@@ -1,0 +1,308 @@
+[
+ {
+  "path": "reference/src/age",
+  "url": "https://github.com/c-sp/age",
+  "rev": "4a8ec44e923892bc0bc5094da831632cb117cc41",
+  "date": "2025-09-06T20:08:40+02:00",
+  "sparse": [],
+  "license": "Apache-2.0",
+  "note": "c-sp's emulator (detector)"
+ },
+ {
+  "path": "reference/src/age-test-roms",
+  "url": "https://github.com/c-sp/age-test-roms",
+  "rev": "1f5bc10e2cb60b86c19f8d0287ff78f410c4f639",
+  "date": "2025-02-26T20:28:33+01:00",
+  "sparse": [],
+  "license": "MIT",
+  "note": "c-sp's tests, verified on DMG-C, CGB B/C/E"
+ },
+ {
+  "path": "reference/src/BullyGB",
+  "url": "https://github.com/Hacktix/BullyGB",
+  "rev": "e24fe6fd7f3fbc6021e3ee7f0f29e9166fce5937",
+  "date": "2021-02-26T17:01:00+01:00",
+  "sparse": [],
+  "license": "MIT",
+  "note": ""
+ },
+ {
+  "path": "reference/src/cgb-acid-hell",
+  "url": "https://github.com/mattcurrie/cgb-acid-hell",
+  "rev": "107b7c5a875f26473ebc1193e32c59394bdd3049",
+  "date": "2021-03-22T15:47:39+13:00",
+  "sparse": [],
+  "license": "MIT",
+  "note": ""
+ },
+ {
+  "path": "reference/src/cgb-acid2",
+  "url": "https://github.com/mattcurrie/cgb-acid2",
+  "rev": "04c6ca40cf75b6a93513fe596de4ab797efaff97",
+  "date": "2021-02-26T19:25:12+13:00",
+  "sparse": [],
+  "license": "MIT",
+  "note": "reference image"
+ },
+ {
+  "path": "reference/src/dmg-acid2",
+  "url": "https://github.com/mattcurrie/dmg-acid2",
+  "rev": "8a98ce731f96dde032ffb22ec36dc985d78fdb18",
+  "date": "2020-04-21T12:29:51+12:00",
+  "sparse": [],
+  "license": "MIT",
+  "note": "reference image + hardware photos"
+ },
+ {
+  "path": "reference/src/DMG-CPU-Inside",
+  "url": "https://github.com/furrtek/DMG-CPU-Inside",
+  "rev": "dd70d93d6da3d903fb0d655934983708668d1c92",
+  "date": "2026-03-24T16:48:38+01:00",
+  "sparse": [],
+  "license": "CC-BY-SA-4.0",
+  "note": "furrtek's die overlay and schematics (archived)"
+ },
+ {
+  "path": "reference/src/dmg-schematics",
+  "url": "https://github.com/msinger/dmg-schematics",
+  "rev": "28f66aedf974b91aafeb42443f2b731fcd7769e7",
+  "date": "2026-09-08T00:40:57+02:00",
+  "sparse": [],
+  "license": "CC-BY-SA-4.0",
+  "note": "msinger's corrected DMG-CPU B + SM83 schematics and netlists"
+ },
+ {
+  "path": "reference/src/dmg-sim",
+  "url": "https://github.com/msinger/dmg-sim",
+  "rev": "786f8c8aaac7ae507eac2a59f2a7d3d5e91dfe66",
+  "date": "2026-09-11T03:16:30+02:00",
+  "sparse": [],
+  "license": "CC-BY-SA-4.0",
+  "note": "SystemVerilog DMG-CPU B incl. SM83 generated from dmg-schematics; boot/quickboot.bin; needs Icarus Verilog newer than 12"
+ },
+ {
+  "path": "reference/src/gambatte-core",
+  "url": "https://github.com/pokemon-speedrunning/gambatte-core",
+  "rev": "5a41a68c25402421fb1983ddadc9faf2418ddb0f",
+  "date": "2026-04-16T21:32:37-07:00",
+  "sparse": [],
+  "license": "GPL-2.0",
+  "note": "fork carrying sinamas's Gambatte test suite (test/hwtests, testrunner.cpp); sinamas/gambatte is now private"
+ },
+ {
+  "path": "reference/src/game-boy-test-roms",
+  "url": "https://github.com/c-sp/game-boy-test-roms",
+  "rev": "f8c3da8431dc60d752007bce571f50fd380b445e",
+  "date": "2025-04-27T11:51:35+02:00",
+  "sparse": [],
+  "license": "MIT",
+  "note": "c-sp's bundle sources and per-suite howtos; release v7.0 zip pinned separately"
+ },
+ {
+  "path": "reference/src/gb-ctr",
+  "url": "https://github.com/Gekkio/gb-ctr",
+  "rev": "5ce83a107013e9bec4a19fcfdd440fb5dd75c616",
+  "date": "2026-08-16T13:14:18+03:00",
+  "sparse": [],
+  "license": "CC-BY-SA-4.0",
+  "note": "Gekkio, Game Boy: Complete Technical Reference (typst source); PDF rev 192 pinned separately"
+ },
+ {
+  "path": "reference/src/gb-research",
+  "url": "https://github.com/Gekkio/gb-research",
+  "rev": "59088f486f579a69fd86bd86a55181b937e769e0",
+  "date": "2025-08-15T18:01:54+03:00",
+  "sparse": [],
+  "license": "see LICENSES/",
+  "note": "Gekkio's research incl. sm83-cpu-core VHDL (the sibling core's die judge)"
+ },
+ {
+  "path": "reference/src/gb-test-roms",
+  "url": "https://github.com/retrio/gb-test-roms",
+  "rev": "c240dd7d700e5c0b00a7bbba52b53e4ee67b5f15",
+  "date": "2015-06-24T21:17:08-07:00",
+  "sparse": [],
+  "license": "no licence file",
+  "note": "blargg's test ROMs and sources"
+ },
+ {
+  "path": "reference/src/gbdoc",
+  "url": "https://github.com/msinger/gbdoc",
+  "rev": "5ff3cb65b4ff811e5a213a5d368ec552536f26d3",
+  "date": "2026-08-12T10:37:27+02:00",
+  "sparse": [],
+  "license": "CC-BY-SA-4.0",
+  "note": "msinger's research documents"
+ },
+ {
+  "path": "reference/src/GBEmulatorShootout",
+  "url": "https://github.com/daid/GBEmulatorShootout",
+  "rev": "d8fe9674d4603526ae2ecf0c22a1525758fe7503",
+  "date": "2026-03-16T12:33:05+01:00",
+  "sparse": [],
+  "license": "no licence file",
+  "note": "daid's emulator x test-suite matrix and runners"
+ },
+ {
+  "path": "reference/src/GBMicrotest",
+  "url": "https://github.com/aappleby/GBMicrotest",
+  "rev": "463eb6bc0fe31d61781ef63060ad6d74090c0255",
+  "date": "2024-04-26T13:41:17-07:00",
+  "sparse": [],
+  "license": "MIT",
+  "note": "513 tiny tests, checked on DMG-CPU-08 (C blob) per README"
+ },
+ {
+  "path": "reference/src/giibiiadvance",
+  "url": "https://github.com/AntonioND/giibiiadvance",
+  "rev": "ccb40c3cf7d9efec538858a36d4ab69bb4d0ce5c",
+  "date": "2026-01-25T02:01:07Z",
+  "sparse": [],
+  "license": "GPL-3.0",
+  "note": "AntonioND's emulator and GB timing documents"
+ },
+ {
+  "path": "reference/src/little-things-gb",
+  "url": "https://github.com/pinobatch/little-things-gb",
+  "rev": "3fea6a7d4bc4426da948f470f7ae93a8e8fa3ef7",
+  "date": "2026-09-22T20:59:28-04:00",
+  "sparse": [],
+  "license": "no licence file (zlib per sources? UNVERIFIED)",
+  "note": "pinobatch's small tests incl. firstwhite, tellinglys"
+ },
+ {
+  "path": "reference/src/MBC3-Tester-gb",
+  "url": "https://github.com/EricKirschenmann/MBC3-Tester-gb",
+  "rev": "40065adab0e2a5597621bb7e7e4812d0e0f43da7",
+  "date": "2021-03-02T08:30:32-08:00",
+  "sparse": [],
+  "license": "no licence file",
+  "note": "untested on hardware (c-sp)"
+ },
+ {
+  "path": "reference/src/mealybug-tearoom-tests",
+  "url": "https://github.com/mattcurrie/mealybug-tearoom-tests",
+  "rev": "70e88fb90b59d19dfbb9c3ac36c64105202bb1f4",
+  "date": "2020-12-20T11:12:36+13:00",
+  "sparse": [],
+  "license": "MIT",
+  "note": "PPU mode-3 tests; expected/ per revision; photos/; PPU documentation .md"
+ },
+ {
+  "path": "reference/src/metroboy",
+  "url": "https://github.com/aappleby/metroboy",
+  "rev": "36797ad4cf77b3e04ffe45716218a79b5280076a",
+  "date": "2025-02-22T19:36:25-08:00",
+  "sparse": [],
+  "license": "no licence file",
+  "note": "GateBoy / LogicBoy / MetroBoy; GateBoy = gate-level DMG-CPU B with a guessed CPU"
+ },
+ {
+  "path": "reference/src/metrolib",
+  "url": "https://github.com/aappleby/metrolib",
+  "rev": "617e42fe6e7f2ae929c75c200ebe750842a244b1",
+  "date": "2026-06-28T17:47:02-07:00",
+  "sparse": [],
+  "license": "no licence file",
+  "note": "needed to compile GateBoyTests (symlinks/metrolib)"
+ },
+ {
+  "path": "reference/src/metron",
+  "url": "https://github.com/aappleby/metron",
+  "rev": "4ef5607b05c59053319da7c7fc64f56fba14692e",
+  "date": "2026-06-27T19:45:23-07:00",
+  "sparse": [],
+  "license": "no licence file",
+  "note": "symlink target of metroboy; not needed for GateBoyTests"
+ },
+ {
+  "path": "reference/src/mooneye-gb",
+  "url": "https://github.com/wilbertpol/mooneye-gb",
+  "rev": "b78dd21f0b6d00513bdeab20f7950e897a0379b3",
+  "date": "2016-07-05T21:02:31+02:00",
+  "sparse": [],
+  "license": "GPL-3.0",
+  "note": "wilbertpol's fork with extra tests"
+ },
+ {
+  "path": "reference/src/mooneye-test-suite",
+  "url": "https://github.com/Gekkio/mooneye-test-suite",
+  "rev": "31510e12eea6286d36eea060a6adde755e1067aa",
+  "date": "2026-07-14T12:32:49+03:00",
+  "sparse": [],
+  "license": "MIT",
+  "note": "test sources with per-test 'Verified results' headers; prebuilt ROMs pinned as mts-20260714-0944-31510e1.zip"
+ },
+ {
+  "path": "reference/src/pandocs",
+  "url": "https://github.com/gbdev/pandocs",
+  "rev": "0191af06ac49661587dcde3d57a241a626b8df75",
+  "date": "2026-10-03T00:54:21+02:00",
+  "sparse": [],
+  "license": "CC0-1.0",
+  "note": "Pan Docs source (src/*.md); the primary programming reference"
+ },
+ {
+  "path": "reference/src/rtc3test",
+  "url": "https://github.com/aaaaaa123456789/rtc3test",
+  "rev": "80ae792bf1b3c3387929b912e6df001af3511e24",
+  "date": "2020-12-02T15:52:18-03:00",
+  "sparse": [],
+  "license": "Unlicense",
+  "note": "MBC3 RTC tests"
+ },
+ {
+  "path": "reference/src/SameBoy",
+  "url": "https://github.com/LIJI32/SameBoy",
+  "rev": "c458e7c5d2d350fb37a1931c40da9f758d28d240",
+  "date": "2026-10-04T00:17:21+03:00",
+  "sparse": [],
+  "license": "MIT (except iOS/Mac frontends; see LICENSE)",
+  "note": "reference detector; built locally as libsameboy.so + tester (scripts/sameboy_run.py)"
+ },
+ {
+  "path": "reference/src/SameSuite",
+  "url": "https://github.com/LIJI32/SameSuite",
+  "rev": "f15645fb049a47ea235f6d2c9a033e72d8087901",
+  "date": "2025-10-11T19:08:35+03:00",
+  "sparse": [],
+  "license": "X11",
+  "note": "SameBoy's hardware tests; APU sub-suite CGB-oriented"
+ },
+ {
+  "path": "reference/src/scribbltests",
+  "url": "https://github.com/Hacktix/scribbltests",
+  "rev": "96dd2f14bc8cce1fd5df25427056e059a175e9f7",
+  "date": "2020-12-25T21:32:24+01:00",
+  "sparse": [],
+  "license": "MIT",
+  "note": ""
+ },
+ {
+  "path": "reference/src/strikethrough.gb",
+  "url": "https://github.com/Hacktix/strikethrough.gb",
+  "rev": "7cd01bf91665b85809379b71e655da751809994e",
+  "date": "2021-03-05T16:06:24+01:00",
+  "sparse": [],
+  "license": "MIT",
+  "note": ""
+ },
+ {
+  "path": "reference/src/TurtleTests",
+  "url": "https://github.com/Powerlated/TurtleTests",
+  "rev": "b341ff54ec1e6a501d37dd309c556b6968a07eec",
+  "date": "2020-09-05T02:38:25-04:00",
+  "sparse": [],
+  "license": "no licence file",
+  "note": ""
+ },
+ {
+  "path": "reference/build-iverilog/src",
+  "url": "https://github.com/steveicarus/iverilog",
+  "rev": "467d830d2435d28d63ecdfc011c5bf150f15f206",
+  "date": "2026-10-04T10:15:08-07:00",
+  "sparse": [],
+  "license": "GPL-2.0",
+  "note": "Icarus Verilog built from source for dmg-sim (Ubuntu's 12.0 cannot parse it); see docs/validation.md"
+ }
+]

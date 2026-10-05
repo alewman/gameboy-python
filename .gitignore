@@ -1,0 +1,37 @@
+# Python and package builds
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments and tooling
+.venv/
+.venv-*/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Fetched references, tools and test programs; scripts/fetch_references.py
+# fills these from scripts/pinned_files.json and scripts/pinned_repos.json.
+# Never commit them: third-party documents, programs and source trees, and
+# the local builds of SameBoy, Icarus Verilog, dmg-sim and GateBoy.
+reference/
+tests/test_roms/
+
+# Boot ROMs are bring-your-own: never commit one.
+*.bin
+*boot*.gb
+*boot*.gbc
+
+# MAME oracle runs (scripts/mame_trace.py): traces, error.log, cfg, nvram.
+tests/mame_traces/
+*.trace
+error.log
+
+# Battery saves and scripts/count_mbcs.py output.
+*.sav
+coverage.json
+coverage.txt
