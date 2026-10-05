@@ -20,8 +20,9 @@ other, not out of any single document:
 1. **A complete DMG-CPU B including the SM83 runs here from the die.**
    msinger's dmg-sim (SystemVerilog generated from the corrected schematics,
    with transistor-derived delays fitted to measurements on a real DMG-CPU B)
-   compiles with Icarus Verilog built from source in under a minute and
-   simulates about 0.1 emulated second per 5 host minutes. It is the die-level
+   compiles with Icarus Verilog built from source in under a minute and ran
+   Mooneye `bits/mem_oam` (0.4 emulated seconds) in 29 minutes, matching its
+   expected picture byte for byte. It is the die-level
    judge for anything a short test ROM can show, CPU included, which GateBoy
    (CPU guessed) cannot be.
 2. **The hardware-captured DMG suites were captured on a DMG-CPU C (blob),**
