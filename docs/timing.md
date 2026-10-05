@@ -19,9 +19,10 @@ lets famicom-python be:
   then completes the access. It never adds `step()`'s return value on top.
 - Internal cycles still go through the board: their address reaches the PPU's
   OAM-bug logic (DMG) and costs time.
-- IF is the board's. The core samples `IE & IF` at its fetch cycles through
-  the line the board drives (see [handoff-brief.md](handoff-brief.md) "What
-  the board needs from sm83-python").
+- IE and IF live in the core; the board decides *when* each IF bit rises and
+  raises it through the core's method from inside the callback (see
+  [handoff-brief.md](handoff-brief.md) "What the board needs from
+  sm83-python" 3). The core samples `IE & IF` at its fetch cycles.
 - HALT and STOP are visible states: the core keeps calling the board once per
   M-cycle while halted (so time passes and the wake-up is found on the right
   M-cycle), and reports STOP through a hook so the board can do the DMG

@@ -42,7 +42,8 @@ relies on (validation.md): SameBoy (`libsameboy.so`, seconds) and dmg-sim
 
 - **Two repositories**: the CPU is `sm83-python` (SM83 is the CPU core;
   LR35902 / DMG-CPU is the whole SoC); this board is `gameboy-python`.
-  Local git only for now.
+  Local git until sm83-python passes its rung 3, then private GitHub
+  repositories (Aubrey, 2026-10-05).
 - **DMG first.** Reference model **DMG-01 with DMG-CPU B** (start-here.md
   "Why DMG-CPU B"; C1 is the caveat). CGB with double speed is a machine-table
   row from day one and a later phase; MGB/MGL rows later; **SGB proper is
@@ -85,10 +86,13 @@ stop=…)`, its handoff-brief "The bus contract"):
 2. **`cpu.idu`** (+1, −1, 0) readable inside the callback: the OAM bug's
    corruption pattern differs for read, write, IDU-only and read-plus-
    increment (timing.md "The OAM corruption bug").
-3. **IE and IF as core attributes** (`ie`, `if_`), which the board maps at
-   $FFFF/$FF0F and sets from inside its callbacks; the core samples them at
-   its own exact cycles, including the late vector choice of the IE-push
-   cancellation. The board owns *when* each IF bit rises (timing.md
+3. **IE and IF live in the core** as attributes (`ie`, `if_`; decided by
+   Aubrey 2026-10-05). The board raises an IF bit through a core method
+   callable from inside a bus callback (`request_interrupt(bit)` here;
+   **sm83-python's handoff-brief is authoritative for the name**), and the
+   core services CPU accesses to $FF0F and $FFFF itself. The core samples
+   them at its own exact cycles, including the late vector choice of the
+   IE-push cancellation; the board owns *when* each IF bit rises (timing.md
    "Interrupts").
 4. **`halted`, `stopped`, `locked` readable**, and a halted or locked CPU's
    `step()` making exactly one `idle(PC)` and returning 1, so time passes
@@ -209,7 +213,8 @@ Numbers in brackets are what SameBoy (the reference detector) scored here on
   `tests/mame_traces/`, `*.sav`, `coverage.json`.
 - No `rm -rf`, `sed -i`, `ln -sfn` one-liners; edit with the editor tool.
 - Commit in logical steps with the family's attribution line; do not push or
-  create the GitHub repository without the user.
+  create the GitHub repository before sm83-python passes rung 3, and then
+  only as a private repository with the user's go-ahead.
 - Every number in a document says where it came from and when it was measured.
 
 ## Decisions made by Aubrey (2026-10-05)
@@ -224,9 +229,7 @@ Numbers in brackets are what SameBoy (the reference detector) scored here on
    every suite disabled; dmg-sim is the die judge (its CPU is from the die,
    GateBoy's is a guess). GateBoy stays pinned as reading material only.
 
-## Still open
-
-5. **IE/IF in the core** (sm83-python's open decision): to be decided together
-   with the sm83-python findings. This board works either way: as core
-   attributes (`ie`, `if_`) as proposed, or as board registers the core
-   samples through a line.
+5. **IE and IF are core attributes**; the board raises IF bits through the
+   core's method from inside bus callbacks; the core services $FF0F/$FFFF
+   ("What the board needs from sm83-python" 3).
+6. **Publishing**: local until sm83-python passes rung 3, then private GitHub.

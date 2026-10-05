@@ -104,7 +104,7 @@ bits are DIV ($FF04): [timing.md](timing.md) "The system counter".
 | $FEA0–$FEFF | nothing usable | internal | revision-dependent read value; OAM bug on DMG |
 | $FF00–$FF7F | I/O registers | internal | open bits read 1 |
 | $FF80–$FFFE | HRAM | internal | the only memory usable during OAM DMA |
-| $FFFF | IE | internal | in the CPU core per GBCTR (sm83-python's contract) |
+| $FFFF | IE | internal | in the CPU core (GBCTR; decided 2026-10-05); IF ($FF0F) also lives in the core |
 
 `pandocs/Memory_Map.md`; external-bus ranges from
 `gb-ctr/appendix/external-bus.typ` ("a) $0000–$7FFF", "b) $A000–$FDFF";
@@ -137,8 +137,11 @@ $FF72–$FF75 (`pandocs/CGB_Registers.md`).
 ### Interrupts
 
 Five sources (VBlank, STAT, Timer, Serial, Joypad), bits 0–4 of IF ($FF0F) and
-IE ($FFFF); IF's top three bits read 1 (Mooneye `if_ie_registers`). **IF is
-the board's**: each unit raises its bit at a defined T-cycle, and the CPU
+IE ($FFFF); IF's top three bits read 1 (Mooneye `if_ie_registers`). **IE and
+IF live in the core** (Aubrey, 2026-10-05): the core services $FF0F/$FFFF
+accesses, and each board unit raises its IF bit at a defined T-cycle through
+the core's method (`request_interrupt(bit)`; sm83-python's brief is
+authoritative for the name), called from inside a bus callback. The CPU
 samples `IE & IF` at its fetch cycles. Dispatch, IME, HALT, the HALT bug and
 the IE-push cancellation are the core's (sm83-python `docs/start-here.md`
 "Interrupts"); what the board must give the core is in
