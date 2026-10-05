@@ -36,7 +36,7 @@ refactor. Revision letters follow Mooneye's naming
 | CGB-001 | CPU CGB 0, A, B, C, D, **E** | CGB0 / CGB (not in GBCTR's table; Pan Docs `Power_Up_Sequence.md`) | 4.194304 MHz, CPU ×2 in double speed | **2** (rows from day one) |
 | AGB/AGS in GB mode | CPU AGB … | CGB-AGB | | out of scope (a GBA board would embed this one) |
 
-Why **DMG-CPU B**: it is the only revision with a die-level model
+Why **DMG-CPU B** (decided by Aubrey 2026-10-05): it is the only revision with a die-level model
 (`dmg-schematics`, `dmg-sim` and GateBoy are all DMG-CPU B: their READMEs'
 first lines), it is in Mooneye's main test fleet (`DMG-CPU-04` mainboard,
 "Hardware testing" table), and it was the volume part. The catch: several
@@ -46,7 +46,7 @@ hardware-captured suites were captured on a **DMG-CPU C (blob)** unit
 C1–C3). So `revision` is a field from milestone 1, and every known B/C
 difference is a row in undocumented-behavior.md.
 
-CGB reference revision when CGB arrives: **CPU CGB E** (SameSuite's APU suite
+CGB reference revision when CGB arrives: **CPU CGB E** (decided by Aubrey 2026-10-05; SameSuite's APU suite
 passes in full only on E, `SameSuite/apu/README.md`; SameBoy's default; c-sp
 verifies on B, C and E). Mealybug's CGB pictures are C and D, Gambatte's
 are `cgb04c`, so CGB revision is also a field.
@@ -55,7 +55,7 @@ Fields the machine table needs (each with its source in a comment, as
 sms-python does):
 
 - `model` (dmg, mgb, sgb, sgb2, cgb, agb) and `revision` (0, A, B, C, … E);
-- `boot_rom` (BYOR path, or a named open replacement, see "Boot ROMs" below);
+- `boot_rom` (real ROM path by default, see "Boot ROMs" below; quickboot / SameBoy's as labelled fallbacks);
 - `cgb_mode` (CGB hardware running a CGB cartridge vs DMG compatibility
   mode, chosen by the boot ROM from header byte $0143 and latched in KEY0);
 - `oam_bug` (DMG/MGB/SGB yes; CGB/AGB no: `pandocs/OAM_Corruption_Bug.md`);
@@ -242,22 +242,36 @@ output is pinned; the analogue stage is a labelled fit.
 
 ## Boot ROMs
 
-The boot ROMs are Nintendo's; never ship them. The board takes a path
-(bring your own: the user's No-Intro `[BIOS] Nintendo Game Boy Boot ROM
-(World) (Rev 1)` is SHA-1 `4ed31ec6…`, the DMG ROM in GBCTR's table) or one
-of two open replacements, both pinned:
+The boot ROMs are Nintendo's; never ship them, never copy them into this
+repository. **Decided (Aubrey, 2026-10-05): every harness boots with the
+real boot ROM; `quickboot.bin` only when no real ROM is available; SameBoy's
+open ROM is a last fallback, labelled.** The path is configurable (`--boot`,
+or `GAMEBOY_BOOT_ROM`; `GAMEBOY_NOINTRO_DIR` moves the default directory); a
+`.zip` is read in place. The documented local default is Aubrey's own
+No-Intro `[BIOS]` set under
+`/data/emu/source/myrient.erista.me/files/No-Intro/`, identified 2026-10-05:
 
-| Replacement | What it leaves | Mooneye boot tests on SameBoy (DMG-B) | Licence |
-| --- | --- | --- | --- |
-| SameBoy `BootROMs/dmg_boot.asm` (built with RGBDS 1.0.4) | logo + animation; registers as DMG | `boot_regs-dmgABC` passes; **`boot_div-dmgABCmgb`, `boot_hwio-dmgABCmgb`, `serial/boot_sclk_align-dmgABCmgb` fail** | MIT (SameBoy `LICENSE`) |
-| dmg-sim `boot/quickboot.bin` (msinger) | the DMG A/B/C exit state incl. DIV phase, PPU phase and serial clock; VRAM zeroed (no logo) | **all four pass** | CC BY-SA 4.0 (dmg-sim `LICENSE`) |
-| your DMG boot ROM | the real thing | all four pass | Nintendo's |
+| Model | File (under that directory) | SHA-1 | SHA-256 | Identified by |
+| --- | --- | --- | --- | --- |
+| **DMG (A/B/C)** | `Nintendo - Game Boy/[BIOS] Nintendo Game Boy Boot ROM (World) (Rev 1).zip` | `4ed31ec6b0b175bb109c0eb5fd3d193da823339f` | `cf053eccb4ccafff9e67339d4e78e98dce7d1ed59be819d2a1ba2232c6fce1c7` | MAME `dmg_boot.bin`, GBCTR "DMG" |
+| DMG0 | `Nintendo - Game Boy/[BIOS] Nintendo Game Boy Boot ROM (Japan) (En).zip` | `8bd501e31921e9601788316dbd3ce9833a97bcbc` | `26e71cf01e301e5dc40e987cd2ecbf6d0276245890ac829db2a25323da86818e` | MAME `dmg_v0.rom`, GBCTR "DMG0" |
+| MGB | `Nintendo - Game Boy/[BIOS] Nintendo Game Boy Pocket Boot ROM (World).zip` | `4e68f9da03c310e84c523654b9026e51f26ce7f0` | `a8cb5f4f1f16f2573ed2ecd8daedb9c5d1dd2c30a481f9b179b5d725d95eafe2` | MAME `mgb_boot.bin`, GBCTR "MGB" |
+| **CGB** | `Nintendo - Game Boy Color/[BIOS] Nintendo Game Boy Color Boot ROM (World) (Rev 1).zip` (2,304 B) | `1293d68bf9643bc4f36954c1e80e38f39864528d` | `b4f2e416a35eef52cba161b159c7c8523a92594facb924b3ede0d722867c50c7` | its $000–$0FF and $200–$8FF are MAME `gbc_boot.1` `e4b40c9f…` and `gbc_boot.2` `f943b1e0…` |
+| CGB0 (probable) | `… Color Boot ROM (Japan) (En).zip` | `df5a0d2d49de38fbd31cc2aab8e62c8550e655c0` | `3a307a41689bee99a9a32ea021bf45136906c86b2e4f06c806738398e4f92e45` | 602 bytes differ from CGB, same layout (Pan Docs: CGB0 differs "very minor, with no change in the layout"); UNVERIFIED |
+| AGB? (unidentified) | `… Color Boot ROM (World) (Rev 2).zip` | `f5f33729a956131d9c44310f0ae3bb0599e9ec3e` | `c56299bedd56debdbf36442238636bf5887a65c5173b33995682052353804da9` | differs from CGB in 2 bytes only ($409: `LD DE,$0104` → `LD DE,$FF80`, the logo-compare source); no `INC B`, so not the AGB0 ROM Pan Docs describes. UNVERIFIED which model |
 
-Measured here 2026-10-05 with `scripts/sameboy_run.py` on the Mooneye build
-`mts-20260714-0944-31510e1`. So: **the acceptance harness boots with the real
-ROM when given one and with `quickboot.bin` otherwise**; SameBoy's open ROM is
-the default for *users* (it draws a logo) and is wrong for timing tests.
-Whether that split is right is an open decision in the brief.
+SGB/SGB2 boot ROMs are not in the local sets (SNES-board concern). Confirmed
+2026-10-05 with `scripts/sameboy_run.py` reading these zips in place: Mooneye
+`boot_div-dmgABCmgb`, `boot_hwio-dmgABCmgb`, `serial/boot_sclk_align-dmgABCmgb`,
+`boot_regs-dmgABC` pass (DMG-B), `boot_regs-mgb` passes (MGB),
+`misc/boot_regs-cgb` passes (CGB-E with the Rev 1 image).
+
+The two open replacements, both pinned, for when no real ROM is present:
+
+| Replacement | What it leaves | Mooneye boot tests on SameBoy (DMG-B) | Licence | Role |
+| --- | --- | --- | --- | --- |
+| dmg-sim `boot/quickboot.bin` (msinger) | the DMG A/B/C exit state incl. DIV phase, PPU phase and serial clock; VRAM zeroed (no logo) | **all four pass** | CC BY-SA 4.0 | second choice |
+| SameBoy `BootROMs/dmg_boot.asm` (built with RGBDS 1.0.4) | logo + animation; registers as DMG | `boot_regs-dmgABC` passes; **`boot_div-dmgABCmgb`, `boot_hwio-dmgABCmgb`, `serial/boot_sclk_align-dmgABCmgb` fail** (C7) | MIT | last fallback only, labelled |
 
 A "skip boot" path (load the post-boot register and I/O state directly) is
 also needed, as every emulator has: Pan Docs `Power_Up_Sequence.md` tables

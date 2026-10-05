@@ -27,9 +27,18 @@ frames, and after each frame checks the result protocols:
 - timeout: none of these within ``--seconds``; the screen may still carry the
   answer (``--png`` saves it).
 
-Boot with ``--boot``: for timing tests use your DMG boot ROM or
-``reference/src/dmg-sim/boot/quickboot.bin``; SameBoy's own open boot ROM
-fails Mooneye's boot-state tests (docs/undocumented-behavior.md C7).
+Boot ROM, in this order (docs/start-here.md "Boot ROMs"; Aubrey 2026-10-05):
+
+1. ``--boot PATH`` or the environment variable ``GAMEBOY_BOOT_ROM`` (a raw
+   image or a No-Intro ``.zip``): your own copy;
+2. the documented local default for the model, the user's No-Intro
+   ``[BIOS]`` zip under ``LOCAL_BOOT_DIR`` (``GAMEBOY_NOINTRO_DIR`` overrides),
+   read in place and checked against its SHA-256 (``LOCAL_BOOT``);
+3. ``reference/src/dmg-sim/boot/quickboot.bin`` (DMG only);
+4. SameBoy's own open boot ROM, last, and labelled in the verdict: it fails
+   three Mooneye boot-state tests (docs/undocumented-behavior.md C7).
+
+Boot ROMs are never copied into the repository.
 
     python scripts/sameboy_run.py ROM [ROM ...] [--model dmg-b|cgb-e|...]
         [--seconds 30] [--boot DMG_BOOT.bin] [--microtest] [--png out.png]
@@ -39,8 +48,11 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
+import os
 import struct
 import sys
+import zipfile
 import zlib
 from pathlib import Path
 
@@ -59,6 +71,35 @@ MODELS = {
     "cgb-e": (0x205, "cgb_boot.bin"),
     "agb-a": (0x207, "agb_boot.bin"),
 }
+# The user's own boot ROMs, read in place (never copied): No-Intro [BIOS] dumps,
+# identified 2026-10-05 by SHA-1 against MAME 0.285 gb.cpp and GBCTR's table.
+LOCAL_BOOT_DIR = Path(
+    os.environ.get("GAMEBOY_NOINTRO_DIR", "/data/emu/source/myrient.erista.me/files/No-Intro")
+)
+LOCAL_BOOT = {
+    # model: (zip relative to LOCAL_BOOT_DIR, SHA-256 of the image)
+    "dmg-b": (
+        "Nintendo - Game Boy/[BIOS] Nintendo Game Boy Boot ROM (World) (Rev 1).zip",
+        "cf053eccb4ccafff9e67339d4e78e98dce7d1ed59be819d2a1ba2232c6fce1c7",
+    ),
+    "mgb": (
+        "Nintendo - Game Boy/[BIOS] Nintendo Game Boy Pocket Boot ROM (World).zip",
+        "a8cb5f4f1f16f2573ed2ecd8daedb9c5d1dd2c30a481f9b179b5d725d95eafe2",
+    ),
+    "cgb-c": (
+        "Nintendo - Game Boy Color/[BIOS] Nintendo Game Boy Color Boot ROM (World) (Rev 1).zip",
+        "b4f2e416a35eef52cba161b159c7c8523a92594facb924b3ede0d722867c50c7",
+    ),
+    "cgb-d": (
+        "Nintendo - Game Boy Color/[BIOS] Nintendo Game Boy Color Boot ROM (World) (Rev 1).zip",
+        "b4f2e416a35eef52cba161b159c7c8523a92594facb924b3ede0d722867c50c7",
+    ),
+    "cgb-e": (
+        "Nintendo - Game Boy Color/[BIOS] Nintendo Game Boy Color Boot ROM (World) (Rev 1).zip",
+        "b4f2e416a35eef52cba161b159c7c8523a92594facb924b3ede0d722867c50c7",
+    ),
+}
+QUICKBOOT = ROOT / "reference" / "src" / "dmg-sim" / "boot" / "quickboot.bin"
 FIBONACCI = (3, 5, 8, 13, 21, 34)
 FRAMES_PER_SECOND = 4194304 / 70224
 
@@ -83,6 +124,7 @@ def load_library() -> ctypes.CDLL:
     lib.GB_init.restype = ctypes.c_void_p
     lib.GB_init.argtypes = [ctypes.c_void_p, ctypes.c_int]
     lib.GB_load_boot_rom.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    lib.GB_load_boot_rom_from_buffer.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]
     lib.GB_load_rom.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
     lib.GB_run_frame.restype = ctypes.c_uint64
     lib.GB_run_frame.argtypes = [ctypes.c_void_p]
@@ -124,6 +166,33 @@ def write_png(path: Path, width: int, height: int, pixels) -> None:
     )
 
 
+def read_image(path: Path) -> bytes:
+    if path.suffix.lower() == ".zip":
+        with zipfile.ZipFile(path) as archive:
+            return archive.read(archive.infolist()[0])
+    return path.read_bytes()
+
+
+def choose_boot(model: str, override: Path | None) -> tuple[bytes | None, str]:
+    """The boot image and a label for it; None means SameBoy's own open ROM."""
+    chosen = override or (
+        Path(os.environ["GAMEBOY_BOOT_ROM"]) if "GAMEBOY_BOOT_ROM" in os.environ else None
+    )
+    if chosen:
+        return read_image(chosen), f"boot {chosen.name}"
+    if model in LOCAL_BOOT:
+        relative, digest = LOCAL_BOOT[model]
+        path = LOCAL_BOOT_DIR / relative
+        if path.exists():
+            image = read_image(path)
+            if hashlib.sha256(image).hexdigest() == digest:
+                return image, "real boot ROM"
+            print(f"warning: {path} does not match its SHA-256; not used")
+    if model == "dmg-b" and QUICKBOOT.exists():
+        return QUICKBOOT.read_bytes(), "quickboot"
+    return None, "SameBoy open boot ROM: boot-state tests unreliable"
+
+
 def run(
     lib: ctypes.CDLL,
     rom: Path,
@@ -134,7 +203,7 @@ def run(
     microtest: bool = False,
 ) -> str:
     number, boot = MODELS[model]
-    boot_path = boot_rom or BOOT / boot
+    image, _label = choose_boot(model, boot_rom)
     gb = lib.GB_init(lib.GB_alloc(), number)
     rgb = RGB_CB(lambda _gb, r, g, b: (r << 16) | (g << 8) | b)
     serial_bits: list[int] = []
@@ -149,7 +218,12 @@ def run(
     lib.GB_set_serial_transfer_bit_start_callback(gb, serial)
     pixels = (ctypes.c_uint32 * (256 * 224))()
     lib.GB_set_pixels_output(gb, pixels)
-    if lib.GB_load_boot_rom(gb, str(boot_path).encode()) or lib.GB_load_rom(gb, str(rom).encode()):
+    if image is None:
+        failed = lib.GB_load_boot_rom(gb, str(BOOT / boot).encode())
+    else:
+        lib.GB_load_boot_rom_from_buffer(gb, image, len(image))
+        failed = 0
+    if failed or lib.GB_load_rom(gb, str(rom).encode()):
         return "error: could not load"
     verdict = "timeout"
     if microtest:
@@ -218,7 +292,7 @@ def main() -> int:
     parser.add_argument("--model", default="dmg-b", choices=sorted(MODELS))
     parser.add_argument("--seconds", type=float, default=30.0)
     parser.add_argument(
-        "--boot", type=Path, help="a boot ROM you own instead of SameBoy's open one (BYOR)"
+        "--boot", type=Path, help="your boot ROM (raw or No-Intro .zip); see the boot order above"
     )
     parser.add_argument(
         "--microtest", action="store_true", help="GBMicrotest protocol: read $FF82 after the run"
@@ -229,6 +303,7 @@ def main() -> int:
         print(f"{LIB} is missing; build SameBoy first (see this script's docstring)")
         return 2
     lib = load_library()
+    print(f"# model {args.model}: {choose_boot(args.model, args.boot)[1]}")
     failures = 0
     for rom in args.roms:
         verdict = run(lib, rom, args.model, args.seconds, args.png, args.boot, args.microtest)

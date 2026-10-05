@@ -10,7 +10,7 @@ Read in this order.
 | [undocumented-behavior.md](undocumented-behavior.md) | Fifteen DMG quirks with their judges, the DMG revision table, contradictions C1–C10, open items |
 | [validation.md](validation.md) | Every oracle by tier with pins and provenance quotes; the result protocols; the die-level models and how to run dmg-sim and build GateBoy; SameBoy and MAME measured as detectors; what is not available; local romsets |
 | [mame-oracle.md](mame-oracle.md) | The verified MAME 0.285 recipe for `gameboy`, its output, six traps, and its measured score |
-| [handoff-brief.md](handoff-brief.md) | The task for the session that builds the board: decisions, what the board needs from sm83-python, seven milestones with acceptance tests, constraints, decisions for Aubrey |
+| [handoff-brief.md](handoff-brief.md) | The task for the session that builds the board: decisions, what the board needs from sm83-python, seven milestones with acceptance tests, constraints, Aubrey's decisions and the one still open |
 
 ## Findings made while gathering (2026-10-05)
 

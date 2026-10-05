@@ -77,8 +77,8 @@ g++ -std=c++20 -O2 -DNDEBUG -DCONFIG_RELEASE -w -Isrc -Isymlinks -Isymlinks/metr
 It links and is headless, but at `36797ad4` every suite in `main()` sits under
 `if (0)` and `config_fastmode` makes it return at once; it expects ROMs at
 `symlinks/GBMicrotests/bin/` and `tests/mooneye-gb/tests/build/`. Driving it
-needs a small driver of our own: not done (handoff-brief.md "Decisions for
-Aubrey" 4).
+needs a small driver of our own: **decided not to write one** (Aubrey,
+2026-10-05; handoff-brief.md "Decisions made"): dmg-sim is the die judge.
 
 **SameBoy built here** (2026-10-05, 4 s): `make -C reference/src/SameBoy lib
 tester CONF=release RGBDS=$PWD/reference/build-rgbds/` (RGBDS 1.0.4 builds

@@ -58,9 +58,13 @@ relies on (validation.md): SameBoy (`libsameboy.so`, seconds) and dmg-sim
   import-boundary test (cartridge.md).
 - **The PPU is dot-accurate**: OAM scan, fetcher, FIFOs, mode-3 length from
   SCX, window and objects; no scanline renderer.
-- **Boot ROMs are bring-your-own.** SameBoy's open boot ROMs are the default
-  for users. (The test harness needs more than that: see "Decisions for
-  Aubrey" 2.)
+- **Boot ROMs are bring-your-own, and the real one is the default.** Order:
+  a configured path (`--boot` / `GAMEBOY_BOOT_ROM`, raw or No-Intro `.zip`),
+  then the documented local default (Aubrey's No-Intro `[BIOS]` zips, read in
+  place and checked by SHA-256: table in start-here.md "Boot ROMs"), then
+  dmg-sim's `quickboot.bin`, then SameBoy's open ROM, labelled, because it
+  fails three Mooneye boot-state tests (C7). Never copy a boot ROM into the
+  repository. `scripts/sameboy_run.py` implements this order.
 - **Output**: frames as data (DMG: 160×144 2-bit shades plus a "blank" state;
   CGB: 15-bit RGB), audio as `take_samples()` floats; pygame-ce frontend
   optional; the board runs headless.
@@ -152,7 +156,7 @@ Numbers in brackets are what SameBoy (the reference detector) scored here on
    line, VBlank IRQ; no pixels). **Acceptance**: blargg `cpu_instrs` (11/11,
    serial), `instr_timing`, `mem_timing`, `mem_timing-2` ($A000); Mooneye
    acceptance minus `ppu/*`: every test whose header verifies it on DMG ABC
-   passes, booted with your DMG boot ROM *and* with `quickboot.bin`
+   passes, booted with the real DMG boot ROM *and* with `quickboot.bin`
    [SameBoy: all] (a test that turns out to need exact mode-3 timing moves to
    milestone 2, with the reason written here); the MAME trace of `cpu_instrs` matches the board's per-
    instruction registers from $0100 for the first 100,000 instructions (MAME
@@ -208,21 +212,21 @@ Numbers in brackets are what SameBoy (the reference detector) scored here on
   create the GitHub repository without the user.
 - Every number in a document says where it came from and when it was measured.
 
-## Decisions for Aubrey
+## Decisions made by Aubrey (2026-10-05)
 
-1. **Reference revision: DMG-CPU B or C?** B has the die models; C (blob) has
-   Gambatte's and GBMicrotest's hardware results (C1). Recommended: B, with
-   dmg-sim as tie-breaker.
-2. **The harness's default boot.** Recommended: your DMG boot ROM when
-   present, else dmg-sim's `quickboot.bin` (CC BY-SA 4.0, fetched, never
-   shipped), which passes all four Mooneye boot-state tests on SameBoy where
-   SameBoy's own open ROM fails three (C7). SameBoy's ROM stays the
-   *user-facing* default because it draws the logo.
-3. **CGB reference revision**: recommended CPU CGB E (SameSuite, c-sp,
-   SameBoy's default).
-4. **GateBoy's test driver**: its `GateBoyTests` builds here in 30 s, but
-   every suite in `main()` is disabled (`if (0)`) and it refuses to run in
-   fast mode at `36797ad4`. Recommended: do not maintain a patched driver;
-   dmg-sim is the die judge (its CPU is from the die, GateBoy's is a guess).
-5. **IE/IF in the core** (sm83-python's open decision): this board works with
-   it as proposed.
+1. **Reference revision DMG-CPU B**, with dmg-sim as tie-breaker against the
+   DMG-CPU C (blob) hardware results (C1).
+2. **The harness boots with the real boot ROM**, else `quickboot.bin`;
+   SameBoy's open ROM is no longer a default, only a labelled last fallback
+   (C7).
+3. **CGB reference revision: CPU CGB E.**
+4. **No GateBoy test driver.** Its `GateBoyTests` builds (30 s) but ships with
+   every suite disabled; dmg-sim is the die judge (its CPU is from the die,
+   GateBoy's is a guess). GateBoy stays pinned as reading material only.
+
+## Still open
+
+5. **IE/IF in the core** (sm83-python's open decision): to be decided together
+   with the sm83-python findings. This board works either way: as core
+   attributes (`ie`, `if_`) as proposed, or as board registers the core
+   samples through a line.

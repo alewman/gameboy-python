@@ -44,7 +44,10 @@ python scripts/fetch_references.py            # everything missing
 python scripts/fetch_references.py --verify   # check what is present
 ```
 
-It needs `git` and `curl`. Boot ROMs are never fetched: bring your own.
+It needs `git` and `curl`. Boot ROMs are never fetched or committed: the
+harness uses the real ones by default, read in place from a configurable
+path (`--boot`, `GAMEBOY_BOOT_ROM`, `GAMEBOY_NOINTRO_DIR`; local default and
+hashes in [docs/start-here.md](docs/start-here.md) "Boot ROMs").
 
 ## Scripts
 

@@ -20,7 +20,9 @@ Everything here was run on 2026-10-05 with `/usr/games/mame` 0.285 and
 
 **Every driver needs its boot ROM; none is shipped.** `--rompath` points at a
 directory you make from boot ROMs you own, with MAME's file names
-(`<rompath>/gameboy/dmg_boot.bin`). The No-Intro `[BIOS] Nintendo Game Boy
+(`<rompath>/gameboy/dmg_boot.bin`), e.g. in your scratch space, extracted
+from the local No-Intro zips listed in start-here.md "Boot ROMs" (never
+inside this repository). The No-Intro `[BIOS] Nintendo Game Boy
 Boot ROM (World) (Rev 1)` is byte-identical to `dmg_boot.bin`; the CGB image
 (2,304 bytes) is MAME's two files with the $100–$1FF gap removed (not tried
 here: check the SHA-1s after splitting).
