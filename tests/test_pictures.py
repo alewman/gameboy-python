@@ -50,3 +50,8 @@ def test_mealybug_dmg_blob(name):
     gb = GameBoy(load_cartridge((MEALYBUG / f"{name}.gb").read_bytes()), boot_rom=REAL)
     gb.run_frames(420)
     assert gb.ppu.frame == want
+
+
+def test_blargg_halt_bug_screen():
+    want, _w, _h = read_shades(GBTR / "blargg" / "halt_bug-dmg-cgb.png")
+    assert frame_of(GBTR / "blargg" / "halt_bug.gb", 600) == want

@@ -156,5 +156,17 @@ reads come a fitted number of dots after the pop. Every fitted constant is marke
   those 10 dots. Doing it properly needs the structural decisions (window start, its 6-dot stall)
   made on later register values while the mode-0 flag stays early, which means two timelines (a flag
   stepper and a render stepper); that is the next step, not a constant.
-- Not started: blargg `halt_bug` screen, GBMicrotest PPU families, STAT quirks 2-5, Mealybug's
-  `dmg_b` pictures for `lcdc_bg_en_change` and `win_en_change_multiple_wx`.
+- **blargg `halt_bug`**: the screen matches the reference picture pixel for pixel (skip-boot and real
+  boot ROM).
+- **GBMicrotest**: 395 of 513 pass (`scripts/gbmicrotest.py`; the passing set is held by
+  `tests/test_gbmicrotest.py`). 31 more report no result by protocol (screens, benches). SameBoy's
+  count is 476, so 81 are still open: the SCX-dependent HBlank `_if_`/`_nops_` variants (the IRQ
+  phase inside an M-cycle), `int_oam_*`/`lcdon_to_oam_*` (see below), line 153 LY/LYC timing,
+  vblank/lyc `_if_` edges, `ppu_sprite0_scx*_b`, one `win*`. The DMG STAT write glitch, the OAM
+  source as a line-start pulse, LYC interrupt 4 dots before the flag, window restart cost are in.
+- **An unresolved conflict.** GBMicrotest's `int_oam_*` want the line-start OAM interrupt 4 dots
+  earlier than Mooneye's `intr_2_*` (halt-based) allow; an experiment holding PPU interrupts back
+  while the CPU is halted made Mooneye fail more than it fixed (`OAM_IRQ_EARLY` stays 0). Mooneye
+  wins; the cause is probably the halt-wake or interrupt-sampling phase, not the PPU.
+- Not started: Mealybug's `dmg_b` pictures for `lcdc_bg_en_change` and
+  `win_en_change_multiple_wx`.
