@@ -22,6 +22,7 @@ from gameboy_python.machines import DOTS_PER_LINE
 MODE2_END = 80
 MODE_READ_LAG = 4  # FITTED: STAT and the CPU's VRAM/OAM locks see the mode 4 dots late (Mooneye
 # intr_2_mode0_timing, intr_2_mode3_timing, intr_2_oam_ok_timing); interrupts do not
+IRQ_EARLY = 0
 LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lcdon_timing-GS)
 LINE0_LEAD = 4  # FITTED (Mealybug line_0_fix): on line 0 the pixel pipeline runs this early
 LINE0_IRQ_DOT = 0  # FITTED (Mealybug line_0_fix; Mooneye intr_1_2_timing): line 0's mode-2 IRQ
@@ -30,6 +31,10 @@ BGP_GLITCH_DOT = 1  # FITTED: the dot, counted from the write's, whose palette i
 LCDC_DELAY = 9
 BGP_DELAY = 7
 OBP_DELAY = 10
+OBJ_SIZE_LAG = 0  # FITTED (Mealybug): dots LCDC.2 arrives late at an object fetch
+MAP_SHIFT = LOW_SHIFT = HIGH_SHIFT = (
+    10  # FITTED (Mealybug): dots each background VRAM read is deferred
+)
 SKIP_LATCH_DOT = 10  # FITTED (Mealybug m3_scx_low_3_bits): last dot SCX's low bits are read
 MAP_READ_DOT = LOW_READ_DOT = HIGH_READ_DOT = 2  # which dot (1 or 2) of its step each fetch reads
 OBJ_FETCH_DOTS = 6
@@ -46,6 +51,8 @@ class PPU:
         self.vram = bytearray(0x2000)
         self.oam = bytearray(0xA0)
         self.lcdc = 0
+        self.f_events: list[list[int]] = []  # deferred fetcher reads [dots left, step]
+        self.lcdc_hist = [0] * 16  # LCDC as of each of the last dots (for the lagged bits)
         self.stat_select = 0  # STAT bits 6-3 as written
         self.scy = self.scx = 0
         self.ly = 0
@@ -78,10 +85,12 @@ class PPU:
         self.mode3_start = MODE2_END
         self.mode0_dot = 0
         self.m3 = self.skip = self.fetch_col = 0
-        self.bg: list[int] = []
+        self.bg: list[tuple[list[int], int]] = []
         self.obj_fifo: list[tuple[int, int]] = []
         self.f_step = self.f_dot = 0
-        self.fetch_tile = self.fetch_lo = self.fetch_hi = self.obj_lo = self.obj_hi = 0
+        self.ticket = [0, 0, 0, 0]
+        self.ticket_col = 0
+        self.obj_lo = self.obj_hi = 0
         self.dummy = False
         self.bgp_glitch: tuple[int, int, int] = (-1, -1, 0)  # (dot, line, OR of old and new)
         self.penalised = False
@@ -129,6 +138,8 @@ class PPU:
             self._dot()
 
     def _dot(self) -> None:
+        self.lcdc_hist.append(self.lcdc)
+        del self.lcdc_hist[0]
         self.dot += 1
         if self.dot >= DOTS_PER_LINE:
             self._next_line()
@@ -145,6 +156,8 @@ class PPU:
             if self.mode0_dot and dot >= self.mode0_dot:
                 self.mode = 0
                 self.mode0_dot = 0
+        if self.f_events:
+            self._run_fetch_events()
         if self.pipe:
             self._colour_pixels()
         self._recent.append(self.mode)
@@ -202,7 +215,7 @@ class PPU:
         self.skip = self.scx & 7  # latched now: later SCX writes move tiles, not the fine scroll
         self.next_obj = 0
         self.window_active = False
-        self.bg: list[int] = []  # the background FIFO: next pixel first
+        self.bg: list[tuple[list[int], int]] = []  # the background FIFO: (tile ticket, bit)
         self.obj_fifo: list[tuple[int, int]] = []  # (colour, flags) for the next pixels
         self.f_step = 0  # 0 tile, 1 data low, 2 data high, 3 waiting to push
         self.f_dot = 0
@@ -216,37 +229,57 @@ class PPU:
 
     # ----- the background fetcher ---------------------------------------------------------
 
-    def _tile_row(self) -> int:
-        return self.window_line if self.window_active else (self.ly + self.scy) & 255
+    def _lcdc_ago(self, lag: int) -> int:
+        return self.lcdc_hist[-lag] if lag else self.lcdc
 
-    def _fetch_read(self, step: int) -> None:
+    def _fetch_read(self, step: int, ticket: list[int], window: bool, col: int) -> None:
+        """The VRAM read of one fetcher step, with the registers as they are *now*; ``ticket``
+        collects a tile's [map byte, data low, data high, done]."""
         lcdc = self.lcdc
         if step == 0:
-            if self.window_active:
+            if window:
                 base = 0x1C00 if lcdc & 0x40 else 0x1800
-                index = base + (self.window_line >> 3) * 32 + (self.fetch_col & 31)
+                index = base + (self.window_line >> 3) * 32 + (col & 31)
             else:
                 base = 0x1C00 if lcdc & 8 else 0x1800
                 row = (self.ly + self.scy) & 255
-                index = base + (row >> 3) * 32 + (((self.scx >> 3) + self.fetch_col) & 31)
-            self.fetch_tile = self.vram[index]
-            self.fetch_col += 1
+                index = base + (row >> 3) * 32 + (((self.scx >> 3) + col) & 31)
+            ticket[0] = self.vram[index]
             return
-        tile = self.fetch_tile
+        tile = ticket[0]
         signed = 0x1000 + ((tile ^ 0x80) - 0x80) * 16
         address = tile * 16 if lcdc & 0x10 else signed
-        address += (self._tile_row() & 7) * 2 + (step - 1)
-        if step == 1:
-            self.fetch_lo = self.vram[address]
-        else:
-            self.fetch_hi = self.vram[address]
+        row = self.window_line if window else (self.ly + self.scy) & 255
+        address += (row & 7) * 2 + (step - 1)
+        ticket[step] = self.vram[address]
+        if step == 2:
+            ticket[3] = 1
+
+    def _run_fetch_events(self) -> None:
+        pending = []
+        for event in self.f_events:
+            event[0] -= 1
+            if event[0] <= 0:
+                self._fetch_read(*event[1:])
+            else:
+                pending.append(event)
+        self.f_events = pending
 
     def _fetcher_dot(self) -> None:
         step = self.f_step
         if step < 3:
             self.f_dot += 1
             if self.f_dot == (MAP_READ_DOT, LOW_READ_DOT, HIGH_READ_DOT)[step]:
-                self._fetch_read(step)
+                if step == 0:
+                    self.ticket = [0, 0, 0, 0]
+                    self.ticket_col = self.fetch_col
+                    self.fetch_col += 1
+                args = (step, self.ticket, self.window_active, self.ticket_col)
+                shift = (MAP_SHIFT, LOW_SHIFT, HIGH_SHIFT)[step]
+                if shift:
+                    self.f_events.append([shift, *args])
+                else:
+                    self._fetch_read(*args)
             if self.f_dot < 2:
                 return
             self.f_dot = 0
@@ -259,8 +292,7 @@ class PPU:
                 self.dummy = False
                 self.fetch_col = 0
             else:
-                lo, hi = self.fetch_lo, self.fetch_hi
-                self.bg = [((lo >> b) & 1) | (((hi >> b) & 1) << 1) for b in range(7, -1, -1)]
+                self.bg = [(self.ticket, b) for b in range(7, -1, -1)]
             self.f_step = 0
             self.f_dot = 0
 
@@ -274,7 +306,7 @@ class PPU:
         ox, _index, tile, flags, oy = entry
         for read_at, is_high in ((self.obj_low_at, 0), (self.obj_high_at, 1)):
             if self.obj_dots == read_at:
-                height = 16 if self.lcdc & 4 else 8
+                height = 16 if self._lcdc_ago(OBJ_SIZE_LAG) & 4 else 8
                 row = self.ly - oy
                 if flags & 0x40:
                     row = height - 1 - row
@@ -376,7 +408,7 @@ class PPU:
                         self._start_object_fetch(entry)
                     return
         if self.bg:
-            colour = self.bg.pop(0)
+            colour = self.bg.pop(0)  # (ticket, bit): resolved when the pixel is coloured
             if self.skip:
                 self.skip -= 1
             else:
@@ -423,7 +455,7 @@ class PPU:
                 rec[7] = g_value if glitch else self.bgp
             if rec[5] <= dot and rec[8] is None:
                 rec[8], rec[9] = self.obp0, self.obp1
-            if rec[8] is None or rec[7] is None or rec[6] is None:
+            if rec[8] is None or rec[7] is None or rec[6] is None or not rec[1][0][3]:
                 keep.append(rec)
                 continue
             self.framebuffer[rec[10] * SCREEN_W + rec[0]] = self._pixel(rec)
@@ -431,7 +463,8 @@ class PPU:
 
     @staticmethod
     def _pixel(rec: list) -> int:
-        _x, bg, (colour, flags), _a, _b, _c, lcdc, bgp, obp0, obp1, _ly = rec
+        _x, (ticket, bit), (colour, flags), _a, _b, _c, lcdc, bgp, obp0, obp1, _ly = rec
+        bg = ((ticket[1] >> bit) & 1) | (((ticket[2] >> bit) & 1) << 1)
         if not lcdc & 1:
             bg = 0
         if colour and lcdc & 2 and not (flags & 0x80 and bg):
@@ -457,6 +490,11 @@ class PPU:
                 select & 0x20
                 and (
                     (self.mode == 2 and (self.ly != 0 or self.dot >= LINE0_IRQ_DOT))
+                    or (
+                        IRQ_EARLY
+                        and self.dot >= DOTS_PER_LINE - IRQ_EARLY
+                        and (self.ly < 143 or self.ly == LAST_LINE)
+                    )
                     or (self.ly == VBLANK_LINE and self.dot < 4)
                 )
             )
