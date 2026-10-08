@@ -23,8 +23,15 @@ MODE2_END = 80
 MODE_READ_LAG = 4  # FITTED: STAT and the CPU's VRAM/OAM locks see the mode 4 dots late (Mooneye
 # intr_2_mode0_timing, intr_2_mode3_timing, intr_2_oam_ok_timing); interrupts do not
 LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lcdon_timing-GS)
-PIXEL_DELAY = 5  # dots from the stepper's pixel to the pixel as the registers see it (Mealybug)
-FETCH_READ_EARLY = 0  # 1 reads on the first dot of a fetcher step, 0 on the second
+LINE0_LEAD = 4  # FITTED (Mealybug line_0_fix): on line 0 the pixel pipeline runs this early
+LINE0_IRQ_DOT = 0  # FITTED (Mealybug line_0_fix; Mooneye intr_1_2_timing): line 0's mode-2 IRQ
+BGP_GLITCH_DOT = 1  # FITTED: the dot, counted from the write's, whose palette is the OR
+# FITTED (Mealybug): dots from a pop to each register sample
+LCDC_DELAY = 9
+BGP_DELAY = 7
+OBP_DELAY = 10
+SKIP_LATCH_DOT = 10  # FITTED (Mealybug m3_scx_low_3_bits): last dot SCX's low bits are read
+MAP_READ_DOT = LOW_READ_DOT = HIGH_READ_DOT = 2  # which dot (1 or 2) of its step each fetch reads
 OBJ_FETCH_DOTS = 6
 FIRST_OBJECT_DISCOUNT = 3  # FITTED to Mooneye ppu/intr_2_mode0_timing_sprites
 VBLANK_LINE = 144
@@ -65,16 +72,18 @@ class PPU:
         self.wy_hit = False  # WY == LY seen this frame
         self.read_mode = 0  # the mode as the CPU sees it: ``mode`` from MODE_READ_LAG dots ago
         self._recent = [0] * MODE_READ_LAG
-        self.pipe: list[tuple[int, int, int, tuple[int, int]]] = []  # (due, x, bg, obj) to colour
+        self.pipe: list[list] = []  # popped pixels waiting for their register samples
         self.drawing = False  # mode 3 is running
         self.line0 = False  # the first line after LCD on: late, and its STAT mode is not lagged
         self.mode3_start = MODE2_END
+        self.mode0_dot = 0
         self.m3 = self.skip = self.fetch_col = 0
         self.bg: list[int] = []
         self.obj_fifo: list[tuple[int, int]] = []
         self.f_step = self.f_dot = 0
         self.fetch_tile = self.fetch_lo = self.fetch_hi = self.obj_lo = self.obj_hi = 0
         self.dummy = False
+        self.bgp_glitch: tuple[int, int, int] = (-1, -1, 0)  # (dot, line, OR of old and new)
         self.penalised = False
         self.obj_wait_left = 0
         self.obj_tiles_waited = set()
@@ -125,17 +134,19 @@ class PPU:
             self._next_line()
         if self.ly < VBLANK_LINE:
             dot = self.dot
-            if dot < MODE2_END:
-                if not self.skip_scan and not dot & 1:
-                    self._scan(dot >> 1)
-            elif dot == self.mode3_start:
+            if dot < MODE2_END and not self.skip_scan and not dot & 1:
+                self._scan(dot >> 1)
+            if dot == self.mode3_start:
                 self._start_mode3()
             elif self.drawing:
                 self._step_pixel()
-        pipe = self.pipe
-        while pipe and pipe[0][0] <= self.dot:
-            _due, x, bg, obj = pipe.pop(0)
-            self.framebuffer[self.ly * SCREEN_W + x] = self._pixel(bg, obj)
+            if dot == MODE2_END and self.drawing:
+                self.mode = 3
+            if self.mode0_dot and dot >= self.mode0_dot:
+                self.mode = 0
+                self.mode0_dot = 0
+        if self.pipe:
+            self._colour_pixels()
         self._recent.append(self.mode)
         lagged = self._recent.pop(0)
         self.read_mode = self.mode if self.line0 else lagged
@@ -153,6 +164,7 @@ class PPU:
         if self.ly == 0:
             self.window_line = 0
             self.wy_hit = False
+            self.mode3_start = MODE2_END - LINE0_LEAD
         if self.ly == VBLANK_LINE:
             self.frames += 1
             self.frame = bytes(self.framebuffer)
@@ -182,7 +194,8 @@ class PPU:
     # ----- mode 3 -------------------------------------------------------------------------
 
     def _start_mode3(self) -> None:
-        self.mode = 3
+        if self.dot >= MODE2_END:
+            self.mode = 3
         self.drawing = True
         self.x = 0
         self.m3 = 0
@@ -206,33 +219,37 @@ class PPU:
     def _tile_row(self) -> int:
         return self.window_line if self.window_active else (self.ly + self.scy) & 255
 
+    def _fetch_read(self, step: int) -> None:
+        lcdc = self.lcdc
+        if step == 0:
+            if self.window_active:
+                base = 0x1C00 if lcdc & 0x40 else 0x1800
+                index = base + (self.window_line >> 3) * 32 + (self.fetch_col & 31)
+            else:
+                base = 0x1C00 if lcdc & 8 else 0x1800
+                row = (self.ly + self.scy) & 255
+                index = base + (row >> 3) * 32 + (((self.scx >> 3) + self.fetch_col) & 31)
+            self.fetch_tile = self.vram[index]
+            self.fetch_col += 1
+            return
+        tile = self.fetch_tile
+        signed = 0x1000 + ((tile ^ 0x80) - 0x80) * 16
+        address = tile * 16 if lcdc & 0x10 else signed
+        address += (self._tile_row() & 7) * 2 + (step - 1)
+        if step == 1:
+            self.fetch_lo = self.vram[address]
+        else:
+            self.fetch_hi = self.vram[address]
+
     def _fetcher_dot(self) -> None:
         step = self.f_step
         if step < 3:
             self.f_dot += 1
-            if self.f_dot < 2 - FETCH_READ_EARLY:
+            if self.f_dot == (MAP_READ_DOT, LOW_READ_DOT, HIGH_READ_DOT)[step]:
+                self._fetch_read(step)
+            if self.f_dot < 2:
                 return
             self.f_dot = 0
-            lcdc = self.lcdc
-            if step == 0:
-                if self.window_active:
-                    base = 0x1C00 if lcdc & 0x40 else 0x1800
-                    index = base + (self.window_line >> 3) * 32 + (self.fetch_col & 31)
-                else:
-                    base = 0x1C00 if lcdc & 8 else 0x1800
-                    row = (self.ly + self.scy) & 255
-                    index = base + (row >> 3) * 32 + (((self.scx >> 3) + self.fetch_col) & 31)
-                self.fetch_tile = self.vram[index]
-                self.fetch_col += 1
-            else:
-                tile = self.fetch_tile
-                signed = 0x1000 + ((tile ^ 0x80) - 0x80) * 16
-                address = tile * 16 if lcdc & 0x10 else signed
-                address += (self._tile_row() & 7) * 2 + (step - 1)
-                if step == 1:
-                    self.fetch_lo = self.vram[address]
-                else:
-                    self.fetch_hi = self.vram[address]
             self.f_step = step + 1
             if self.f_step < 3:
                 return
@@ -312,6 +329,8 @@ class PPU:
 
     def _step_pixel(self) -> None:
         self.m3 += 1
+        if self.m3 <= SKIP_LATCH_DOT:
+            self.skip = self.scx & 7  # the fine scroll is read here, then frozen for the line
         if self.obj_dots:
             self._object_dot()
             return
@@ -362,22 +381,62 @@ class PPU:
                 self.skip -= 1
             else:
                 obj = self.obj_fifo.pop(0) if self.obj_fifo else (0, 0)
-                self.pipe.append((self.dot + PIXEL_DELAY, self.x, colour, obj))
+                d = self.dot
+                self.pipe.append(
+                    [
+                        self.x,
+                        colour,
+                        obj,
+                        d + LCDC_DELAY,
+                        d + BGP_DELAY,
+                        d + OBP_DELAY,
+                        None,
+                        None,
+                        None,
+                        None,
+                        self.ly,
+                    ]
+                )
                 self.x += 1
                 if self.x >= SCREEN_W:
-                    self.mode = 0
+                    if self.mode3_start < MODE2_END:  # line 0: the pipeline ran early, STAT did not
+                        self.mode0_dot = self.dot + MODE2_END - self.mode3_start
+                    else:
+                        self.mode = 0
                     self.drawing = False
                     return
         self._fetcher_dot()
 
-    def _pixel(self, bg: int, obj: tuple[int, int]) -> int:
-        if not self.lcdc & 1:
+    # A popped pixel is coloured from three registers, each sampled a fixed number of dots after
+    # the pop (they pass different stages of the pipeline): LCDC's BG/OBJ enables, BGP, OBP0/1.
+
+    def _colour_pixels(self) -> None:
+        dot = self.dot
+        keep = []
+        for rec in self.pipe:
+            # rec = [x, bg, obj, lcdc_due, bgp_due, obp_due, lcdc, bgp, obp0, obp1, ly]
+            if rec[3] <= dot and rec[6] is None:
+                rec[6] = self.lcdc
+            if rec[4] <= dot and rec[7] is None:
+                g_dot, g_ly, g_value = self.bgp_glitch
+                glitch = g_dot + BGP_GLITCH_DOT == dot and g_ly == self.ly
+                rec[7] = g_value if glitch else self.bgp
+            if rec[5] <= dot and rec[8] is None:
+                rec[8], rec[9] = self.obp0, self.obp1
+            if rec[8] is None or rec[7] is None or rec[6] is None:
+                keep.append(rec)
+                continue
+            self.framebuffer[rec[10] * SCREEN_W + rec[0]] = self._pixel(rec)
+        self.pipe = keep
+
+    @staticmethod
+    def _pixel(rec: list) -> int:
+        _x, bg, (colour, flags), _a, _b, _c, lcdc, bgp, obp0, obp1, _ly = rec
+        if not lcdc & 1:
             bg = 0
-        colour, flags = obj
-        if colour and self.lcdc & 2 and not (flags & 0x80 and bg):
-            palette = self.obp1 if flags & 0x10 else self.obp0
-            return (palette >> (colour * 2)) & 3
-        return (self.bgp >> (bg * 2)) & 3
+        if colour and lcdc & 2 and not (flags & 0x80 and bg):
+            return ((obp1 if flags & 0x10 else obp0) >> (colour * 2)) & 3
+        return (bgp >> (bg * 2)) & 3
 
     @property
     def visible_ly(self) -> int:
@@ -394,7 +453,13 @@ class PPU:
             or (select & 0x08 and self.mode == 0)
             or (select & 0x10 and self.mode == 1)
             # the mode-2 source also fires as VBlank starts (Mooneye vblank_stat_intr-GS)
-            or (select & 0x20 and (self.mode == 2 or (self.ly == VBLANK_LINE and self.dot < 4)))
+            or (
+                select & 0x20
+                and (
+                    (self.mode == 2 and (self.ly != 0 or self.dot >= LINE0_IRQ_DOT))
+                    or (self.ly == VBLANK_LINE and self.dot < 4)
+                )
+            )
         )
         if line and not self.stat_line:
             self.raise_irq(1)
@@ -422,6 +487,7 @@ class PPU:
             self.window_line = 0
             self.window_used = self.window_active = self.wy_hit = False
             self.line_objs = []
+            self.pipe = []
             self._settle(0)
         elif not was_on and self.lcd_on:  # LCD on: line 0 starts now, but late
             self.ly = 0
@@ -444,6 +510,12 @@ class PPU:
         self.ly, self.dot = ly, dot
         self._settle(mode)
         self._update_stat_line()
+
+    def write_bgp(self, value: int) -> None:
+        """DMG: for one dot around a BGP write the palette is the OR of the old and new values
+        (Mealybug m3_bgp_change: each band is one pixel wider at both edges)."""
+        self.bgp_glitch = (self.dot, self.ly, self.bgp | value)
+        self.bgp = value
 
     def write_lyc(self, value: int) -> None:
         self.lyc = value

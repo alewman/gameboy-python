@@ -284,7 +284,7 @@ class GameBoy:
         elif low == 0x46:
             self.dma.start(value)
         elif low == 0x47:
-            self.ppu.bgp = value
+            self.ppu.write_bgp(value)
         elif low == 0x48:
             self.ppu.obp0 = value
         elif low == 0x49:

@@ -55,11 +55,26 @@ def main() -> int:
     args = parser.parse_args()
     ignore = set(filter(None, args.ignore.split(",")))
     rows = read_trace(args.trace, int(args.start, 16), args.limit)
-    gb = GameBoy(load_cartridge(args.rom.read_bytes()), boot_rom=args.boot.read_bytes() if args.boot else None)
+    gb = GameBoy(
+        load_cartridge(args.rom.read_bytes()),
+        boot_rom=args.boot.read_bytes() if args.boot else None,
+    )
     cpu = gb.cpu
     for i, row in enumerate(rows[: args.limit]):
-        got = (cpu.pc, (cpu.a << 8) | cpu.f, cpu.b, cpu.c, cpu.d, cpu.e, cpu.h, cpu.l, cpu.sp, cpu.ie, cpu.if_)
-        bad = [n for n, g, w in zip(NAMES, got, row[:11]) if g != w and n not in ignore]
+        got = (
+            cpu.pc,
+            (cpu.a << 8) | cpu.f,
+            cpu.b,
+            cpu.c,
+            cpu.d,
+            cpu.e,
+            cpu.h,
+            cpu.l,
+            cpu.sp,
+            cpu.ie,
+            cpu.if_,
+        )
+        bad = [n for n, g, w in zip(NAMES, got, row[:11], strict=True) if g != w and n not in ignore]
         if bad:
             print(f"first divergence at instruction {i}: {bad}")
             print("  board", [hex(x) for x in got])
