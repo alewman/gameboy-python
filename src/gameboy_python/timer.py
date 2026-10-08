@@ -38,13 +38,6 @@ class Timer:
 
     def tick(self, t_cycles: int = 4) -> None:
         """Advance one M-cycle: ``t_cycles`` counts of the system counter."""
-        if self.reload_pending:
-            self.reload_pending = False
-            self.reloading = True
-            self.tima = self.tma
-            self.raise_irq(2)
-        else:
-            self.reloading = False
         previous = self.counter
         self.previous = previous
         counter = self.counter = (previous + t_cycles) & 0xFFFF
@@ -52,6 +45,20 @@ class Timer:
             bit = TIMER_BITS[self.tac & 3]
             if (previous >> bit) & 1 and not (counter >> bit) & 1:
                 self._increment()
+
+    def finish(self) -> None:
+        """The end of the M-cycle, after the CPU's access. The reload and the interrupt happen
+        here, at the end of the overflow cycle, so that the core's next decision sees IF: the
+        hardware services the timer interrupt before the instruction after the one whose cycle
+        overflowed TIMA (Mooneye timer/rapid_toggle). TIMA still read $00 during the overflow
+        cycle; the reload is visible from the next one."""
+        if self.reload_pending:
+            self.reload_pending = False
+            self.reloading = True
+            self.tima = self.tma
+            self.raise_irq(2)
+        else:
+            self.reloading = False
 
     def _increment(self) -> None:
         self.tima += 1

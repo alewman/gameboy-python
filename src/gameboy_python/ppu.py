@@ -83,8 +83,14 @@ class PPU:
         self.mode = self._mode_at()
         self._update_stat_line()
 
+    @property
+    def visible_ly(self) -> int:
+        """LY as software reads it: on line 153 it reads 153 for only the first few dots and then
+        0 for the rest of the line (Pan Docs STAT.md; Gambatte hwtests/ly0, lyc153int_m2irq)."""
+        return 0 if self.ly == LAST_LINE and self.dot >= 4 else self.ly
+
     def _update_stat_line(self) -> None:
-        self.lyc_flag = self.ly == self.lyc
+        self.lyc_flag = self.visible_ly == self.lyc
         select = self.stat_select
         line = bool(
             (select & 0x40 and self.lyc_flag)
@@ -129,4 +135,4 @@ class PPU:
             self._update_stat_line()
 
     def read_ly(self) -> int:
-        return self.ly if self.lcd_on else 0
+        return self.visible_ly if self.lcd_on else 0

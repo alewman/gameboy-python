@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from gameboy_python.cartridge.header import Header, parse_header
-from gameboy_python.cartridge.mbc import MBC1, Cartridge
+from gameboy_python.cartridge.mbc import MBC1, MBC5, Cartridge
 
 
 class CartridgeConnector(Protocol):
@@ -30,9 +30,19 @@ def load_cartridge(rom: bytes) -> Cartridge:
         return Cartridge(rom, header)
     if header.board == "mbc1":
         return MBC1(rom, header)
+    if header.board == "mbc5":
+        return MBC5(rom, header)
     raise NotImplementedError(
         f"cartridge board {header.board!r} (type ${header.cartridge_type:02X})"
     )
 
 
-__all__ = ["MBC1", "Cartridge", "CartridgeConnector", "Header", "load_cartridge", "parse_header"]
+__all__ = [
+    "MBC1",
+    "MBC5",
+    "Cartridge",
+    "CartridgeConnector",
+    "Header",
+    "load_cartridge",
+    "parse_header",
+]

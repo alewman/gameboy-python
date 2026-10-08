@@ -97,3 +97,47 @@ class MBC1(Cartridge):
             self.mode = value & 1
         elif 0xA000 <= address < 0xC000 and self.ram_enabled and self.ram:
             self.ram[self._ram_offset(address)] = value
+
+
+class MBC5(Cartridge):
+    """MBC5 (Pan Docs MBC5.md; Mooneye emulator-only/mbc5/* verify on a genuine chip).
+
+    RAMG ($0000-$1FFF, enabled only by exactly $0A), ROMB0 ($2000-$2FFF, 8 bits), ROMB1
+    ($3000-$3FFF, bit 0 = bank bit 8), RAMB ($4000-$5FFF, 4 bits; bit 3 drives the rumble motor
+    on rumble boards). Unlike MBC1, bank 0 can be selected for $4000-$7FFF.
+    """
+
+    def __init__(self, rom: bytes, header: Header) -> None:
+        super().__init__(rom, header)
+        self.rom_mask = max(1, len(self.rom) // 0x4000) - 1
+        self.ram_enabled = False
+        self.romb0 = 1
+        self.romb1 = 0
+        self.ramb = 0
+        self.rumble = False
+
+    def read(self, address: int, t: int) -> int | None:
+        if address < 0x4000:
+            return self.rom[address]
+        if address < 0x8000:
+            bank = ((self.romb1 << 8) | self.romb0) & self.rom_mask
+            return self.rom[(bank << 14) | (address & 0x3FFF)]
+        if 0xA000 <= address < 0xC000:
+            if self.ram_enabled and self.ram:
+                return self.ram[((self.ramb << 13) | (address & 0x1FFF)) % len(self.ram)]
+            return 0xFF
+        return None
+
+    def write(self, address: int, value: int, t: int) -> None:
+        if address < 0x2000:
+            self.ram_enabled = value == 0x0A
+        elif address < 0x3000:
+            self.romb0 = value
+        elif address < 0x4000:
+            self.romb1 = value & 1
+        elif address < 0x6000:
+            self.ramb = value & (0x07 if self.header.has_rumble else 0x0F)
+            if self.header.has_rumble:
+                self.rumble = bool(value & 0x08)
+        elif 0xA000 <= address < 0xC000 and self.ram_enabled and self.ram:
+            self.ram[((self.ramb << 13) | (address & 0x1FFF)) % len(self.ram)] = value

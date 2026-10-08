@@ -16,7 +16,7 @@ DIRECTIONS = ("right", "left", "up", "down")
 class Joypad:
     def __init__(self, raise_irq: Callable[[int], None]) -> None:
         self.raise_irq = raise_irq
-        self.select = 0x30  # bits 5-4 as written
+        self.select = 0x00  # bits 5-4: both rows selected at power-on, so P1 reads $CF
         self.pressed: set[str] = set()
 
     def _lines(self) -> int:

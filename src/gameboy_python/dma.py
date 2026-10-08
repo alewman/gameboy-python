@@ -41,6 +41,7 @@ class OamDma:
         self.index = 0
         self.byte = 0xFF  # the byte on the source bus this M-cycle
         self.bus = EXTERNAL
+        self._finishing = False  # the last byte moved this M-cycle: still locked until the next
 
     def start(self, value: int) -> None:
         self.register = value
@@ -49,6 +50,9 @@ class OamDma:
 
     def tick(self) -> None:
         """One M-cycle."""
+        if self._finishing:
+            self._finishing = False
+            self.active = False
         if self.pending is not None:
             self.countdown -= 1
             if self.countdown == 0:
@@ -65,4 +69,4 @@ class OamDma:
             self.write_oam(self.index, self.byte)
             self.index += 1
             if self.index == 160:
-                self.active = False
+                self._finishing = True

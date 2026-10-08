@@ -51,6 +51,9 @@ class GameBoy:
         self.cpu = SM83(self._read, self._write, self._idle, stop=self._stop)
         raise_irq = self.cpu.request_interrupt
         self.timer = Timer(raise_irq, machine.tac_disable_glitch)
+        # The counter's power-on phase: DIV reads in Mooneye boot_div-dmgABCmgb need the counter
+        # 4 T ahead of the M-cycle count since reset (fitted; the only phase that passes it)
+        self.timer.counter = 4
         self.serial = Serial(raise_irq)
         self.joypad = Joypad(raise_irq)
         self.ppu = PPU(raise_irq)
@@ -66,13 +69,18 @@ class GameBoy:
         header = self.cartridge.header
         f = 0x80 | (0x30 if header.header_checksum != 0 else 0)
         self.cpu.restore_state(CPUState(**POST_BOOT_DMG, f=f, sp=0xFFFE, pc=0x0100, if_=0x01))
-        # DIV $AB; the low byte is the counter phase Mooneye boot_div-dmgABCmgb measures
-        self.timer.counter = 0xABCC
+        # DIV $AB; the low byte is the counter phase at handoff: what dmg-sim's
+        # quickboot leaves on this board and the only phase that passes Mooneye boot_div-dmgABCmgb
+        self.timer.counter = 0xABC8
         self.serial.sc = 0
         self.dma.register = 0xFF
         self.ppu.bgp = 0xFC
         self.ppu.write_lcdc(0x91)
         self.ppu.stat_select = 0
+        # the PPU is late in line 153 (LY reads 0, mode 1, STAT $85) at handoff, as quickboot
+        # leaves it
+        self.ppu.ly, self.ppu.dot, self.ppu.mode = 153, 392, 1
+        self.ppu._update_stat_line()
         for address, value in (
             (0x10, 0x80), (0x11, 0xBF), (0x12, 0xF3), (0x13, 0xFF), (0x14, 0xBF),
             (0x16, 0x3F), (0x17, 0x00), (0x18, 0xFF), (0x19, 0xBF),
@@ -97,6 +105,7 @@ class GameBoy:
 
     def _idle(self, address: int) -> None:
         self._tick()
+        self.timer.finish()
 
     def _stop(self, pending: bool):
         """STOP on a DMG: it stops the oscillator and clears DIV; an interrupt that is already
@@ -111,11 +120,14 @@ class GameBoy:
 
     def _read(self, address: int) -> int:
         self._tick()
-        return self._load(address)
+        value = self._load(address)
+        self.timer.finish()
+        return value
 
     def _write(self, address: int, value: int) -> None:
         self._tick()
         self._store(address, value)
+        self.timer.finish()
 
     def _load(self, address: int) -> int:
         """What the CPU reads at ``address`` this M-cycle."""
