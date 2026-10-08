@@ -130,7 +130,6 @@ SingleStepTests `sm83` belongs to the CPU core, not here; sm83-python's
   sides from $0000): no divergence over 1,200,000 instructions ignoring `if` and `af` (the two
   fields that read PPU phase: IF.0 at instruction 39,939, an LY read at 513,158). MAME is a detector;
   both are PPU-phase leads for milestone 2.
-- **PyPy 3.11**: the whole cpu_instrs.gb, 224,319,804 T (about 56 M instructions' worth of
-  M-cycles), 3,191 frames, 8.7 s wall (including start-up).
+- **PyPy 3.11**: the whole cpu_instrs.gb, 224,319,804 T (56.1 M M-cycles), 3,191 frames, 8.7 s wall (including start-up).
 - Import boundaries: `cartridge/` and `apu/` import nothing else from the board
   (`tests/test_import_boundaries.py`).
