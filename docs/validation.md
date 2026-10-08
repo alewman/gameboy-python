@@ -119,3 +119,18 @@ SingleStepTests `sm83` belongs to the CPU core, not here; sm83-python's
 `[BIOS]` boot ROMs: DMG `4ed31ec6…`, DMG0, MGB, CGB revisions). MAME's
 `hash/gameboy.xml` (1,743 entries) and `gbcolor.xml` (1,718) carry board
 `slot` features. Counts in [cartridge.md](cartridge.md).
+
+## Results: milestone 1 (2026-10-07)
+
+- **Mooneye** acceptance, 56 of the 66 applicable ROMs pass (skip-boot); the other 10 need the
+  dot-accurate PPU and are strict xfails (`tests/test_mooneye.py::NEEDS_PPU`). Real boot ROM: same,
+  except 3 phase tests (xfail until milestone 2). dmg-sim quickboot: the same set.
+- **blargg** cpu_instrs 11/11 (serial text), instr_timing, mem_timing, mem_timing-2 ($A000).
+- **MAME trace** (`scripts/mame_compare.py`, blargg 01-special, SameBoy's open boot ROM on both
+  sides from $0000): no divergence over 1,200,000 instructions ignoring `if` and `af` (the two
+  fields that read PPU phase: IF.0 at instruction 39,939, an LY read at 513,158). MAME is a detector;
+  both are PPU-phase leads for milestone 2.
+- **PyPy 3.11**: the whole cpu_instrs.gb, 224,319,804 T (about 56 M instructions' worth of
+  M-cycles), 3,191 frames, 8.7 s wall (including start-up).
+- Import boundaries: `cartridge/` and `apu/` import nothing else from the board
+  (`tests/test_import_boundaries.py`).
