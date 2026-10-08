@@ -22,23 +22,28 @@ from gameboy_python.machines import DOTS_PER_LINE
 MODE2_END = 80
 MODE_READ_LAG = 4  # FITTED: STAT and the CPU's VRAM/OAM locks see the mode 4 dots late (Mooneye
 # intr_2_mode0_timing, intr_2_mode3_timing, intr_2_oam_ok_timing); interrupts do not
-OAM_IRQ_EARLY = 0  # the OAM interrupt pulse begins this early (GBMicrotest wants 4, Mooneye 0)
+OAM_IRQ_EARLY = (
+    4  # FITTED: the CPU's dispatch sees the line-start OAM interrupt this early (GBMicrotest)
+)
+WX_LAG = 4  # FITTED (Mealybug): the window comparator sees WX this many dots late
+WIN_LAG = 0  # ... and LCDC.5/.0 this many
 WINDOW_HEAD = 4  # FITTED (GBMicrotest win*): fetcher dots the window restart gets for free
 WINDOW_EDGE_HEAD = 6  # ... when the window starts at the left edge (WX < 7)
 LYC_IRQ_EARLY = 4  # the LY=LYC interrupt comes this many dots before the flag shows
 OAM_IRQ_WIDTH = 4  # and lasts this many dots
 LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lcdon_timing-GS)
-LINE0_LEAD = 4  # FITTED (Mealybug line_0_fix): on line 0 the pixel pipeline runs this early
+LINE0_LEAD = 0  # FITTED (Mealybug line_0_fix): on line 0 the pixel pipeline runs this early
 BGP_GLITCH_DOT = 1  # FITTED: the dot, counted from the write's, whose palette is the OR
 # FITTED (Mealybug): dots from a pop to each register sample
-LCDC_DELAY = 9
-BGP_DELAY = 7
-OBP_DELAY = 10
+LCDC_DELAY = 5
+BGP_DELAY = 3
+OBP_DELAY = 6
 OBJ_SIZE_LAG = 0  # FITTED (Mealybug): dots LCDC.2 arrives late at an object fetch
-MAP_SHIFT = LOW_SHIFT = HIGH_SHIFT = (
-    10  # FITTED (Mealybug): dots each background VRAM read is deferred
-)
-SKIP_LATCH_DOT = 10  # FITTED (Mealybug m3_scx_low_3_bits): last dot SCX's low bits are read
+# FITTED (Mealybug): dots each background VRAM read is deferred past its fetcher step
+MAP_SHIFT = 6
+LOW_SHIFT = 6
+HIGH_SHIFT = 6
+SKIP_LATCH_DOT = 6  # FITTED (Mealybug m3_scx_low_3_bits): last dot SCX's low bits are read
 MAP_READ_DOT = LOW_READ_DOT = HIGH_READ_DOT = 2  # which dot (1 or 2) of its step each fetch reads
 OBJ_FETCH_DOTS = 6
 FIRST_OBJECT_DISCOUNT = 3  # FITTED to Mooneye ppu/intr_2_mode0_timing_sprites
@@ -52,10 +57,14 @@ class PPU:
     def __init__(self, raise_irq: Callable[[int], None], stat_write_glitch: bool = False) -> None:
         self.raise_irq = raise_irq
         self.stat_write_glitch = stat_write_glitch
+        self.early_fired = False
+        self.irq_early_by = 0  # dots before its real time the interrupt just raised came
+        self.irq_from_oam = False  # the STAT interrupt just raised came from the OAM source
         self.vram = bytearray(0x2000)
         self.oam = bytearray(0xA0)
         self.lcdc = 0
         self.f_events: list[list[int]] = []  # deferred fetcher reads [dots left, step]
+        self.wx_hist = [0] * 16
         self.lcdc_hist = [0] * 16  # LCDC as of each of the last dots (for the lagged bits)
         self.stat_select = 0  # STAT bits 6-3 as written
         self.scy = self.scx = 0
@@ -148,6 +157,8 @@ class PPU:
     def _dot(self) -> None:
         self.lcdc_hist.append(self.lcdc)
         del self.lcdc_hist[0]
+        self.wx_hist.append(self.wx)
+        del self.wx_hist[0]
         self.dot += 1
         if self.dot >= DOTS_PER_LINE:
             self._next_line()
@@ -388,12 +399,14 @@ class PPU:
         lcdc = self.lcdc
         if self.bg and not self.skip:
             x = self.x
+            wx = self.wx_hist[-WX_LAG] if WX_LAG else self.wx
+            win_lcdc = self._lcdc_ago(WIN_LAG)
             if (
                 not self.window_active
-                and lcdc & 0x20
-                and lcdc & 1
+                and win_lcdc & 0x20
+                and win_lcdc & 1
                 and self.wy_hit
-                and (x + 7 == self.wx or (x == 0 and self.wx < 7))
+                and (x + 7 == wx or (x == 0 and wx < 7))
             ):
                 self.window_active = True
                 self.window_used = True
@@ -401,8 +414,8 @@ class PPU:
                 self.f_step = 0
                 self.f_dot = 0
                 self.fetch_col = 0
-                self.free_skip = max(0, 7 - self.wx)  # hidden window pixels cost no dots
-                for _ in range(1 + (WINDOW_EDGE_HEAD if self.wx < 7 else WINDOW_HEAD)):
+                self.free_skip = max(0, 7 - wx)  # hidden window pixels cost no dots
+                for _ in range(1 + (WINDOW_EDGE_HEAD if wx < 7 else WINDOW_HEAD)):
                     self._fetcher_dot()
                 return
             objs = self.line_objs
@@ -494,6 +507,7 @@ class PPU:
         # (and for the first 4 dots of a new line it reads as false: Mooneye lcdon_timing-GS)
         self.lyc_flag = (self.dot >= 4 or self.ly == 0) and self.visible_ly == self.lyc
         select = self.stat_select
+        oam = bool(select & 0x20 and self._oam_pulse())
         line = bool(
             (select & 0x40 and self.lyc_flag)
             or (select & 0x40 and self._lyc_early())
@@ -503,12 +517,26 @@ class PPU:
                 and not (self.line0 and self.dot < self.mode3_start)
             )
             or (select & 0x10 and self.mode == 1)
-            # the OAM source is a short pulse at the start of each line, VBlank's first line
-            # included (Mooneye vblank_stat_intr-GS, GBMicrotest lcdon_to_oam_int_l1)
-            or (select & 0x20 and self._oam_pulse())
+            or oam
         )
+        early_dot = DOTS_PER_LINE - OAM_IRQ_EARLY
+        if OAM_IRQ_EARLY and select & 0x20 and self.dot == early_dot and not self.stat_line:
+            following = 0 if self.ly == LAST_LINE else self.ly + 1
+            if 0 < following <= VBLANK_LINE:
+                # the interrupt the CPU's dispatch sees a cycle before the line's pulse is real
+                self.early_fired = True
+                self.irq_from_oam = True
+                self.irq_early_by = OAM_IRQ_EARLY
+                self.raise_irq(1)
         if line and not self.stat_line:
-            self.raise_irq(1)
+            if self.early_fired and oam:
+                self.early_fired = False  # already raised, early
+            else:
+                self.irq_from_oam = False
+                self.irq_early_by = 0
+                self.raise_irq(1)
+        if self.dot == 1:
+            self.early_fired = False
         self.stat_line = line
 
     def _lyc_early(self) -> bool:
@@ -521,12 +549,9 @@ class PPU:
         )
 
     def _oam_pulse(self) -> bool:
-        if self.dot >= DOTS_PER_LINE - OAM_IRQ_EARLY:
-            following = 0 if self.ly == LAST_LINE else self.ly + 1
-            return following <= VBLANK_LINE
-        return (
-            self.dot < OAM_IRQ_WIDTH - OAM_IRQ_EARLY and self.ly <= VBLANK_LINE and not self.line0
-        )
+        """The line-start OAM source: a short pulse at dots 0-3 of each line, VBlank's first line
+        included (Mooneye vblank_stat_intr-GS, GBMicrotest lcdon_to_oam_int_l1)."""
+        return self.dot < OAM_IRQ_WIDTH and self.ly <= VBLANK_LINE and not self.line0
 
     # ----- registers ----------------------------------------------------------------------
 

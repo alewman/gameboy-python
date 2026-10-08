@@ -29,6 +29,9 @@ from gameboy_python.timer import Timer
 POST_BOOT_DMG = {"a": 0x01, "b": 0x00, "c": 0x13, "d": 0x00, "e": 0xD8, "h": 0x01, "l": 0x4D}
 
 
+HALT_OAM_DELAY = 4  # a halted CPU wakes this much later for it: Mooneye's halt tests (FITTED)
+
+
 class GameBoy:
     """One console: a machine row, a cartridge, an optional boot ROM, and all the units."""
 
@@ -56,7 +59,10 @@ class GameBoy:
         self.timer.counter = 4
         self.serial = Serial(raise_irq)
         self.joypad = Joypad(raise_irq)
-        self.ppu = PPU(raise_irq, machine.stat_write_glitch)
+        self._hide = 0  # IF bits raised early for the CPU's dispatch, not yet readable
+        self._hide_left = 0
+        self._late: list[list[int]] = []  # OAM interrupts held back while the CPU is halted
+        self.ppu = PPU(self._ppu_irq, machine.stat_write_glitch)
         self.apu = APU()
         self.dma = OamDma(self._dma_source, self._dma_write)
         if self.boot_rom is None:
@@ -93,9 +99,32 @@ class GameBoy:
 
     # ----- time ---------------------------------------------------------------------------
 
+    def _ppu_irq(self, bit: int) -> None:
+        if HALT_OAM_DELAY and bit == 1 and self.ppu.irq_from_oam and self.cpu.halted:
+            self._late.append([HALT_OAM_DELAY, bit])
+        else:
+            self.cpu.request_interrupt(bit)
+            if bit == 1 and self.ppu.irq_early_by:
+                # the dispatch decision sees this interrupt a cycle early; reads of IF do not
+                self._hide |= 2
+                self._hide_left = self.ppu.irq_early_by
+
     def _tick(self) -> None:
         """One M-cycle of the whole board."""
         self.t += 4
+        if self._hide:
+            self._hide_left -= 4
+            if self._hide_left <= 0:
+                self._hide = 0
+        if self._late:
+            held = []
+            for item in self._late:
+                item[0] -= 4
+                if item[0] <= 0:
+                    self.cpu.request_interrupt(item[1])
+                else:
+                    held.append(item)
+            self._late = held
         timer = self.timer
         timer.tick()
         self.serial.tick(timer.previous, timer.counter)
@@ -224,7 +253,7 @@ class GameBoy:
         if low == 0x07:
             return 0xF8 | self.timer.tac
         if low == 0x0F:
-            return 0xE0 | self.cpu.if_
+            return 0xE0 | (self.cpu.if_ & ~self._hide)
         if low == 0x40:
             return ppu.lcdc
         if low == 0x41:
