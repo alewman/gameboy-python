@@ -23,8 +23,10 @@ MODE2_END = 80
 MODE_READ_LAG = 4  # FITTED: STAT and the CPU's VRAM/OAM locks see the mode 4 dots late (Mooneye
 # intr_2_mode0_timing, intr_2_mode3_timing, intr_2_oam_ok_timing); interrupts do not
 LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lcdon_timing-GS)
+PIXEL_DELAY = 2  # dots from the stepper's pixel to the pixel as the registers see it (Mealybug)
 FIRST_OBJECT_DISCOUNT = 3  # FITTED to Mooneye ppu/intr_2_mode0_timing_sprites: the first object's
 # stall on a line is 3 dots shorter than Pan Docs' penalty (every later one is as documented)
+MAP_PHASE, LOW_PHASE, HIGH_PHASE = 1, 3, 5  # FITTED: dots into a tile of each fetcher read
 START_UP_DOTS = 12  # two tile fetches before the first pixel (Pan Docs Rendering.md)
 VBLANK_LINE = 144
 LAST_LINE = 153
@@ -67,10 +69,17 @@ class PPU:
         self.wy_hit = False  # WY == LY seen this frame
         self.read_mode = 0  # the mode as the CPU sees it: ``mode`` from MODE_READ_LAG dots ago
         self._recent = [0] * MODE_READ_LAG
+        self.pipe: list[
+            tuple[int, int, int]
+        ] = []  # (due dot, x, BG colour) waiting for the palettes
         self.drawing = False  # mode 3's pixel stepper is running
         self.penalised = False  # an object stalled this line
         self.line0 = False  # the first line after LCD on: late, and its STAT mode is not lagged
         self.mode3_start = MODE2_END
+        self.m3 = self.popped = self.fetch_col = self.discard = 0
+        self.cur = (0, 0)
+        self.fetch_tile = self.fetch_lo = self.fetch_hi = 0
+        self.window_fetch = False
 
     # ----- state --------------------------------------------------------------------------
 
@@ -122,6 +131,10 @@ class PPU:
                 self._start_mode3()
             elif self.drawing:
                 self._step_pixel()
+        pipe = self.pipe
+        while pipe and pipe[0][0] <= self.dot:
+            _due, x, bg = pipe.pop(0)
+            self.framebuffer[self.ly * SCREEN_W + x] = self._pixel(x, bg)
         self._recent.append(self.mode)
         lagged = self._recent.pop(0)
         self.read_mode = self.mode if self.line0 else lagged
@@ -172,24 +185,95 @@ class PPU:
         self.drawing = True
         self.penalised = False
         self.x = 0
-        self.delay = START_UP_DOTS + (self.scx & 7)
+        self.m3 = 0
+        self.popped = 0
+        self.fetch_col = 0
+        self.discard = self.scx & 7  # latched now: later SCX writes move tiles, not the fine scroll
+        self.cur = (0, 0)
         self.stall = 0
         self.next_obj = 0
         self.penalised_tiles = set()
         self.window_active = False
+        self.window_fetch = False
+
+    # The background fetcher, reduced to when each of its three VRAM reads happens: a tile's map
+    # byte,
+    # data-low and data-high are read at fixed pixel phases while the previous tile is on screen
+    # (Pan Docs pixel_fifo.md "FIFO Pixel Fetcher": 2 dots per step). Registers are read at those
+    # dots, which is what the Mealybug m3_* pictures measure. FITTED phases: MAP_PHASE etc.
+
+    def _fetch_map(self) -> None:
+        lcdc = self.lcdc
+        if self.window_active:
+            base = 0x1C00 if lcdc & 0x40 else 0x1800
+            index = base + (self.window_line >> 3) * 32 + (self.fetch_col & 31)
+        else:
+            base = 0x1C00 if lcdc & 8 else 0x1800
+            row = (self.ly + self.scy) & 255
+            index = base + (row >> 3) * 32 + (((self.scx >> 3) + self.fetch_col) & 31)
+        self.fetch_tile = self.vram[index]
+        self.fetch_col += 1
+
+    def _tile_address(self) -> int:
+        row = self.window_line if self.window_active else (self.ly + self.scy) & 255
+        tile = self.fetch_tile
+        if self.lcdc & 0x10:
+            return tile * 16 + (row & 7) * 2
+        return 0x1000 + ((tile ^ 0x80) - 0x80) * 16 + (row & 7) * 2
+
+    def _fetch_low(self) -> None:
+        self.fetch_lo = self.vram[self._tile_address()]
+
+    def _fetch_high(self) -> None:
+        self.fetch_hi = self.vram[self._tile_address() + 1]
+
+    def _fetch_event(self, phase: int) -> None:
+        if phase == MAP_PHASE:
+            self._fetch_map()
+        elif phase == LOW_PHASE:
+            self._fetch_low()
+        elif phase == HIGH_PHASE:
+            self._fetch_high()
 
     def _step_pixel(self) -> None:
-        if self.delay:
-            self.delay -= 1
+        self.m3 += 1
+        m3 = self.m3
+        if m3 <= START_UP_DOTS:  # the dummy tile, then tile 0 (its three reads at m3 7, 9, 11)
+            if m3 == START_UP_DOTS // 2 + MAP_PHASE:
+                self._fetch_map()
+            elif m3 == START_UP_DOTS // 2 + LOW_PHASE:
+                self._fetch_low()
+            elif m3 == START_UP_DOTS // 2 + HIGH_PHASE:
+                self._fetch_high()
+            if m3 == START_UP_DOTS:
+                self.cur = (self.fetch_lo, self.fetch_hi)
             return
         if self.stall:
             self.stall -= 1
+            if self.window_fetch:
+                if self.stall == 3:
+                    self._fetch_map()
+                elif self.stall == 1:
+                    self._fetch_low()
+                elif self.stall == 0:
+                    self._fetch_high()
+                    self.cur = (self.fetch_lo, self.fetch_hi)
+                    self.window_fetch = False
+            return
+        phase = self.popped & 7
+        if self.discard:
+            self.discard -= 1
+            self._fetch_event(phase)
+            self._advance_tile()
             return
         x = self.x
         lcdc = self.lcdc
         if not self.window_active and lcdc & 0x20 and lcdc & 1 and self.wy_hit and x + 7 >= self.wx:
             self.window_active = True
             self.window_used = True
+            self.window_fetch = True
+            self.fetch_col = 0
+            self.popped = max(0, 7 - self.wx)
             self.stall = 6 - 1
             return
         objs = self.line_objs
@@ -217,31 +301,26 @@ class PPU:
                 penalty -= FIRST_OBJECT_DISCOUNT
             self.stall = penalty - 1
             return
-        self.framebuffer[self.ly * SCREEN_W + x] = self._pixel(x)
+        lo, hi = self.cur
+        bit = 7 - phase
+        colour = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1)
+        self.pipe.append((self.dot + PIXEL_DELAY, x, colour))
+        self._fetch_event(phase)
+        self._advance_tile()
         self.x = x + 1
         if self.x >= SCREEN_W:
             self.mode = 0
             self.drawing = False
 
-    def _pixel(self, x: int) -> int:
-        lcdc = self.lcdc
-        bg = 0
-        if lcdc & 1:
-            if self.window_active:
-                column = x - (self.wx - 7)
-                row = self.window_line
-                tile_map = 0x1C00 if lcdc & 0x40 else 0x1800
-            else:
-                column = (x + self.scx) & 255
-                row = (self.ly + self.scy) & 255
-                tile_map = 0x1C00 if lcdc & 8 else 0x1800
-            vram = self.vram
-            tile = vram[tile_map + (row >> 3) * 32 + ((column >> 3) & 31)]
-            signed_tile = 0x1000 + ((tile ^ 0x80) - 0x80) * 16
-            address = (tile * 16 if lcdc & 0x10 else signed_tile) + (row & 7) * 2
-            bit = 7 - (column & 7)
-            bg = ((vram[address] >> bit) & 1) | (((vram[address + 1] >> bit) & 1) << 1)
-        if lcdc & 2:
+    def _advance_tile(self) -> None:
+        self.popped += 1
+        if not self.popped & 7:
+            self.cur = (self.fetch_lo, self.fetch_hi)
+
+    def _pixel(self, x: int, bg: int) -> int:
+        if not self.lcdc & 1:
+            bg = 0
+        if self.lcdc & 2:
             for ox, _index, tile, flags, oy in self.line_objs:
                 if ox - 8 <= x < ox:
                     color = self._object_pixel(ox, oy, tile, flags, x)

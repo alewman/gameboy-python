@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def read_shades(path: Path) -> tuple[bytes, int, int]:
-    """Return (shades 0-3 lightest first, width, height); at most 4 colours."""
+    """Return (shades 0-3, 0 the lightest, width, height) of a picture in the DMG greys 00/55/AA/FF."""
     data = path.read_bytes()
     pos = 8
     palette: list[tuple[int, ...]] = []
@@ -64,7 +64,10 @@ def read_shades(path: Path) -> tuple[bytes, int, int]:
                 pixels.append(palette[line[x]])
             else:
                 pixels.append(tuple(line[x * channels : x * channels + min(channels, 3)]))
-    colours = sorted(set(pixels), key=lambda c: -sum(c))
-    assert len(colours) <= 4, f"{len(colours)} colours"
-    index = {c: i for i, c in enumerate(colours)}
-    return bytes(index[c] for c in pixels), width, height
+    top = (1 << depth) - 1 if ctype == 0 else 255  # a grey sample's full-scale value
+    shades = bytearray()
+    for pixel in pixels:
+        grey = pixel[0] * 255 // top
+        assert len({*pixel[:3]}) == 1 and round(grey / 85) * 85 == grey, f"not a DMG grey: {pixel}"
+        shades.append(3 - grey // 85)
+    return bytes(shades), width, height
