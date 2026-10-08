@@ -133,3 +133,16 @@ SingleStepTests `sm83` belongs to the CPU core, not here; sm83-python's
 - **PyPy 3.11**: the whole cpu_instrs.gb, 224,319,804 T (56.1 M M-cycles), 3,191 frames, 8.7 s wall (including start-up).
 - Import boundaries: `cartridge/` and `apu/` import nothing else from the board
   (`tests/test_import_boundaries.py`).
+
+## Results: milestone 2, in progress (2026-10-07)
+
+- **dmg-acid2**: pixel-exact on the DMG picture from skip-boot (`tests/test_pictures.py`).
+- **Mooneye**: all 66 applicable ROMs pass, including the nine `ppu/*` that were xfail, and the three
+  boot-ROM phase tests pass with the real boot ROM (LCD-on timing). Every constant fitted to a test is
+  marked FITTED in `ppu.py`.
+- **Mealybug (DMG blob)**: 1 of 24 pixel-exact (`scripts/mealybug_compare.py`); the fetcher is a
+  phase model (map/low/high reads at fixed pixel phases, latched fine scroll, a 5-dot pixel delay),
+  fitted by a grid search that bottomed out at 59,098 differing pixels in total. Worst: `m3_wx_6_change`,
+  `m3_scy_change`, `m3_lcdc_win_en_change_multiple(_wx)`, `m3_bgp_change_sprites`. These need structure,
+  not constants (the BGP write glitch, the window restart, object fetch timing), so the next step is a
+  real fetcher/FIFO. Not started: blargg `halt_bug` screen, GBMicrotest PPU families, STAT quirks 2-5.

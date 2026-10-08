@@ -23,10 +23,10 @@ MODE2_END = 80
 MODE_READ_LAG = 4  # FITTED: STAT and the CPU's VRAM/OAM locks see the mode 4 dots late (Mooneye
 # intr_2_mode0_timing, intr_2_mode3_timing, intr_2_oam_ok_timing); interrupts do not
 LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lcdon_timing-GS)
-PIXEL_DELAY = 2  # dots from the stepper's pixel to the pixel as the registers see it (Mealybug)
+PIXEL_DELAY = 5  # dots from the stepper's pixel to the pixel as the registers see it (Mealybug)
 FIRST_OBJECT_DISCOUNT = 3  # FITTED to Mooneye ppu/intr_2_mode0_timing_sprites: the first object's
 # stall on a line is 3 dots shorter than Pan Docs' penalty (every later one is as documented)
-MAP_PHASE, LOW_PHASE, HIGH_PHASE = 1, 3, 5  # FITTED: dots into a tile of each fetcher read
+MAP_PHASE, LOW_PHASE, HIGH_PHASE = 4, 5, 6  # FITTED: dots into a tile of each fetcher read
 START_UP_DOTS = 12  # two tile fetches before the first pixel (Pan Docs Rendering.md)
 VBLANK_LINE = 144
 LAST_LINE = 153
