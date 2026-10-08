@@ -95,8 +95,10 @@ stop=…)`, its handoff-brief "The bus contract"):
    IE-push cancellation; the board owns *when* each IF bit rises (timing.md
    "Interrupts").
 4. **`halted`, `stopped`, `locked` readable**, and a halted or locked CPU's
-   `step()` making exactly one `idle(PC)` and returning 1, so time passes
-   M-cycle by M-cycle and the board finds the wake-up cycle.
+   `step()` making exactly one `idle` call and returning 1, so time passes
+   M-cycle by M-cycle and the board finds the wake-up cycle. **Settled
+   (2026-10-07, sm83-python's two die models): the address on that idle is
+   $0000, not PC.**
 5. **The STOP hook**: the core reports `stop(pending)` and the board decides:
    DMG low-power stop with DIV reset, behave as HALT, 1-byte NOP, or (CGB)
    speed switch, then runs the 2050-M pause itself.

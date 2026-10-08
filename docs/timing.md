@@ -44,6 +44,13 @@ register or memory address at one specific cycle after boot":
 2. Run GBMicrotest's `*_a/_b/_c/_d` families (the same test at successive
    T offsets) and Mooneye `ppu/*`, `timer/*`; where they disagree with the
    model, move that unit's sample point within the M-cycle, and record it here.
+**Settled in milestone 1 (2026-10-07):** every M-cycle is *tick the units (+4 T), perform
+the access, then `timer.finish()`*. `finish()` applies the TIMA reload and raises IF at the end
+of the overflow cycle, so the CPU's next decision (the next fetch, or an interrupt check) sees
+it; with the reload inside `tick()` Mooneye `timer/rapid_toggle` is one instruction late. The
+PPU and serial both tick before the access. Two constants are fitted, not read off the die: the
+counter's power-on phase (4 T) and `SERIAL_PHASE_T` (4 T; serial/boot_sclk_align with boot_div).
+
 3. Settle residual T-level questions on the die: `dmg-sim` runs any small test
    ROM through the whole DMG-CPU B including the SM83, with transistor-derived
    delays ([validation.md](validation.md) "Die-level models").

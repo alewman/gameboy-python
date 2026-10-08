@@ -34,7 +34,7 @@ The 32-pin cartridge edge carries (`pandocs/External_Connectors.md`; GBCTR's
   console reset clears MBC state on some chips: model the MBC's power-on state,
   not a reset input, until a test says otherwise.
 
-### Proposed protocol (settle it in milestone 1, change only with a reason here)
+### Protocol (settled in milestone 1, 2026-10-07: as proposed, implemented in `cartridge/__init__.py`; change only with a reason here)
 
 ```python
 class Cartridge(Protocol):

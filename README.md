@@ -7,7 +7,7 @@ the picture processor dot by dot, the sound unit, OAM DMA, the serial port
 and joypad, the cartridge connector and the MBCs behind it, and the clock
 that ties them together.
 
-**Status (2026-10-05): groundwork only, no emulator code.** The documents in
+**Status (2026-10-07): milestone 1 done** (the CPU on the board: bus, timer, interrupts, serial, OAM DMA, ROM-only and MBC1, boot; the PPU is a timing skeleton; results in docs/validation.md). Run `python -m gameboy_python ROM.gb`. Earlier groundwork: The documents in
 [`docs/`](docs/README.md) gather what the build needs, every fact with its
 source and tier: the hardware, the timing, the cartridges, the quirks and
 contradictions, the oracles (with the die-level model running here), a
