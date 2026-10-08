@@ -136,13 +136,25 @@ SingleStepTests `sm83` belongs to the CPU core, not here; sm83-python's
 
 ## Results: milestone 2, in progress (2026-10-07)
 
+The PPU is a real fetcher and two FIFOs (`ppu.py`): OAM scan, a background fetcher (tile, data low,
+data high, push), a discarded first tile, a FIFO pop per dot, object fetches with Pan Docs' wait
+rule, the window restart, and a pixel pipeline whose register samples (LCDC, BGP, OBP) and VRAM
+reads come a fitted number of dots after the pop. Every fitted constant is marked FITTED.
+
 - **dmg-acid2**: pixel-exact on the DMG picture from skip-boot (`tests/test_pictures.py`).
-- **Mooneye**: all 66 applicable ROMs pass, including the nine `ppu/*` that were xfail, and the three
-  boot-ROM phase tests pass with the real boot ROM (LCD-on timing). Every constant fitted to a test is
-  marked FITTED in `ppu.py`.
-- **Mealybug (DMG blob)**: 1 of 24 pixel-exact (`scripts/mealybug_compare.py`); the fetcher is a
-  phase model (map/low/high reads at fixed pixel phases, latched fine scroll, a 5-dot pixel delay),
-  fitted by a grid search that bottomed out at 59,098 differing pixels in total. Worst: `m3_wx_6_change`,
-  `m3_scy_change`, `m3_lcdc_win_en_change_multiple(_wx)`, `m3_bgp_change_sprites`. These need structure,
-  not constants (the BGP write glitch, the window restart, object fetch timing), so the next step is a
-  real fetcher/FIFO. Not started: blargg `halt_bug` screen, GBMicrotest PPU families, STAT quirks 2-5.
+- **Mooneye**: all 66 applicable ROMs pass (skip-boot, quickboot and the real boot ROM), including
+  `ppu/*` and the three boot-ROM phase tests.
+- **Mealybug (DMG blob)**: 5 of 24 pixel-exact (`m2_win_en_toggle`, `m3_bgp_change`, `m3_obp0_change`,
+  `m3_scx_high_5_bits`, `m3_scx_low_3_bits`; `scripts/mealybug_compare.py`, booted from the real boot
+  ROM because the tests draw its (R) tile). Total 36,767 differing pixels over the other 19.
+  Largest: `m3_wx_6_change` 13.8k, `m3_lcdc_win_en_change_multiple` 8.3k and `_wx` 5.9k,
+  `m3_bgp_change_sprites` 2.1k, `m3_window_timing_wx_0` 0.8k, `m3_lcdc_tile_sel_win_change` 1.3k.
+- **What the fits say.** Register effects in the Mealybug pictures land about 10 dots after the
+  pixel's pop in the timeline Mooneye pins (STAT/IRQ/mode flags): the map and data reads, BGP (7),
+  OBP (10), LCDC.0/1 (9). The window comparator (WX) is the one input I have not moved into that
+  later domain, and it is the common factor of the worst tests: they change WX or LCDC.5 within
+  those 10 dots. Doing it properly needs the structural decisions (window start, its 6-dot stall)
+  made on later register values while the mode-0 flag stays early, which means two timelines (a flag
+  stepper and a render stepper); that is the next step, not a constant.
+- Not started: blargg `halt_bug` screen, GBMicrotest PPU families, STAT quirks 2-5, Mealybug's
+  `dmg_b` pictures for `lcdc_bg_en_change` and `win_en_change_multiple_wx`.

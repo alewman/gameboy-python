@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def read_shades(path: Path) -> tuple[bytes, int, int]:
-    """Return (shades 0-3, 0 the lightest, width, height) of a picture in the DMG greys 00/55/AA/FF."""
+    """Return (shades 0-3, 0 the lightest, width, height) of a DMG-grey picture."""
     data = path.read_bytes()
     pos = 8
     palette: list[tuple[int, ...]] = []

@@ -74,7 +74,9 @@ def main() -> int:
             cpu.ie,
             cpu.if_,
         )
-        bad = [n for n, g, w in zip(NAMES, got, row[:11], strict=True) if g != w and n not in ignore]
+        bad = [
+            n for n, g, w in zip(NAMES, got, row[:11], strict=True) if g != w and n not in ignore
+        ]
         if bad:
             print(f"first divergence at instruction {i}: {bad}")
             print("  board", [hex(x) for x in got])

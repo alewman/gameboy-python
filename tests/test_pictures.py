@@ -7,9 +7,13 @@ from pathlib import Path
 import pytest
 
 from gameboy_python import GameBoy, load_cartridge
+from gameboy_python.boot import find_boot_rom
 from tests.pngread import read_shades
 
 GBTR = Path(__file__).parent / "test_roms" / "gbtr"
+
+REAL, REAL_LABEL = find_boot_rom("DMG")
+REAL_OK = REAL is not None and REAL_LABEL == "real boot ROM"
 
 pytestmark = pytest.mark.skipif(not GBTR.exists(), reason="run scripts/fetch_references.py")
 
@@ -23,3 +27,26 @@ def frame_of(rom: Path, frames: int, **kwargs) -> bytes:
 def test_dmg_acid2_from_skip_boot():
     want, _w, _h = read_shades(GBTR / "dmg-acid2" / "dmg-acid2-dmg.png")
     assert frame_of(GBTR / "dmg-acid2" / "dmg-acid2.gb", 30) == want
+
+
+MEALYBUG = GBTR / "mealybug-tearoom-tests" / "ppu"
+#: the Mealybug DMG pictures the board matches pixel for pixel (scripts/mealybug_compare.py scores
+#: all 24; the rest are listed in docs/validation.md). They draw the boot ROM's (R) tile, so they
+#: are booted with the real DMG boot ROM.
+MEALYBUG_EXACT = [
+    "m2_win_en_toggle",
+    "m3_bgp_change",
+    "m3_obp0_change",
+    "m3_scx_high_5_bits",
+    "m3_scx_low_3_bits",
+]
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not REAL_OK, reason="the real DMG boot ROM is not at its documented place")
+@pytest.mark.parametrize("name", MEALYBUG_EXACT)
+def test_mealybug_dmg_blob(name):
+    want, _w, _h = read_shades(MEALYBUG / f"{name}_dmg_blob.png")
+    gb = GameBoy(load_cartridge((MEALYBUG / f"{name}.gb").read_bytes()), boot_rom=REAL)
+    gb.run_frames(420)
+    assert gb.ppu.frame == want

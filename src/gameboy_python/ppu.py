@@ -22,10 +22,8 @@ from gameboy_python.machines import DOTS_PER_LINE
 MODE2_END = 80
 MODE_READ_LAG = 4  # FITTED: STAT and the CPU's VRAM/OAM locks see the mode 4 dots late (Mooneye
 # intr_2_mode0_timing, intr_2_mode3_timing, intr_2_oam_ok_timing); interrupts do not
-IRQ_EARLY = 0
 LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lcdon_timing-GS)
 LINE0_LEAD = 4  # FITTED (Mealybug line_0_fix): on line 0 the pixel pipeline runs this early
-LINE0_IRQ_DOT = 0  # FITTED (Mealybug line_0_fix; Mooneye intr_1_2_timing): line 0's mode-2 IRQ
 BGP_GLITCH_DOT = 1  # FITTED: the dot, counted from the write's, whose palette is the OR
 # FITTED (Mealybug): dots from a pop to each register sample
 LCDC_DELAY = 9
@@ -381,7 +379,7 @@ class PPU:
                 and lcdc & 0x20
                 and lcdc & 1
                 and self.wy_hit
-                and x + 7 >= self.wx
+                and (x + 7 == self.wx or (x == 0 and self.wx < 7))
             ):
                 self.window_active = True
                 self.window_used = True
@@ -486,18 +484,7 @@ class PPU:
             or (select & 0x08 and self.mode == 0)
             or (select & 0x10 and self.mode == 1)
             # the mode-2 source also fires as VBlank starts (Mooneye vblank_stat_intr-GS)
-            or (
-                select & 0x20
-                and (
-                    (self.mode == 2 and (self.ly != 0 or self.dot >= LINE0_IRQ_DOT))
-                    or (
-                        IRQ_EARLY
-                        and self.dot >= DOTS_PER_LINE - IRQ_EARLY
-                        and (self.ly < 143 or self.ly == LAST_LINE)
-                    )
-                    or (self.ly == VBLANK_LINE and self.dot < 4)
-                )
-            )
+            or (select & 0x20 and (self.mode == 2 or (self.ly == VBLANK_LINE and self.dot < 4)))
         )
         if line and not self.stat_line:
             self.raise_irq(1)
