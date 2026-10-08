@@ -24,10 +24,9 @@ MODE_READ_LAG = 4  # FITTED: STAT and the CPU's VRAM/OAM locks see the mode 4 do
 # intr_2_mode0_timing, intr_2_mode3_timing, intr_2_oam_ok_timing); interrupts do not
 LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lcdon_timing-GS)
 PIXEL_DELAY = 5  # dots from the stepper's pixel to the pixel as the registers see it (Mealybug)
-FIRST_OBJECT_DISCOUNT = 3  # FITTED to Mooneye ppu/intr_2_mode0_timing_sprites: the first object's
-# stall on a line is 3 dots shorter than Pan Docs' penalty (every later one is as documented)
-MAP_PHASE, LOW_PHASE, HIGH_PHASE = 4, 5, 6  # FITTED: dots into a tile of each fetcher read
-START_UP_DOTS = 12  # two tile fetches before the first pixel (Pan Docs Rendering.md)
+FETCH_READ_EARLY = 0  # 1 reads on the first dot of a fetcher step, 0 on the second
+OBJ_FETCH_DOTS = 6
+FIRST_OBJECT_DISCOUNT = 3  # FITTED to Mooneye ppu/intr_2_mode0_timing_sprites
 VBLANK_LINE = 144
 LAST_LINE = 153
 SCREEN_W = 160
@@ -59,27 +58,29 @@ class PPU:
         ] = []  # (x, index, tile, flags, y), by x then index
         self.skip_scan = False
         self.x = 0  # next pixel to emit
-        self.delay = 0  # start-up dots left
-        self.stall = 0  # penalty dots left
         self.next_obj = 0
-        self.penalised_tiles: set[tuple[bool, int | None]] = set()
         self.window_active = False
         self.window_line = 0  # the window's own line counter
         self.window_used = False  # window pixels drawn on this line
         self.wy_hit = False  # WY == LY seen this frame
         self.read_mode = 0  # the mode as the CPU sees it: ``mode`` from MODE_READ_LAG dots ago
         self._recent = [0] * MODE_READ_LAG
-        self.pipe: list[
-            tuple[int, int, int]
-        ] = []  # (due dot, x, BG colour) waiting for the palettes
-        self.drawing = False  # mode 3's pixel stepper is running
-        self.penalised = False  # an object stalled this line
+        self.pipe: list[tuple[int, int, int, tuple[int, int]]] = []  # (due, x, bg, obj) to colour
+        self.drawing = False  # mode 3 is running
         self.line0 = False  # the first line after LCD on: late, and its STAT mode is not lagged
         self.mode3_start = MODE2_END
-        self.m3 = self.popped = self.fetch_col = self.discard = 0
-        self.cur = (0, 0)
-        self.fetch_tile = self.fetch_lo = self.fetch_hi = 0
-        self.window_fetch = False
+        self.m3 = self.skip = self.fetch_col = 0
+        self.bg: list[int] = []
+        self.obj_fifo: list[tuple[int, int]] = []
+        self.f_step = self.f_dot = 0
+        self.fetch_tile = self.fetch_lo = self.fetch_hi = self.obj_lo = self.obj_hi = 0
+        self.dummy = False
+        self.penalised = False
+        self.obj_wait_left = 0
+        self.obj_tiles_waited = set()
+        self.obj_low_at = self.obj_high_at = 0
+        self.obj_dots = 0
+        self.obj_entry = None
 
     # ----- state --------------------------------------------------------------------------
 
@@ -133,8 +134,8 @@ class PPU:
                 self._step_pixel()
         pipe = self.pipe
         while pipe and pipe[0][0] <= self.dot:
-            _due, x, bg = pipe.pop(0)
-            self.framebuffer[self.ly * SCREEN_W + x] = self._pixel(x, bg)
+            _due, x, bg, obj = pipe.pop(0)
+            self.framebuffer[self.ly * SCREEN_W + x] = self._pixel(bg, obj)
         self._recent.append(self.mode)
         lagged = self._recent.pop(0)
         self.read_mode = self.mode if self.line0 else lagged
@@ -183,165 +184,200 @@ class PPU:
     def _start_mode3(self) -> None:
         self.mode = 3
         self.drawing = True
-        self.penalised = False
         self.x = 0
         self.m3 = 0
-        self.popped = 0
-        self.fetch_col = 0
-        self.discard = self.scx & 7  # latched now: later SCX writes move tiles, not the fine scroll
-        self.cur = (0, 0)
-        self.stall = 0
+        self.skip = self.scx & 7  # latched now: later SCX writes move tiles, not the fine scroll
         self.next_obj = 0
-        self.penalised_tiles = set()
         self.window_active = False
-        self.window_fetch = False
+        self.bg: list[int] = []  # the background FIFO: next pixel first
+        self.obj_fifo: list[tuple[int, int]] = []  # (colour, flags) for the next pixels
+        self.f_step = 0  # 0 tile, 1 data low, 2 data high, 3 waiting to push
+        self.f_dot = 0
+        self.fetch_col = 0
+        self.dummy = True  # the first fetch is thrown away (Pan Docs Rendering.md, "first12")
+        self.penalised = False  # an object has been fetched on this line
+        self.obj_wait_left = 0
+        self.obj_tiles_waited: set[tuple[bool, int | None]] = set()
+        self.obj_dots = 0  # dots left of the object fetch
+        self.obj_entry: tuple[int, int, int, int, int] | None = None
 
-    # The background fetcher, reduced to when each of its three VRAM reads happens: a tile's map
-    # byte,
-    # data-low and data-high are read at fixed pixel phases while the previous tile is on screen
-    # (Pan Docs pixel_fifo.md "FIFO Pixel Fetcher": 2 dots per step). Registers are read at those
-    # dots, which is what the Mealybug m3_* pictures measure. FITTED phases: MAP_PHASE etc.
+    # ----- the background fetcher ---------------------------------------------------------
 
-    def _fetch_map(self) -> None:
-        lcdc = self.lcdc
-        if self.window_active:
-            base = 0x1C00 if lcdc & 0x40 else 0x1800
-            index = base + (self.window_line >> 3) * 32 + (self.fetch_col & 31)
+    def _tile_row(self) -> int:
+        return self.window_line if self.window_active else (self.ly + self.scy) & 255
+
+    def _fetcher_dot(self) -> None:
+        step = self.f_step
+        if step < 3:
+            self.f_dot += 1
+            if self.f_dot < 2 - FETCH_READ_EARLY:
+                return
+            self.f_dot = 0
+            lcdc = self.lcdc
+            if step == 0:
+                if self.window_active:
+                    base = 0x1C00 if lcdc & 0x40 else 0x1800
+                    index = base + (self.window_line >> 3) * 32 + (self.fetch_col & 31)
+                else:
+                    base = 0x1C00 if lcdc & 8 else 0x1800
+                    row = (self.ly + self.scy) & 255
+                    index = base + (row >> 3) * 32 + (((self.scx >> 3) + self.fetch_col) & 31)
+                self.fetch_tile = self.vram[index]
+                self.fetch_col += 1
+            else:
+                tile = self.fetch_tile
+                signed = 0x1000 + ((tile ^ 0x80) - 0x80) * 16
+                address = tile * 16 if lcdc & 0x10 else signed
+                address += (self._tile_row() & 7) * 2 + (step - 1)
+                if step == 1:
+                    self.fetch_lo = self.vram[address]
+                else:
+                    self.fetch_hi = self.vram[address]
+            self.f_step = step + 1
+            if self.f_step < 3:
+                return
+        # step 3: push, retried every dot until the FIFO is empty
+        if not self.bg:
+            if self.dummy:
+                self.dummy = False
+                self.fetch_col = 0
+            else:
+                lo, hi = self.fetch_lo, self.fetch_hi
+                self.bg = [((lo >> b) & 1) | (((hi >> b) & 1) << 1) for b in range(7, -1, -1)]
+            self.f_step = 0
+            self.f_dot = 0
+
+    # ----- objects ------------------------------------------------------------------------
+
+    def _object_dot(self) -> None:
+        """One dot of an object fetch; the background fetcher is frozen."""
+        self.obj_dots -= 1
+        entry = self.obj_entry
+        assert entry is not None
+        ox, _index, tile, flags, oy = entry
+        for read_at, is_high in ((self.obj_low_at, 0), (self.obj_high_at, 1)):
+            if self.obj_dots == read_at:
+                height = 16 if self.lcdc & 4 else 8
+                row = self.ly - oy
+                if flags & 0x40:
+                    row = height - 1 - row
+                if height == 16:
+                    tile &= 0xFE
+                data = self.vram[tile * 16 + row * 2 + is_high]
+                if is_high:
+                    self.obj_hi = data
+                else:
+                    self.obj_lo = data
+        if self.obj_dots == 0:
+            self._merge_object(ox, flags)
+            self.obj_entry = None
+
+    def _start_object_fetch(self, entry: tuple[int, int, int, int, int]) -> None:
+        dots = OBJ_FETCH_DOTS
+        if not self.penalised:  # FITTED: the first object on a line costs less
+            self.penalised = True
+            dots -= FIRST_OBJECT_DISCOUNT
+        self.obj_dots = dots
+        self.obj_low_at = max(dots - 3, 0)
+        self.obj_high_at = max(dots - 5, 0)
+        self.obj_entry = entry
+        self._object_dot()
+
+    def _object_wait(self, ox: int) -> int:
+        """Pan Docs' "OBJ penalty algorithm" (Rendering.md): dots spent waiting for the background
+        tile under the object's leftmost pixel, once per tile; an object at X=0 is a tile of its
+        own that is waited for in full."""
+        if ox == 0:
+            key, wait = (False, None), 5
         else:
-            base = 0x1C00 if lcdc & 8 else 0x1800
-            row = (self.ly + self.scy) & 255
-            index = base + (row >> 3) * 32 + (((self.scx >> 3) + self.fetch_col) & 31)
-        self.fetch_tile = self.vram[index]
-        self.fetch_col += 1
+            pixel = ox - 8
+            position = pixel - (self.wx - 7) if self.window_active else pixel + self.scx
+            key, wait = (self.window_active, position >> 3), max(0, 7 - (position & 7) - 2)
+        if key in self.obj_tiles_waited:
+            return 0
+        self.obj_tiles_waited.add(key)
+        return wait
 
-    def _tile_address(self) -> int:
-        row = self.window_line if self.window_active else (self.ly + self.scy) & 255
-        tile = self.fetch_tile
-        if self.lcdc & 0x10:
-            return tile * 16 + (row & 7) * 2
-        return 0x1000 + ((tile ^ 0x80) - 0x80) * 16 + (row & 7) * 2
-
-    def _fetch_low(self) -> None:
-        self.fetch_lo = self.vram[self._tile_address()]
-
-    def _fetch_high(self) -> None:
-        self.fetch_hi = self.vram[self._tile_address() + 1]
-
-    def _fetch_event(self, phase: int) -> None:
-        if phase == MAP_PHASE:
-            self._fetch_map()
-        elif phase == LOW_PHASE:
-            self._fetch_low()
-        elif phase == HIGH_PHASE:
-            self._fetch_high()
+    def _merge_object(self, ox: int, flags: int) -> None:
+        skip = max(0, 8 - ox)  # the part hanging off the left edge
+        fifo = self.obj_fifo
+        while len(fifo) < 8 - skip:
+            fifo.append((0, 0))
+        for i in range(skip, 8):
+            bit = i if flags & 0x20 else 7 - i
+            colour = ((self.obj_lo >> bit) & 1) | (((self.obj_hi >> bit) & 1) << 1)
+            slot = i - skip
+            if colour and not fifo[slot][0]:
+                fifo[slot] = (colour, flags)
 
     def _step_pixel(self) -> None:
         self.m3 += 1
-        m3 = self.m3
-        if m3 <= START_UP_DOTS:  # the dummy tile, then tile 0 (its three reads at m3 7, 9, 11)
-            if m3 == START_UP_DOTS // 2 + MAP_PHASE:
-                self._fetch_map()
-            elif m3 == START_UP_DOTS // 2 + LOW_PHASE:
-                self._fetch_low()
-            elif m3 == START_UP_DOTS // 2 + HIGH_PHASE:
-                self._fetch_high()
-            if m3 == START_UP_DOTS:
-                self.cur = (self.fetch_lo, self.fetch_hi)
+        if self.obj_dots:
+            self._object_dot()
             return
-        if self.stall:
-            self.stall -= 1
-            if self.window_fetch:
-                if self.stall == 3:
-                    self._fetch_map()
-                elif self.stall == 1:
-                    self._fetch_low()
-                elif self.stall == 0:
-                    self._fetch_high()
-                    self.cur = (self.fetch_lo, self.fetch_hi)
-                    self.window_fetch = False
-            return
-        phase = self.popped & 7
-        if self.discard:
-            self.discard -= 1
-            self._fetch_event(phase)
-            self._advance_tile()
-            return
-        x = self.x
-        lcdc = self.lcdc
-        if not self.window_active and lcdc & 0x20 and lcdc & 1 and self.wy_hit and x + 7 >= self.wx:
-            self.window_active = True
-            self.window_used = True
-            self.window_fetch = True
-            self.fetch_col = 0
-            self.popped = max(0, 7 - self.wx)
-            self.stall = 6 - 1
-            return
-        objs = self.line_objs
-        penalty = 0
-        while self.next_obj < len(objs) and objs[self.next_obj][0] - 8 <= x:
-            ox = objs[self.next_obj][0]
-            self.next_obj += 1
-            if not lcdc & 2:
-                continue
-            if ox == 0:  # off the left edge: its own "tile", waited for in full, whatever SCX is
-                key = (False, None)
-                wait = 5
+        if self.obj_entry is not None:  # the wait for the object's tile is over: fetch it
+            if self.obj_wait_left:
+                self.obj_wait_left -= 1
+                self._fetcher_dot()
             else:
-                pixel = ox - 8
-                position = pixel - (self.wx - 7) if self.window_active else pixel + self.scx
-                key = (self.window_active, position >> 3)
-                wait = max(0, 7 - (position & 7) - 2)
-            if key not in self.penalised_tiles:
-                self.penalised_tiles.add(key)
-                penalty += wait
-            penalty += 6
-        if penalty:
-            if not self.penalised:
-                self.penalised = True
-                penalty -= FIRST_OBJECT_DISCOUNT
-            self.stall = penalty - 1
+                self._start_object_fetch(self.obj_entry)
             return
-        lo, hi = self.cur
-        bit = 7 - phase
-        colour = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1)
-        self.pipe.append((self.dot + PIXEL_DELAY, x, colour))
-        self._fetch_event(phase)
-        self._advance_tile()
-        self.x = x + 1
-        if self.x >= SCREEN_W:
-            self.mode = 0
-            self.drawing = False
+        lcdc = self.lcdc
+        if self.bg and not self.skip:
+            x = self.x
+            if (
+                not self.window_active
+                and lcdc & 0x20
+                and lcdc & 1
+                and self.wy_hit
+                and x + 7 >= self.wx
+            ):
+                self.window_active = True
+                self.window_used = True
+                self.bg = []
+                self.f_step = 0
+                self.f_dot = 0
+                self.fetch_col = 0
+                self.skip = max(0, 7 - self.wx)
+                self._fetcher_dot()
+                return
+            objs = self.line_objs
+            if self.next_obj < len(objs) and objs[self.next_obj][0] - 8 <= x:
+                if not lcdc & 2:
+                    self.next_obj += 1
+                else:
+                    entry = objs[self.next_obj]
+                    self.next_obj += 1
+                    self.obj_entry = entry
+                    self.obj_wait_left = self._object_wait(entry[0])
+                    if self.obj_wait_left:  # this dot is the first of the wait
+                        self.obj_wait_left -= 1
+                        self._fetcher_dot()
+                    else:
+                        self._start_object_fetch(entry)
+                    return
+        if self.bg:
+            colour = self.bg.pop(0)
+            if self.skip:
+                self.skip -= 1
+            else:
+                obj = self.obj_fifo.pop(0) if self.obj_fifo else (0, 0)
+                self.pipe.append((self.dot + PIXEL_DELAY, self.x, colour, obj))
+                self.x += 1
+                if self.x >= SCREEN_W:
+                    self.mode = 0
+                    self.drawing = False
+                    return
+        self._fetcher_dot()
 
-    def _advance_tile(self) -> None:
-        self.popped += 1
-        if not self.popped & 7:
-            self.cur = (self.fetch_lo, self.fetch_hi)
-
-    def _pixel(self, x: int, bg: int) -> int:
+    def _pixel(self, bg: int, obj: tuple[int, int]) -> int:
         if not self.lcdc & 1:
             bg = 0
-        if self.lcdc & 2:
-            for ox, _index, tile, flags, oy in self.line_objs:
-                if ox - 8 <= x < ox:
-                    color = self._object_pixel(ox, oy, tile, flags, x)
-                    if color:
-                        if flags & 0x80 and bg:
-                            break
-                        palette = self.obp1 if flags & 0x10 else self.obp0
-                        return (palette >> (color * 2)) & 3
+        colour, flags = obj
+        if colour and self.lcdc & 2 and not (flags & 0x80 and bg):
+            palette = self.obp1 if flags & 0x10 else self.obp0
+            return (palette >> (colour * 2)) & 3
         return (self.bgp >> (bg * 2)) & 3
-
-    def _object_pixel(self, ox: int, oy: int, tile: int, flags: int, x: int) -> int:
-        height = 16 if self.lcdc & 4 else 8
-        row = self.ly - oy
-        if flags & 0x40:
-            row = height - 1 - row
-        if height == 16:
-            tile &= 0xFE
-        address = tile * 16 + row * 2
-        column = x - (ox - 8)
-        bit = column if flags & 0x20 else 7 - column
-        return ((self.vram[address] >> bit) & 1) | (((self.vram[address + 1] >> bit) & 1) << 1)
 
     @property
     def visible_ly(self) -> int:
