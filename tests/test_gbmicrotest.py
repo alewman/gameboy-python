@@ -1,5 +1,5 @@
-"""GBMicrotest: the board must keep passing every ROM it passes today (``tests/gbmicrotest_pass.txt``,
-written by ``scripts/gbmicrotest.py --write``). ``poweron_*`` ROMs run from the real boot ROM."""
+"""GBMicrotest: the board must keep passing every ROM it passes today
+(``tests/gbmicrotest_pass.txt``, written by ``scripts/gbmicrotest.py --write``). ``poweron_*`` ROMs run from the real boot ROM."""
 
 from __future__ import annotations
 
