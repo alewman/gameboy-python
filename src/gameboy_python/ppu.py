@@ -23,6 +23,8 @@ MODE2_END = 80
 MODE_READ_LAG = 4  # FITTED: STAT and the CPU's VRAM/OAM locks see the mode 4 dots late (Mooneye
 # intr_2_mode0_timing, intr_2_mode3_timing, intr_2_oam_ok_timing); interrupts do not
 OAM_IRQ_EARLY = 0  # the OAM interrupt pulse begins this early (GBMicrotest wants 4, Mooneye 0)
+WINDOW_HEAD = 4  # FITTED (GBMicrotest win*): fetcher dots the window restart gets for free
+WINDOW_EDGE_HEAD = 6  # ... when the window starts at the left edge (WX < 7)
 LYC_IRQ_EARLY = 4  # the LY=LYC interrupt comes this many dots before the flag shows
 OAM_IRQ_WIDTH = 4  # and lasts this many dots
 LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lcdon_timing-GS)
@@ -47,8 +49,9 @@ SCREEN_H = 144
 
 
 class PPU:
-    def __init__(self, raise_irq: Callable[[int], None]) -> None:
+    def __init__(self, raise_irq: Callable[[int], None], stat_write_glitch: bool = False) -> None:
         self.raise_irq = raise_irq
+        self.stat_write_glitch = stat_write_glitch
         self.vram = bytearray(0x2000)
         self.oam = bytearray(0xA0)
         self.lcdc = 0
@@ -220,6 +223,7 @@ class PPU:
         self.skip = self.scx & 7  # latched now: later SCX writes move tiles, not the fine scroll
         self.next_obj = 0
         self.window_active = False
+        self.free_skip = 0
         self.bg: list[tuple[list[int], int]] = []  # the background FIFO: (tile ticket, bit)
         self.obj_fifo: list[tuple[int, int]] = []  # (colour, flags) for the next pixels
         self.f_step = 0  # 0 tile, 1 data low, 2 data high, 3 waiting to push
@@ -298,6 +302,9 @@ class PPU:
                 self.fetch_col = 0
             else:
                 self.bg = [(self.ticket, b) for b in range(7, -1, -1)]
+                if self.free_skip:
+                    del self.bg[: self.free_skip]
+                    self.free_skip = 0
             self.f_step = 0
             self.f_dot = 0
 
@@ -394,8 +401,9 @@ class PPU:
                 self.f_step = 0
                 self.f_dot = 0
                 self.fetch_col = 0
-                self.skip = max(0, 7 - self.wx)
-                self._fetcher_dot()
+                self.free_skip = max(0, 7 - self.wx)  # hidden window pixels cost no dots
+                for _ in range(1 + (WINDOW_EDGE_HEAD if self.wx < 7 else WINDOW_HEAD)):
+                    self._fetcher_dot()
                 return
             objs = self.line_objs
             if self.next_obj < len(objs) and objs[self.next_obj][0] - 8 <= x:
@@ -528,6 +536,13 @@ class PPU:
         return 0x80 | self.stat_select | (4 if self.lyc_flag else 0) | self.read_mode
 
     def write_stat(self, value: int) -> None:
+        if self.lcd_on and self.stat_write_glitch:
+            # DMG: for the write's cycle every source is enabled, so a source that is true raises
+            # the interrupt if the line was low (Pan Docs STAT.md; GBMicrotest stat_write_glitch_*)
+            saved = self.stat_select
+            self.stat_select = 0x78
+            self._update_stat_line()
+            self.stat_select = saved
         self.stat_select = value & 0x78
         if self.lcd_on:
             self._update_stat_line()

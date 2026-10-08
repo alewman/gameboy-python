@@ -56,7 +56,7 @@ class GameBoy:
         self.timer.counter = 4
         self.serial = Serial(raise_irq)
         self.joypad = Joypad(raise_irq)
-        self.ppu = PPU(raise_irq)
+        self.ppu = PPU(raise_irq, machine.stat_write_glitch)
         self.apu = APU()
         self.dma = OamDma(self._dma_source, self._dma_write)
         if self.boot_rom is None:
