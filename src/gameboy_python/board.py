@@ -304,6 +304,11 @@ class GameBoy:
         advanced inside the callbacks)."""
         return self.cpu.step()
 
+    def capture_state(self) -> CPUState:
+        """The CPU's state, so a ``DebugSession`` can drive the board as its target; the
+        board's own registers are in ``state.capture_board_state``."""
+        return self.cpu.capture_state()
+
     def run_frames(self, frames: int, max_steps: int = 50_000_000) -> None:
         """Run until the PPU has completed ``frames`` more VBlanks."""
         target = self.ppu.frames + frames
