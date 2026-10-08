@@ -79,8 +79,7 @@ class GameBoy:
         self.ppu.stat_select = 0
         # the PPU is late in line 153 (LY reads 0, mode 1, STAT $85) at handoff, as quickboot
         # leaves it
-        self.ppu.ly, self.ppu.dot, self.ppu.mode = 153, 392, 1
-        self.ppu._update_stat_line()
+        self.ppu.place(153, 392, 1)
         for address, value in (
             (0x10, 0x80), (0x11, 0xBF), (0x12, 0xF3), (0x13, 0xFF), (0x14, 0xBF),
             (0x16, 0x3F), (0x17, 0x00), (0x18, 0xFF), (0x19, 0xBF),
@@ -168,14 +167,14 @@ class GameBoy:
         if address < 0x8000:
             self.cartridge.write(address, value, self.t)
         elif address < 0xA000:
-            if not self.ppu.vram_locked:
+            if not self.ppu.vram_write_locked:
                 self.ppu.vram[address - 0x8000] = value
         elif address < 0xC000:
             self.cartridge.write(address, value, self.t)
         elif address < 0xFE00:
             self.wram[address & 0x1FFF] = value
         elif address < 0xFEA0:
-            if not self.ppu.oam_locked and not self.dma.active:
+            if not self.ppu.oam_write_locked and not self.dma.active:
                 self.ppu.oam[address - 0xFE00] = value
         elif address < 0xFF00:
             pass  # unusable

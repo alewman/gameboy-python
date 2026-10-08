@@ -14,27 +14,18 @@ from gameboy_python import GameBoy, load_cartridge
 from gameboy_python.boot import QUICKBOOT, find_boot_rom
 from gameboy_python.testrom import run_mooneye
 from tests.mooneye_meta import ROMS, applicable
-from tests.test_mooneye import NEEDS_PPU
 
 pytestmark = pytest.mark.slow
 
 REAL, REAL_LABEL = find_boot_rom("DMG")
 REAL_OK = REAL is not None and REAL_LABEL == "real boot ROM"
 
-#: the real boot ROM's duration (and so DIV's phase and the serial divider's alignment at
-#: handoff) depends on the exact LCD-on alignment of the PPU: milestone 2
-REAL_NEEDS_PPU = {
-    "boot_div-dmgABCmgb",
-    "boot_hwio-dmgABCmgb",
-    "serial/boot_sclk_align-dmgABCmgb",
-}
-
-NAMES = [n for n in applicable() if n not in NEEDS_PPU]
+NAMES = applicable()
 
 
 def run(name: str, image: bytes) -> bool:
     rom = Path(ROMS / f"{name}.gb").read_bytes()
-    return run_mooneye(GameBoy(load_cartridge(rom), boot_rom=image), max_frames=900).passed
+    return run_mooneye(GameBoy(load_cartridge(rom), boot_rom=image), max_frames=1500).passed
 
 
 @pytest.mark.skipif(not QUICKBOOT.exists(), reason="run scripts/fetch_references.py")
@@ -44,16 +35,6 @@ def test_quickboot(name):
 
 
 @pytest.mark.skipif(not REAL_OK, reason="the real DMG boot ROM is not at its documented place")
-@pytest.mark.parametrize(
-    "name",
-    [
-        pytest.param(
-            n, marks=[pytest.mark.xfail(strict=True, reason="needs the PPU's LCD-on timing")]
-        )
-        if n in REAL_NEEDS_PPU
-        else n
-        for n in NAMES
-    ],
-)
+@pytest.mark.parametrize("name", NAMES)
 def test_real_boot_rom(name):
     assert run(name, REAL)
