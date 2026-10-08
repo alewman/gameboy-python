@@ -158,15 +158,19 @@ reads come a fitted number of dots after the pop. Every fitted constant is marke
   stepper and a render stepper); that is the next step, not a constant.
 - **blargg `halt_bug`**: the screen matches the reference picture pixel for pixel (skip-boot and real
   boot ROM).
-- **GBMicrotest**: 395 of 513 pass (`scripts/gbmicrotest.py`; the passing set is held by
+- **GBMicrotest**: 403 of 513 pass (`scripts/gbmicrotest.py`; the passing set is held by
   `tests/test_gbmicrotest.py`). 31 more report no result by protocol (screens, benches). SameBoy's
   count is 476, so 81 are still open: the SCX-dependent HBlank `_if_`/`_nops_` variants (the IRQ
   phase inside an M-cycle), `int_oam_*`/`lcdon_to_oam_*` (see below), line 153 LY/LYC timing,
   vblank/lyc `_if_` edges, `ppu_sprite0_scx*_b`, one `win*`. The DMG STAT write glitch, the OAM
   source as a line-start pulse, LYC interrupt 4 dots before the flag, window restart cost are in.
-- **An unresolved conflict.** GBMicrotest's `int_oam_*` want the line-start OAM interrupt 4 dots
-  earlier than Mooneye's `intr_2_*` (halt-based) allow; an experiment holding PPU interrupts back
-  while the CPU is halted made Mooneye fail more than it fixed (`OAM_IRQ_EARLY` stays 0). Mooneye
-  wins; the cause is probably the halt-wake or interrupt-sampling phase, not the PPU.
+- **The interrupt-phase conflict, resolved in the board.** GBMicrotest's `int_oam_*` want the
+  line-start OAM interrupt 4 dots earlier than Mooneye's halt-based `intr_2_*` allow. Both hold if
+  the CPU's *dispatch* sees the interrupt a cycle early while reads of IF and the STAT line do not
+  (`OAM_IRQ_EARLY`, the hidden IF bit in `board.py`), and a halted CPU wakes a cycle later for it
+  (`HALT_OAM_DELAY`); line 0's interrupt stays on time (Mealybug's `line_0_fix` agrees). That moved
+  the CPU 4 dots earlier against the PPU on lines 1 and up, so the Mealybug register delays were
+  refit 4 dots shorter (BGP 3, OBP 6, LCDC 5, fetch reads 6, SCX latch 6) and the window comparator
+  sees WX 4 dots late; one ROM (`oam_int_if_edge_c`) fell out.
 - Not started: Mealybug's `dmg_b` pictures for `lcdc_bg_en_change` and
   `win_en_change_multiple_wx`.

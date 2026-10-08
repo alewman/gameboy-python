@@ -62,6 +62,8 @@ int_lyc_halt.gb
 int_lyc_incs.gb
 int_lyc_nops.gb
 int_oam_halt.gb
+int_oam_incs.gb
+int_oam_nops.gb
 int_timer_halt_div_a.gb
 int_timer_incs.gb
 int_timer_nops.gb
@@ -88,6 +90,9 @@ lcdon_to_ly3_b.gb
 lcdon_to_lyc1_int.gb
 lcdon_to_lyc2_int.gb
 lcdon_to_lyc3_int.gb
+lcdon_to_oam_int_l0.gb
+lcdon_to_oam_int_l1.gb
+lcdon_to_oam_int_l2.gb
 lcdon_to_oam_unlock_a.gb
 lcdon_to_oam_unlock_b.gb
 lcdon_to_oam_unlock_c.gb
@@ -109,6 +114,8 @@ lcdon_to_stat3_b.gb
 lcdon_to_stat3_c.gb
 lcdon_to_stat3_d.gb
 line_144_oam_int_a.gb
+line_144_oam_int_b.gb
+line_144_oam_int_d.gb
 line_153_ly_a.gb
 line_153_ly_b.gb
 line_153_ly_c.gb
@@ -154,10 +161,11 @@ oam_int_halt_a.gb
 oam_int_halt_b.gb
 oam_int_if_edge_a.gb
 oam_int_if_edge_b.gb
-oam_int_if_edge_c.gb
 oam_int_if_edge_d.gb
 oam_int_if_level_c.gb
 oam_int_if_level_d.gb
+oam_int_inc_sled.gb
+oam_int_nops_a.gb
 oam_int_nops_b.gb
 oam_read_l0_a.gb
 oam_read_l0_b.gb
