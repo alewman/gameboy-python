@@ -22,6 +22,9 @@ from gameboy_python.machines import DOTS_PER_LINE
 MODE2_END = 80
 MODE_READ_LAG = 4  # FITTED: STAT and the CPU's VRAM/OAM locks see the mode 4 dots late (Mooneye
 # intr_2_mode0_timing, intr_2_mode3_timing, intr_2_oam_ok_timing); interrupts do not
+OAM_IRQ_EARLY = 0  # the OAM interrupt pulse begins this early (GBMicrotest wants 4, Mooneye 0)
+LYC_IRQ_EARLY = 4  # the LY=LYC interrupt comes this many dots before the flag shows
+OAM_IRQ_WIDTH = 4  # and lasts this many dots
 LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lcdon_timing-GS)
 LINE0_LEAD = 4  # FITTED (Mealybug line_0_fix): on line 0 the pixel pipeline runs this early
 BGP_GLITCH_DOT = 1  # FITTED: the dot, counted from the write's, whose palette is the OR
@@ -485,18 +488,37 @@ class PPU:
         select = self.stat_select
         line = bool(
             (select & 0x40 and self.lyc_flag)
+            or (select & 0x40 and self._lyc_early())
             or (
                 select & 0x08
                 and self.mode == 0
                 and not (self.line0 and self.dot < self.mode3_start)
             )
             or (select & 0x10 and self.mode == 1)
-            # the mode-2 source also fires as VBlank starts (Mooneye vblank_stat_intr-GS)
-            or (select & 0x20 and (self.mode == 2 or (self.ly == VBLANK_LINE and self.dot < 4)))
+            # the OAM source is a short pulse at the start of each line, VBlank's first line
+            # included (Mooneye vblank_stat_intr-GS, GBMicrotest lcdon_to_oam_int_l1)
+            or (select & 0x20 and self._oam_pulse())
         )
         if line and not self.stat_line:
             self.raise_irq(1)
         self.stat_line = line
+
+    def _lyc_early(self) -> bool:
+        """The LY=LYC interrupt comes LYC_IRQ_EARLY dots before the flag (GBMicrotest int_lyc_*)."""
+        return (
+            self.dot < 4
+            and self.dot >= 4 - LYC_IRQ_EARLY
+            and self.ly != 0
+            and self.visible_ly == self.lyc
+        )
+
+    def _oam_pulse(self) -> bool:
+        if self.dot >= DOTS_PER_LINE - OAM_IRQ_EARLY:
+            following = 0 if self.ly == LAST_LINE else self.ly + 1
+            return following <= VBLANK_LINE
+        return (
+            self.dot < OAM_IRQ_WIDTH - OAM_IRQ_EARLY and self.ly <= VBLANK_LINE and not self.line0
+        )
 
     # ----- registers ----------------------------------------------------------------------
 
