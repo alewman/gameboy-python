@@ -79,7 +79,7 @@ class PPU:
         self._recent = [0] * MODE_READ_LAG
         self.pipe: list[list] = []  # popped pixels waiting for their register samples
         self.drawing = False  # mode 3 is running
-        self.line0 = False  # the first line after LCD on: late, and its STAT mode is not lagged
+        self.line0 = False  # the first line after LCD on: starts at dot 4
         self.mode3_start = MODE2_END
         self.mode0_dot = 0
         self.m3 = self.skip = self.fetch_col = 0
@@ -120,11 +120,15 @@ class PPU:
 
     @property
     def vram_locked(self) -> bool:
-        return self.lcd_on and (self.mode == 3 or self.read_mode == 3)  # locks at once, frees late
+        return self.lcd_on and (
+            (self.mode == 3 and not self.line0) or self.read_mode == 3
+        )  # locks at once, frees late
 
     @property
     def oam_locked(self) -> bool:
-        return self.lcd_on and (self.mode in (2, 3) or self.read_mode in (2, 3))
+        return self.lcd_on and (
+            (self.mode in (2, 3) and not self.line0) or self.read_mode in (2, 3)
+        )
 
     # ----- time ---------------------------------------------------------------------------
 
@@ -160,7 +164,7 @@ class PPU:
             self._colour_pixels()
         self._recent.append(self.mode)
         lagged = self._recent.pop(0)
-        self.read_mode = self.mode if self.line0 else lagged
+        self.read_mode = lagged
         self._update_stat_line()
 
     def _next_line(self) -> None:
@@ -481,7 +485,11 @@ class PPU:
         select = self.stat_select
         line = bool(
             (select & 0x40 and self.lyc_flag)
-            or (select & 0x08 and self.mode == 0)
+            or (
+                select & 0x08
+                and self.mode == 0
+                and not (self.line0 and self.dot < self.mode3_start)
+            )
             or (select & 0x10 and self.mode == 1)
             # the mode-2 source also fires as VBlank starts (Mooneye vblank_stat_intr-GS)
             or (select & 0x20 and (self.mode == 2 or (self.ly == VBLANK_LINE and self.dot < 4)))
@@ -518,7 +526,7 @@ class PPU:
             self.ly = 0
             self.dot = LINE0_START_DOT
             self.line0 = True
-            self.mode3_start = MODE2_END + LINE0_START_DOT
+            self.mode3_start = MODE2_END
             self.mode = 0  # line 0 starts in mode 0 (Mooneye ppu/lcdon_timing-GS)
             self.skip_scan = True  # and has no OAM scan
             self._settle(0)

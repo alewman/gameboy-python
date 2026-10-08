@@ -98,7 +98,7 @@ def run_blargg_ram(gb: GameBoy, max_frames: int = 6000) -> RomResult:
 def run_microtest(gb: GameBoy, frames: int = 4) -> RomResult:
     """Run a GBMicrotest ROM for a few frames and read $FF82."""
     gb.run_frames(frames)
-    result = gb.hram[0x82]
+    result = gb.hram[0x02]
     return RomResult(
         "microtest",
         result == 1,
