@@ -28,6 +28,8 @@ OAM_IRQ_EARLY = (
 HBLANK_IRQ_EARLY = 2  # FITTED (GBMicrotest hblank_int_scx*): pixels before the end it fires
 MODE0_READ_LAG = 1  # FITTED (GBMicrotest ppu_sprite0_scx*): STAT shows mode 0 this many dots after
 LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interrupt)
+SHADOW_LAG = 2  # the pixel-drawing PPU runs this many dots behind the one that times STAT
+SHADOW_WX_LAG = 4
 WX_LAG = 4  # FITTED (Mealybug): the window comparator sees WX this many dots late
 WIN_LAG = 0  # ... and LCDC.5/.0 this many
 WINDOW_HEAD = 4  # FITTED (GBMicrotest win*): fetcher dots the window restart gets for free
@@ -40,15 +42,15 @@ LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lc
 LINE0_LEAD = 0  # FITTED (Mealybug line_0_fix): on line 0 the pixel pipeline runs this early
 BGP_GLITCH_DOT = 1  # FITTED: the dot, counted from the write's, whose palette is the OR
 # FITTED (Mealybug): dots from a pop to each register sample
-LCDC_DELAY = 5
-BGP_DELAY = 3
-OBP_DELAY = 6
+LCDC_DELAY = 3
+BGP_DELAY = 1
+OBP_DELAY = 4
 OBJ_SIZE_LAG = 0  # FITTED (Mealybug): dots LCDC.2 arrives late at an object fetch
 # FITTED (Mealybug): dots each background VRAM read is deferred past its fetcher step
-MAP_SHIFT = 6
-LOW_SHIFT = 6
-HIGH_SHIFT = 6
-SKIP_LATCH_DOT = 6  # FITTED (Mealybug m3_scx_low_3_bits): last dot SCX's low bits are read
+MAP_SHIFT = 4
+LOW_SHIFT = 4
+HIGH_SHIFT = 4
+SKIP_LATCH_DOT = 4  # FITTED (Mealybug m3_scx_low_3_bits): last dot SCX's low bits are read
 MAP_READ_DOT = LOW_READ_DOT = HIGH_READ_DOT = 2  # which dot (1 or 2) of its step each fetch reads
 OBJ_FETCH_DOTS = 6
 FIRST_OBJECT_DISCOUNT = 3  # FITTED to Mooneye ppu/intr_2_mode0_timing_sprites
@@ -58,8 +60,21 @@ SCREEN_W = 160
 SCREEN_H = 144
 
 
+def _ignore_irq(bit: int) -> None:
+    return None
+
+
 class PPU:
-    def __init__(self, raise_irq: Callable[[int], None], stat_write_glitch: bool = False) -> None:
+    def __init__(
+        self,
+        raise_irq: Callable[[int], None],
+        stat_write_glitch: bool = False,
+        _shadow: bool = False,
+    ) -> None:
+        """A PPU is two: this one times the mode, the STAT line and the interrupts from register
+        values at the pops; a *shadow* copy of the same machinery runs ``SHADOW_LAG`` dots behind
+        it, shares VRAM and OAM, sees the registers as they are by then, and draws the picture."""
+        self.is_shadow = _shadow
         self.raise_irq = raise_irq
         self.stat_write_glitch = stat_write_glitch
         self.hblank_early = False  # mode 3 is within HBLANK_IRQ_EARLY pixels of its end
@@ -123,6 +138,11 @@ class PPU:
         self.obj_low_at = self.obj_high_at = 0
         self.obj_dots = 0
         self.obj_entry = None
+        self.shadow: PPU | None = None
+        if not _shadow:
+            self.shadow = PPU(_ignore_irq, False, _shadow=True)
+            self.shadow.vram = self.vram
+            self.shadow.oam = self.oam
 
     # ----- state --------------------------------------------------------------------------
 
@@ -176,7 +196,7 @@ class PPU:
             self._next_line()
         if self.ly < VBLANK_LINE:
             dot = self.dot
-            if dot < MODE2_END and not self.skip_scan and not dot & 1:
+            if 0 <= dot < MODE2_END and not self.skip_scan and not dot & 1:
                 self._scan(dot >> 1)
             if dot == self.mode3_start:
                 self._start_mode3()
@@ -191,6 +211,10 @@ class PPU:
             self._run_fetch_events()
         if self.pipe:
             self._colour_pixels()
+        if self.is_shadow:
+            return
+        if self.shadow is not None:
+            self._step_shadow()
         self._recent.append(self.mode)
         lagged = self._recent.pop(0)
         self.mode0_dots = self.mode0_dots + 1 if self.mode == 0 else 0
@@ -201,6 +225,33 @@ class PPU:
             lagged = 0  # the first dots of line 0 read as mode 0, not VBlank's 1
         self.read_mode = lagged
         self._update_stat_line()
+
+    def _step_shadow(self) -> None:
+        shadow = self.shadow
+        assert shadow is not None
+        shadow.lcdc = self.lcdc
+        shadow.scx, shadow.scy = self.scx, self.scy
+        shadow.wx, shadow.wy = self.wx, self.wy
+        shadow.bgp, shadow.obp0, shadow.obp1 = self.bgp, self.obp0, self.obp1
+        g_dot, g_ly, g_value = self.bgp_glitch
+        shadow.bgp_glitch = (g_dot - SHADOW_LAG, g_ly, g_value)
+        shadow._dot()
+
+    def _follow(self) -> None:
+        """Put the shadow SHADOW_LAG dots behind where this PPU is now."""
+        shadow = self.shadow
+        if shadow is None:
+            return
+        ly, dot = self.ly, self.dot - SHADOW_LAG
+        if dot < 0 and self.ly == 0 and not self.line0:
+            ly, dot = LAST_LINE, dot + DOTS_PER_LINE
+        elif dot < 0 and not self.line0:
+            ly, dot = ly - 1, dot + DOTS_PER_LINE
+        shadow.ly, shadow.dot = ly, dot
+        shadow.line0, shadow.skip_scan = self.line0, self.skip_scan
+        shadow.mode3_start = self.mode3_start
+        shadow.wy_hit = self.wy_hit
+        shadow.window_line = self.window_line
 
     def _next_line(self) -> None:
         self.dot = 0
@@ -218,7 +269,7 @@ class PPU:
             self.mode3_start = MODE2_END - LINE0_LEAD
         if self.ly == VBLANK_LINE:
             self.frames += 1
-            self.frame = bytes(self.framebuffer)
+            self.frame = bytes((self.shadow or self).framebuffer)
             self.mode = 1
             self.irq_early_by = VBLANK_IF_LATE
             self.irq_halt_delay = 0
@@ -277,6 +328,10 @@ class PPU:
     def _fetch_read(self, step: int, ticket: list[int], window: bool, col: int) -> None:
         """The VRAM read of one fetcher step, with the registers as they are *now*; ``ticket``
         collects a tile's [map byte, data low, data high, done]."""
+        if not self.is_shadow:  # this PPU only needs the timing, not the data
+            if step == 2:
+                ticket[3] = 1
+            return
         lcdc = self.lcdc
         if step == 0:
             if window:
@@ -421,7 +476,8 @@ class PPU:
         lcdc = self.lcdc
         if self.bg and not self.skip:
             x = self.x
-            wx = self.wx_hist[-WX_LAG] if WX_LAG else self.wx
+            lag = SHADOW_WX_LAG if self.is_shadow else WX_LAG
+            wx = self.wx_hist[-lag] if lag else self.wx
             win_lcdc = self._lcdc_ago(WIN_LAG)
             if (
                 not self.window_active
@@ -462,21 +518,22 @@ class PPU:
             else:
                 obj = self.obj_fifo.pop(0) if self.obj_fifo else (0, 0)
                 d = self.dot
-                self.pipe.append(
-                    [
-                        self.x,
-                        colour,
-                        obj,
-                        d + LCDC_DELAY,
-                        d + BGP_DELAY,
-                        d + OBP_DELAY,
-                        None,
-                        None,
-                        None,
-                        None,
-                        self.ly,
-                    ]
-                )
+                if self.is_shadow:
+                    self.pipe.append(
+                        [
+                            self.x,
+                            colour,
+                            obj,
+                            d + LCDC_DELAY,
+                            d + BGP_DELAY,
+                            d + OBP_DELAY,
+                            None,
+                            None,
+                            None,
+                            None,
+                            self.ly,
+                        ]
+                    )
                 self.x += 1
                 if (
                     self.x == SCREEN_W - HBLANK_IRQ_EARLY
@@ -677,6 +734,9 @@ class PPU:
             self.line_objs = []
             self.pipe = []
             self._settle(0)
+            if self.shadow is not None:
+                self.shadow.lcdc = value
+                self.shadow.write_lcdc(value)
         elif not was_on and self.lcd_on:  # LCD on: line 0 starts now, but late
             self.ly = 0
             self.dot = LINE0_START_DOT
@@ -686,6 +746,10 @@ class PPU:
             self.skip_scan = True  # and has no OAM scan
             self._settle(0)
             self.wy_hit = self.wy == 0
+            if self.shadow is not None:
+                self.shadow.wy = self.wy
+                self.shadow.write_lcdc(value)
+                self._follow()
             self._update_stat_line()
 
     def _settle(self, mode: int) -> None:
@@ -697,6 +761,7 @@ class PPU:
         """Put the beam at a line, dot and mode (the skip-boot hand-off state)."""
         self.ly, self.dot = ly, dot
         self._settle(mode)
+        self._follow()
         self._update_stat_line()
 
     def write_bgp(self, value: int) -> None:
