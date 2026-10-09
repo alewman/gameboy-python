@@ -26,6 +26,7 @@ OAM_IRQ_EARLY = (
     4  # FITTED: the CPU's dispatch sees the line-start OAM interrupt this early (GBMicrotest)
 )
 HBLANK_IRQ_EARLY = 2  # FITTED (GBMicrotest hblank_int_scx*): pixels before the end it fires
+MODE0_READ_LAG = 1  # FITTED (GBMicrotest ppu_sprite0_scx*): STAT shows mode 0 this many dots after
 LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interrupt)
 WX_LAG = 4  # FITTED (Mealybug): the window comparator sees WX this many dots late
 WIN_LAG = 0  # ... and LCDC.5/.0 this many
@@ -60,6 +61,7 @@ class PPU:
         self.raise_irq = raise_irq
         self.stat_write_glitch = stat_write_glitch
         self.hblank_early = False  # mode 3 is within HBLANK_IRQ_EARLY pixels of its end
+        self.mode0_dots = 0
         self.early_fired = False
         self.irq_early_by = 0  # dots before its real time the interrupt just raised came
         self.irq_halt_delay = 0  # dots later a halted CPU sees the STAT interrupt just raised
@@ -186,6 +188,10 @@ class PPU:
             self._colour_pixels()
         self._recent.append(self.mode)
         lagged = self._recent.pop(0)
+        self.mode0_dots = self.mode0_dots + 1 if self.mode == 0 else 0
+        lag = MODE0_READ_LAG if not (self.penalised or self.window_used) else MODE_READ_LAG
+        if lagged == 3 and self.mode == 0 and self.mode0_dots > lag:
+            lagged = 0  # the end of mode 3 shows up in STAT sooner than the start of it does
         self.read_mode = lagged
         self._update_stat_line()
 
