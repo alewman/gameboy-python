@@ -158,10 +158,9 @@ reads come a fitted number of dots after the pop. Every fitted constant is marke
   stepper and a render stepper); that is the next step, not a constant.
 - **blargg `halt_bug`**: the screen matches the reference picture pixel for pixel (skip-boot and real
   boot ROM).
-- **GBMicrotest**: 476 of 513 pass (`scripts/gbmicrotest.py`; the passing set is held by
+- **GBMicrotest**: 478 of 513 pass (`scripts/gbmicrotest.py`; the passing set is held by
   `tests/test_gbmicrotest.py`), SameBoy's count. 31 more report no result by protocol (screens,
-  benches); 6 fail: `int_timer_halt`, `int_timer_halt_div_b` (a timer/halt phase, probably the core's
-  halt wake), `halt_op_dupe_delay`, `stat_write_glitch_l154_d`, `win0_b`, and `poweron_stat_006`
+  benches); 4 fail: `halt_op_dupe_delay` (expects DIV $55 after a HALT whose wake mine does not wait for: a halt-bug case I could not explain), `stat_write_glitch_l154_d`, `win0_b`, and `poweron_stat_006`
   passes only from the real boot ROM. The pieces that got here: the DMG STAT write glitch (seen as a
   read sees the mode), the line-start OAM pulse, LYC/HBlank/VBlank STAT interrupts that reach the
   CPU's dispatch a few dots before IF shows them, a halted wake 2 dots after the raise, line 153's

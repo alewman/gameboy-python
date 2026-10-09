@@ -474,3 +474,5 @@ win9_a.gb
 win9_b.gb
 poweron_obp0_000.gb
 poweron_obp1_000.gb
+int_timer_halt.gb
+int_timer_halt_div_b.gb

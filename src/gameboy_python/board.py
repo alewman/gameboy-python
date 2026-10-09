@@ -32,6 +32,9 @@ POST_BOOT_DMG = {"a": 0x01, "b": 0x00, "c": 0x13, "d": 0x00, "e": 0xD8, "h": 0x0
 IF_WRITE_PHASE = 0  # FITTED: IF bits raised in a write's own M-cycle survive the write
 
 
+TIMER_HALT_DELAY = 4  # FITTED (GBMicrotest int_timer_halt, int_timer_halt_div_b)
+
+
 class GameBoy:
     """One console: a machine row, a cartridge, an optional boot ROM, and all the units."""
 
@@ -53,7 +56,7 @@ class GameBoy:
 
         self.cpu = SM83(self._read, self._write, self._idle, stop=self._stop)
         raise_irq = self.cpu.request_interrupt
-        self.timer = Timer(raise_irq, machine.tac_disable_glitch)
+        self.timer = Timer(self._timer_irq, machine.tac_disable_glitch)
         # The counter's power-on phase: DIV reads in Mooneye boot_div-dmgABCmgb need the counter
         # 4 T ahead of the M-cycle count since reset (fitted; the only phase that passes it)
         self.timer.counter = 4
@@ -99,6 +102,14 @@ class GameBoy:
         self.boot_mapped = False
 
     # ----- time ---------------------------------------------------------------------------
+
+    def _timer_irq(self, bit: int) -> None:
+        """The timer's interrupt wakes a halted CPU TIMER_HALT_DELAY dots late (GBMicrotest
+        int_timer_halt*)."""
+        if TIMER_HALT_DELAY and self.cpu.halted:
+            self._late.append([TIMER_HALT_DELAY, bit])
+        else:
+            self.cpu.request_interrupt(bit)
 
     def _ppu_irq(self, bit: int) -> None:
         """A PPU interrupt. A halted CPU sees the STAT ones a fitted number of dots after the PPU
