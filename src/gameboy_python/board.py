@@ -29,9 +29,6 @@ from gameboy_python.timer import Timer
 POST_BOOT_DMG = {"a": 0x01, "b": 0x00, "c": 0x13, "d": 0x00, "e": 0xD8, "h": 0x01, "l": 0x4D}
 
 
-HALT_OAM_DELAY = 4  # a halted CPU wakes this much later for it: Mooneye's halt tests (FITTED)
-
-
 class GameBoy:
     """One console: a machine row, a cartridge, an optional boot ROM, and all the units."""
 
@@ -100,14 +97,18 @@ class GameBoy:
     # ----- time ---------------------------------------------------------------------------
 
     def _ppu_irq(self, bit: int) -> None:
-        if HALT_OAM_DELAY and bit == 1 and self.ppu.irq_from_oam and self.cpu.halted:
-            self._late.append([HALT_OAM_DELAY, bit])
-        else:
-            self.cpu.request_interrupt(bit)
-            if bit == 1 and self.ppu.irq_early_by:
-                # the dispatch decision sees this interrupt a cycle early; reads of IF do not
-                self._hide |= 2
-                self._hide_left = self.ppu.irq_early_by
+        """A PPU interrupt. A halted CPU sees the STAT ones a fitted number of dots after the PPU
+        raises them (``ppu.irq_halt_delay``); the line-start OAM one reaches the CPU's dispatch a
+        cycle before its IF bit shows."""
+        delay = self.ppu.irq_halt_delay if bit == 1 and self.cpu.halted else 0
+        if delay and self.ppu.sub + delay >= 4:
+            self._late.append([self.ppu.sub + delay, bit])
+            return
+        self.cpu.request_interrupt(bit)
+        if bit == 1 and self.ppu.irq_early_by:
+            # the dispatch decision sees this interrupt a cycle early; reads of IF do not
+            self._hide |= 2
+            self._hide_left = self.ppu.irq_early_by
 
     def _tick(self) -> None:
         """One M-cycle of the whole board."""
@@ -120,7 +121,7 @@ class GameBoy:
             held = []
             for item in self._late:
                 item[0] -= 4
-                if item[0] <= 0:
+                if item[0] < 4:
                     self.cpu.request_interrupt(item[1])
                 else:
                     held.append(item)

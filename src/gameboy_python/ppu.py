@@ -25,6 +25,8 @@ MODE_READ_LAG = 4  # FITTED: STAT and the CPU's VRAM/OAM locks see the mode 4 do
 OAM_IRQ_EARLY = (
     4  # FITTED: the CPU's dispatch sees the line-start OAM interrupt this early (GBMicrotest)
 )
+HBLANK_IRQ_EARLY = 2  # FITTED (GBMicrotest hblank_int_scx*): pixels before the end it fires
+LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interrupt)
 WX_LAG = 4  # FITTED (Mealybug): the window comparator sees WX this many dots late
 WIN_LAG = 0  # ... and LCDC.5/.0 this many
 WINDOW_HEAD = 4  # FITTED (GBMicrotest win*): fetcher dots the window restart gets for free
@@ -57,9 +59,11 @@ class PPU:
     def __init__(self, raise_irq: Callable[[int], None], stat_write_glitch: bool = False) -> None:
         self.raise_irq = raise_irq
         self.stat_write_glitch = stat_write_glitch
+        self.hblank_early = False  # mode 3 is within HBLANK_IRQ_EARLY pixels of its end
         self.early_fired = False
         self.irq_early_by = 0  # dots before its real time the interrupt just raised came
-        self.irq_from_oam = False  # the STAT interrupt just raised came from the OAM source
+        self.irq_halt_delay = 0  # dots later a halted CPU sees the STAT interrupt just raised
+        self.sub = 0  # the dot within the M-cycle being ticked (0-3)
         self.vram = bytearray(0x2000)
         self.oam = bytearray(0xA0)
         self.lcdc = 0
@@ -151,7 +155,8 @@ class PPU:
         """Advance ``dots`` PPU dots (one M-cycle)."""
         if not self.lcdc & 0x80:
             return
-        for _ in range(dots):
+        for sub in range(dots):
+            self.sub = sub
             self._dot()
 
     def _dot(self) -> None:
@@ -186,6 +191,7 @@ class PPU:
 
     def _next_line(self) -> None:
         self.dot = 0
+        self.hblank_early = False
         self.line0 = False
         self.mode3_start = MODE2_END
         self.skip_scan = False
@@ -456,6 +462,12 @@ class PPU:
                     ]
                 )
                 self.x += 1
+                if (
+                    self.x == SCREEN_W - HBLANK_IRQ_EARLY
+                    and self.next_obj >= len(self.line_objs)
+                    and not self.line0
+                ):
+                    self.hblank_early = True  # the HBlank interrupt precedes mode 0 by a few dots
                 if self.x >= SCREEN_W:
                     if self.mode3_start < MODE2_END:  # line 0: the pipeline ran early, STAT did not
                         self.mode0_dot = self.dot + MODE2_END - self.mode3_start
@@ -513,7 +525,7 @@ class PPU:
             or (select & 0x40 and self._lyc_early())
             or (
                 select & 0x08
-                and self.mode == 0
+                and (self.mode == 0 or self.hblank_early)
                 and not (self.line0 and self.dot < self.mode3_start)
             )
             or (select & 0x10 and self.mode == 1)
@@ -525,19 +537,33 @@ class PPU:
             if 0 < following <= VBLANK_LINE:
                 # the interrupt the CPU's dispatch sees a cycle before the line's pulse is real
                 self.early_fired = True
-                self.irq_from_oam = True
+                self.irq_halt_delay = OAM_IRQ_EARLY
                 self.irq_early_by = OAM_IRQ_EARLY
                 self.raise_irq(1)
         if line and not self.stat_line:
             if self.early_fired and oam:
                 self.early_fired = False  # already raised, early
             else:
-                self.irq_from_oam = False
+                # the early HBlank interrupt, like the OAM one, wakes a halted CPU a cycle later
+                self.irq_halt_delay = self._halt_delay(oam)
                 self.irq_early_by = 0
                 self.raise_irq(1)
         if self.dot == 1:
             self.early_fired = False
         self.stat_line = line
+
+    def _halt_delay(self, oam: bool) -> int:
+        """Dots after its raise at which a halted CPU sees this interrupt: the HBlank one lands
+        2 dots after it is raised (GBMicrotest int_hblank_halt_*, Mooneye
+        hblank_ly_scx_timing), whether it was raised early or on time."""
+        if oam:
+            return 0
+        if self.hblank_early and self.mode != 0:
+            return 2
+        return 2 if self.mode == 0 and self.select_has_hblank() else 0
+
+    def select_has_hblank(self) -> bool:
+        return bool(self.stat_select & 0x08)
 
     def _lyc_early(self) -> bool:
         """The LY=LYC interrupt comes LYC_IRQ_EARLY dots before the flag (GBMicrotest int_lyc_*)."""
@@ -618,4 +644,8 @@ class PPU:
             self._update_stat_line()
 
     def read_ly(self) -> int:
-        return self.visible_ly if self.lcd_on else 0
+        if not self.lcd_on:
+            return 0
+        if LY_LEAD and not self.line0 and self.dot >= DOTS_PER_LINE - LY_LEAD and self.ly < 143:
+            return self.ly + 1  # LY reads as the next line a little before it starts
+        return self.visible_ly
