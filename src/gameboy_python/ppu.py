@@ -80,7 +80,8 @@ class PPU:
         self.scy = self.scx = 0
         self.ly = 0
         self.lyc = 0
-        self.bgp = self.obp0 = self.obp1 = 0
+        self.bgp = 0
+        self.obp0 = self.obp1 = 0xFF  # power-on: GBMicrotest poweron_obp*_000 read $FF
         self.wy = self.wx = 0
         self.dot = 0
         self.mode = 0

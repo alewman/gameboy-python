@@ -158,17 +158,17 @@ reads come a fitted number of dots after the pop. Every fitted constant is marke
   stepper and a render stepper); that is the next step, not a constant.
 - **blargg `halt_bug`**: the screen matches the reference picture pixel for pixel (skip-boot and real
   boot ROM).
-- **GBMicrotest**: 452 of 513 pass (`scripts/gbmicrotest.py`; the passing set is held by
-  `tests/test_gbmicrotest.py`). 31 more report no result by protocol (screens, benches). SameBoy's
-  count is 476, so 24 are still open. What is left (29 fail, 5 of them no-result visual ROMs
-  counted apart): line 153's LY/LYC timing (8), the IF-read edge cases at vblank, LYC, OAM and the STAT
-  write glitch (about 12: they read IF on the exact dot), `int_timer_halt*` (2), `win0_b`,
-  `hblank_int_if_a`, `lcdon_to_stat1_d`, two `poweron_*` (OBP power-on values), `halt_op_dupe_delay`.
-  In: the DMG STAT write glitch, the OAM source as a line-start pulse seen early by the CPU's
-  dispatch, the HBlank interrupt 2 dots before mode 0 with a halted wake 2 dots after it, LYC 4 dots
-  before the flag, STAT showing mode 0 a dot after mode 3 ends (4 on lines with objects or the
-  window), and the skip-boot hand-off at dot 396 (what the real boot ROM leaves: several GBMicrotest
-  ROMs are only right from that phase).
+- **GBMicrotest**: 476 of 513 pass (`scripts/gbmicrotest.py`; the passing set is held by
+  `tests/test_gbmicrotest.py`), SameBoy's count. 31 more report no result by protocol (screens,
+  benches); 6 fail: `int_timer_halt`, `int_timer_halt_div_b` (a timer/halt phase, probably the core's
+  halt wake), `halt_op_dupe_delay`, `stat_write_glitch_l154_d`, `win0_b`, and `poweron_stat_006`
+  passes only from the real boot ROM. The pieces that got here: the DMG STAT write glitch (seen as a
+  read sees the mode), the line-start OAM pulse, LYC/HBlank/VBlank STAT interrupts that reach the
+  CPU's dispatch a few dots before IF shows them, a halted wake 2 dots after the raise, line 153's
+  comparator (LY seen as 153 for 8 dots; a LYC write in the last cycle still cancels the interrupt),
+  IF writes that do not clear a bit raised in the same cycle, STAT showing mode 0 a dot after mode 3
+  ends (4 on lines with objects or the window), OBP power-on $FF, and the skip-boot hand-off at dot
+  396 (what the real boot ROM leaves; several ROMs are only right from that phase).
 - **The interrupt-phase conflict, resolved in the board.** GBMicrotest's `int_oam_*` want the
   line-start OAM interrupt 4 dots earlier than Mooneye's halt-based `intr_2_*` allow. Both hold if
   the CPU's *dispatch* sees the interrupt a cycle early while reads of IF and the STAT line do not
