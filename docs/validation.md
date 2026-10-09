@@ -158,12 +158,17 @@ reads come a fitted number of dots after the pop. Every fitted constant is marke
   stepper and a render stepper); that is the next step, not a constant.
 - **blargg `halt_bug`**: the screen matches the reference picture pixel for pixel (skip-boot and real
   boot ROM).
-- **GBMicrotest**: 446 of 513 pass (`scripts/gbmicrotest.py`; the passing set is held by
+- **GBMicrotest**: 452 of 513 pass (`scripts/gbmicrotest.py`; the passing set is held by
   `tests/test_gbmicrotest.py`). 31 more report no result by protocol (screens, benches). SameBoy's
-  count is 476, so 81 are still open: the SCX-dependent HBlank `_if_`/`_nops_` variants (the IRQ
-  phase inside an M-cycle), `int_oam_*`/`lcdon_to_oam_*` (see below), line 153 LY/LYC timing,
-  vblank/lyc `_if_` edges, `ppu_sprite0_scx*_b`, one `win*`. The DMG STAT write glitch, the OAM
-  source as a line-start pulse, LYC interrupt 4 dots before the flag, window restart cost are in.
+  count is 476, so 24 are still open. What is left (29 fail, 5 of them no-result visual ROMs
+  counted apart): line 153's LY/LYC timing (8), the IF-read edge cases at vblank, LYC, OAM and the STAT
+  write glitch (about 12: they read IF on the exact dot), `int_timer_halt*` (2), `win0_b`,
+  `hblank_int_if_a`, `lcdon_to_stat1_d`, two `poweron_*` (OBP power-on values), `halt_op_dupe_delay`.
+  In: the DMG STAT write glitch, the OAM source as a line-start pulse seen early by the CPU's
+  dispatch, the HBlank interrupt 2 dots before mode 0 with a halted wake 2 dots after it, LYC 4 dots
+  before the flag, STAT showing mode 0 a dot after mode 3 ends (4 on lines with objects or the
+  window), and the skip-boot hand-off at dot 396 (what the real boot ROM leaves: several GBMicrotest
+  ROMs are only right from that phase).
 - **The interrupt-phase conflict, resolved in the board.** GBMicrotest's `int_oam_*` want the
   line-start OAM interrupt 4 dots earlier than Mooneye's halt-based `intr_2_*` allow. Both hold if
   the CPU's *dispatch* sees the interrupt a cycle early while reads of IF and the STAT line do not
