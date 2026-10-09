@@ -546,7 +546,7 @@ class PPU:
             else:
                 # the early HBlank interrupt, like the OAM one, wakes a halted CPU a cycle later
                 self.irq_halt_delay = self._halt_delay(oam)
-                self.irq_early_by = 0
+                self.irq_early_by = HBLANK_IRQ_EARLY if self.hblank_early and self.mode != 0 else 0
                 self.raise_irq(1)
         if self.dot == 1:
             self.early_fired = False

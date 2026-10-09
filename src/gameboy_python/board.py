@@ -82,7 +82,7 @@ class GameBoy:
         self.ppu.stat_select = 0
         # the PPU is late in line 153 (LY reads 0, mode 1, STAT $85) at handoff, as quickboot
         # leaves it
-        self.ppu.place(153, 392, 1)
+        self.ppu.place(153, 396, 1)
         for address, value in (
             (0x10, 0x80), (0x11, 0xBF), (0x12, 0xF3), (0x13, 0xFF), (0x14, 0xBF),
             (0x16, 0x3F), (0x17, 0x00), (0x18, 0xFF), (0x19, 0xBF),
