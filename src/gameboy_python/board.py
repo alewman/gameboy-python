@@ -141,6 +141,7 @@ class GameBoy:
 
     def _idle(self, address: int) -> None:
         self._tick()
+        self.ppu.after_access()
         self.timer.finish()
 
     def _stop(self, pending: bool):
@@ -157,12 +158,14 @@ class GameBoy:
     def _read(self, address: int) -> int:
         self._tick()
         value = self._load(address)
+        self.ppu.after_access()
         self.timer.finish()
         return value
 
     def _write(self, address: int, value: int) -> None:
         self._tick()
         self._store(address, value)
+        self.ppu.after_access()
         self.timer.finish()
 
     def _load(self, address: int) -> int:

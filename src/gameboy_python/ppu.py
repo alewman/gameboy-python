@@ -65,6 +65,7 @@ class PPU:
         self.hblank_early = False  # mode 3 is within HBLANK_IRQ_EARLY pixels of its end
         self.mode0_dots = 0
         self.glitching = False
+        self.early_lyc153 = False
         self.early_fired = False
         self.irq_early_by = 0  # dots before its real time the interrupt just raised came
         self.irq_halt_delay = 0  # dots later a halted CPU sees the STAT interrupt just raised
@@ -559,7 +560,9 @@ class PPU:
                 self.irq_early_by = OAM_IRQ_EARLY
                 self.raise_irq(1)
         if line and not self.stat_line:
-            if self.early_fired and oam:
+            if self.early_lyc153 and self.ly == LAST_LINE and not oam:
+                self.early_lyc153 = False  # already raised, early
+            elif self.early_fired and oam:
                 self.early_fired = False  # already raised, early
             else:
                 # the early HBlank interrupt, like the OAM one, wakes a halted CPU a cycle later
@@ -575,6 +578,7 @@ class PPU:
                 self.raise_irq(1)
         if self.dot == 1:
             self.early_fired = False
+            self.early_lyc153 = False
         self.stat_line = line
 
     def _halt_delay(self, oam: bool) -> int:
@@ -615,6 +619,24 @@ class PPU:
             and self.ly != 0
             and self.visible_ly == self.lyc
         )
+
+    def after_access(self) -> None:
+        """Called by the board after each M-cycle's bus access, with the registers as written.
+        Line 153's LY=LYC interrupt for LYC=0 reaches the CPU's dispatch at the end of the cycle
+        that ends at dot 8, so a LYC write in that cycle still cancels it (GBMicrotest
+        line_153_lyc0_int_inc_sled, line_153_lyc_int_b)."""
+        if (
+            self.ly == LAST_LINE
+            and self.dot == 8
+            and self.lcd_on
+            and self.stat_select & 0x40
+            and self.lyc == 0
+            and not self.stat_line
+        ):
+            self.early_lyc153 = True
+            self.irq_halt_delay = 0
+            self.irq_early_by = LYC_IRQ_EARLY
+            self.raise_irq(1)
 
     def _oam_pulse(self) -> bool:
         """The line-start OAM source: a short pulse at dots 0-3 of each line, VBlank's first line
