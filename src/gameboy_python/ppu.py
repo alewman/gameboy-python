@@ -32,6 +32,7 @@ WX_LAG = 4  # FITTED (Mealybug): the window comparator sees WX this many dots la
 WIN_LAG = 0  # ... and LCDC.5/.0 this many
 WINDOW_HEAD = 4  # FITTED (GBMicrotest win*): fetcher dots the window restart gets for free
 WINDOW_EDGE_HEAD = 6  # ... when the window starts at the left edge (WX < 7)
+MODE1_IRQ_DOT = 4  # FITTED (GBMicrotest vblank_int_if_*): the STAT VBlank source comes this late
 LYC_IRQ_EARLY = 4  # the LY=LYC interrupt comes this many dots before the flag shows
 OAM_IRQ_WIDTH = 4  # and lasts this many dots
 LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lcdon_timing-GS)
@@ -192,6 +193,8 @@ class PPU:
         lag = MODE0_READ_LAG if not (self.penalised or self.window_used) else MODE_READ_LAG
         if lagged == 3 and self.mode == 0 and self.mode0_dots > lag:
             lagged = 0  # the end of mode 3 shows up in STAT sooner than the start of it does
+        if lagged == 1 and self.mode == 2:
+            lagged = 0  # the first dots of line 0 read as mode 0, not VBlank's 1
         self.read_mode = lagged
         self._update_stat_line()
 
@@ -523,7 +526,7 @@ class PPU:
 
     def _update_stat_line(self) -> None:
         # (and for the first 4 dots of a new line it reads as false: Mooneye lcdon_timing-GS)
-        self.lyc_flag = (self.dot >= 4 or self.ly == 0) and self.visible_ly == self.lyc
+        self.lyc_flag = self._lyc_match()
         select = self.stat_select
         oam = bool(select & 0x20 and self._oam_pulse())
         line = bool(
@@ -553,6 +556,10 @@ class PPU:
                 # the early HBlank interrupt, like the OAM one, wakes a halted CPU a cycle later
                 self.irq_halt_delay = self._halt_delay(oam)
                 self.irq_early_by = HBLANK_IRQ_EARLY if self.hblank_early and self.mode != 0 else 0
+                if select & 0x10 and self.mode == 1 and self.ly == VBLANK_LINE and self.dot < 4:
+                    # the VBlank STAT source: the dispatch sees it on time, IF shows it later
+                    self.irq_early_by = MODE1_IRQ_DOT
+                    self.irq_halt_delay = 0
                 self.raise_irq(1)
         if self.dot == 1:
             self.early_fired = False
@@ -570,6 +577,23 @@ class PPU:
 
     def select_has_hblank(self) -> bool:
         return bool(self.stat_select & 0x08)
+
+    def _compare_ly(self) -> int:
+        """The LY the comparator sees: 153 for line 153's first 8 dots (a read sees it for 4)."""
+        if self.ly == LAST_LINE:
+            return LAST_LINE if self.dot < 8 else 0
+        return self.ly
+
+    def _lyc_match(self) -> bool:
+        """The LY=LYC flag: false for 4 dots after the comparator's LY changes (at a line's start,
+        and on line 153 at dot 8; line 0 keeps LYC=0's flag across the wrap): GBMicrotest
+        line_153_lyc*_stat_timing_*, Mooneye lcdon_timing-GS."""
+        dot = self.dot
+        if dot < 4 and self.ly != 0:
+            return False
+        if self.ly == LAST_LINE and 8 <= dot < 12:
+            return False
+        return self._compare_ly() == self.lyc
 
     def _lyc_early(self) -> bool:
         """The LY=LYC interrupt comes LYC_IRQ_EARLY dots before the flag (GBMicrotest int_lyc_*)."""

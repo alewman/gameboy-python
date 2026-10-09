@@ -29,6 +29,11 @@ from gameboy_python.timer import Timer
 POST_BOOT_DMG = {"a": 0x01, "b": 0x00, "c": 0x13, "d": 0x00, "e": 0xD8, "h": 0x01, "l": 0x4D}
 
 
+IF_WRITE_PHASE = (
+    4  # FITTED: an IF bit raised at or after this dot of an M-cycle survives a write to IF
+)
+
+
 class GameBoy:
     """One console: a machine row, a cartridge, an optional boot ROM, and all the units."""
 
@@ -56,6 +61,7 @@ class GameBoy:
         self.timer.counter = 4
         self.serial = Serial(raise_irq)
         self.joypad = Joypad(raise_irq)
+        self._late_bits = 0  # IF bits raised in the last dots of the current M-cycle
         self._hide = 0  # IF bits raised early for the CPU's dispatch, not yet readable
         self._hide_left = 0
         self._late: list[list[int]] = []  # OAM interrupts held back while the CPU is halted
@@ -105,6 +111,8 @@ class GameBoy:
             self._late.append([self.ppu.sub + delay, bit])
             return
         self.cpu.request_interrupt(bit)
+        if self.ppu.sub >= IF_WRITE_PHASE:
+            self._late_bits |= 1 << bit
         if bit == 1 and self.ppu.irq_early_by:
             # the dispatch decision sees this interrupt a cycle early; reads of IF do not
             self._hide |= 2
@@ -113,6 +121,7 @@ class GameBoy:
     def _tick(self) -> None:
         """One M-cycle of the whole board."""
         self.t += 4
+        self._late_bits = 0
         if self._hide:
             self._hide_left -= 4
             if self._hide_left <= 0:
@@ -300,7 +309,8 @@ class GameBoy:
         elif low == 0x07:
             self.timer.write_tac(value)
         elif low == 0x0F:
-            self.cpu.if_ = value & 0x1F
+            # an interrupt raised late in this very cycle is not cleared by the write
+            self.cpu.if_ = (value & 0x1F) | self._late_bits
         elif low == 0x40:
             self.ppu.write_lcdc(value)
         elif low == 0x41:
