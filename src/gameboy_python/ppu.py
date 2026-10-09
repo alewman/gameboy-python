@@ -28,6 +28,7 @@ OAM_IRQ_EARLY = (
 HBLANK_IRQ_EARLY = 2  # FITTED (GBMicrotest hblank_int_scx*): pixels before the end it fires
 MODE0_READ_LAG = 1  # FITTED (GBMicrotest ppu_sprite0_scx*): STAT shows mode 0 this many dots after
 LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interrupt)
+WX_GLITCH = 0  # 1 = Pan Docs' WX-reached-again colour-0 pixel; it made wx_4/5 worse, so off
 SHADOW_LAG = 2  # the pixel-drawing PPU runs this many dots behind the one that times STAT
 SHADOW_WX_LAG = 4
 WX_LAG = 4  # FITTED (Mealybug): the window comparator sees WX this many dots late
@@ -138,6 +139,7 @@ class PPU:
         self.obj_low_at = self.obj_high_at = 0
         self.obj_dots = 0
         self.obj_entry = None
+        self.win_started_wx = -1
         self.shadow: PPU | None = None
         if not _shadow:
             self.shadow = PPU(_ignore_irq, False, _shadow=True)
@@ -480,6 +482,17 @@ class PPU:
             wx = self.wx_hist[-lag] if lag else self.wx
             win_lcdc = self._lcdc_ago(WIN_LAG)
             if (
+                self.window_active
+                and WX_GLITCH
+                and x + 7 == wx
+                and wx != self.win_started_wx
+                and self.is_shadow
+            ):
+                # WX reached again after the window started: a colour-0 pixel is pushed (Pan Docs
+                # pixel_fifo.md "The Window")
+                self.win_started_wx = wx
+                self.bg.insert(0, ([0, 0, 0, 1], 0))
+            if (
                 not self.window_active
                 and win_lcdc & 0x20
                 and win_lcdc & 1
@@ -487,6 +500,7 @@ class PPU:
                 and (x + 7 == wx or (x == 0 and wx < 7))
             ):
                 self.window_active = True
+                self.win_started_wx = wx
                 self.window_used = True
                 self.bg = []
                 self.f_step = 0

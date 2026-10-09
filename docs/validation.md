@@ -146,16 +146,18 @@ reads come a fitted number of dots after the pop. Every fitted constant is marke
   `ppu/*` and the three boot-ROM phase tests.
 - **Mealybug (DMG blob)**: 5 of 24 pixel-exact (`m2_win_en_toggle`, `m3_bgp_change`, `m3_obp0_change`,
   `m3_scx_high_5_bits`, `m3_scx_low_3_bits`; `scripts/mealybug_compare.py`, booted from the real boot
-  ROM because the tests draw its (R) tile). Total 36,767 differing pixels over the other 19.
-  Largest: `m3_wx_6_change` 13.8k, `m3_lcdc_win_en_change_multiple` 8.3k and `_wx` 5.9k,
-  `m3_bgp_change_sprites` 2.1k, `m3_window_timing_wx_0` 0.8k, `m3_lcdc_tile_sel_win_change` 1.3k.
-- **What the fits say.** Register effects in the Mealybug pictures land about 10 dots after the
-  pixel's pop in the timeline Mooneye pins (STAT/IRQ/mode flags): the map and data reads, BGP (7),
-  OBP (10), LCDC.0/1 (9). The window comparator (WX) is the one input I have not moved into that
-  later domain, and it is the common factor of the worst tests: they change WX or LCDC.5 within
-  those 10 dots. Doing it properly needs the structural decisions (window start, its 6-dot stall)
-  made on later register values while the mode-0 flag stays early, which means two timelines (a flag
-  stepper and a render stepper); that is the next step, not a constant.
+  ROM because the tests draw its (R) tile); about 34,000 differing pixels over the other 19. This is
+  **not** the brief's acceptance (all DMG pictures): milestone 2 is open on it.
+  The PPU is now two machines: the one that times STAT, IRQs and the stalls from register values at
+  the pops, and a *shadow* of the same code (`SHADOW_LAG` = 2 dots behind, sharing VRAM and OAM)
+  that sees the registers later and draws. The split fixed the WX comparator (it now sees WX 4 dots
+  late in the shadow) and cost about 2x per dot. What it did not fix, per picture:
+  `m3_wx_6_change` (13.8k: after the window has started, a new WX reached again changes what is
+  drawn; Pan Docs' "colour-0 pixel" rule, tried as `WX_GLITCH`, made `m3_wx_4/5` worse), then
+  `m3_lcdc_win_en_change_multiple` (8.3k) and `_wx` (4.0k), `m3_bgp_change_sprites` (2.1k),
+  `m3_lcdc_win_map_change` (1.0k), `m3_scy_change` (1.0k), and a long tail under 800. Window
+  re-trigger and LCDC.5 toggling mid-line are what is left; the Mealybug author's documentation in
+  the pinned repository is a stub, so there is no source to follow beyond the pictures.
 - **blargg `halt_bug`**: the screen matches the reference picture pixel for pixel (skip-boot and real
   boot ROM).
 - **GBMicrotest**: 478 of 513 pass (`scripts/gbmicrotest.py`; the passing set is held by
