@@ -29,9 +29,7 @@ from gameboy_python.timer import Timer
 POST_BOOT_DMG = {"a": 0x01, "b": 0x00, "c": 0x13, "d": 0x00, "e": 0xD8, "h": 0x01, "l": 0x4D}
 
 
-IF_WRITE_PHASE = (
-    4  # FITTED: an IF bit raised at or after this dot of an M-cycle survives a write to IF
-)
+IF_WRITE_PHASE = 0  # FITTED: IF bits raised in a write's own M-cycle survive the write
 
 
 class GameBoy:
@@ -113,9 +111,9 @@ class GameBoy:
         self.cpu.request_interrupt(bit)
         if self.ppu.sub >= IF_WRITE_PHASE:
             self._late_bits |= 1 << bit
-        if bit == 1 and self.ppu.irq_early_by:
+        if bit in (0, 1) and self.ppu.irq_early_by:
             # the dispatch decision sees this interrupt a cycle early; reads of IF do not
-            self._hide |= 2
+            self._hide |= 1 << bit
             self._hide_left = self.ppu.irq_early_by
 
     def _tick(self) -> None:

@@ -32,6 +32,7 @@ WX_LAG = 4  # FITTED (Mealybug): the window comparator sees WX this many dots la
 WIN_LAG = 0  # ... and LCDC.5/.0 this many
 WINDOW_HEAD = 4  # FITTED (GBMicrotest win*): fetcher dots the window restart gets for free
 WINDOW_EDGE_HEAD = 6  # ... when the window starts at the left edge (WX < 7)
+VBLANK_IF_LATE = 4  # FITTED (GBMicrotest stat_write_glitch_l143_*): IF shows VBlank this much later
 MODE1_IRQ_DOT = 4  # FITTED (GBMicrotest vblank_int_if_*): the STAT VBlank source comes this late
 LYC_IRQ_EARLY = 4  # the LY=LYC interrupt comes this many dots before the flag shows
 OAM_IRQ_WIDTH = 4  # and lasts this many dots
@@ -63,6 +64,7 @@ class PPU:
         self.stat_write_glitch = stat_write_glitch
         self.hblank_early = False  # mode 3 is within HBLANK_IRQ_EARLY pixels of its end
         self.mode0_dots = 0
+        self.glitching = False
         self.early_fired = False
         self.irq_early_by = 0  # dots before its real time the interrupt just raised came
         self.irq_halt_delay = 0  # dots later a halted CPU sees the STAT interrupt just raised
@@ -216,7 +218,10 @@ class PPU:
             self.frames += 1
             self.frame = bytes(self.framebuffer)
             self.mode = 1
+            self.irq_early_by = VBLANK_IF_LATE
+            self.irq_halt_delay = 0
             self.raise_irq(0)
+            self.irq_early_by = 0
         elif self.ly < VBLANK_LINE:
             self.mode = 2
             self.line_objs = []
@@ -534,7 +539,11 @@ class PPU:
             or (select & 0x40 and self._lyc_early())
             or (
                 select & 0x08
-                and (self.mode == 0 or self.hblank_early)
+                and (
+                    (self.read_mode == 0)
+                    if self.glitching
+                    else (self.mode == 0 or self.hblank_early)
+                )
                 and not (self.line0 and self.dot < self.mode3_start)
             )
             or (select & 0x10 and self.mode == 1)
@@ -622,7 +631,9 @@ class PPU:
             # the interrupt if the line was low (Pan Docs STAT.md; GBMicrotest stat_write_glitch_*)
             saved = self.stat_select
             self.stat_select = 0x78
+            self.glitching = True  # the glitch sees the mode as a read does
             self._update_stat_line()
+            self.glitching = False
             self.stat_select = saved
         self.stat_select = value & 0x78
         if self.lcd_on:
