@@ -564,7 +564,10 @@ class PPU:
             else:
                 # the early HBlank interrupt, like the OAM one, wakes a halted CPU a cycle later
                 self.irq_halt_delay = self._halt_delay(oam)
-                self.irq_early_by = HBLANK_IRQ_EARLY if self.hblank_early and self.mode != 0 else 0
+                hblank = select & 0x08 and (self.mode == 0 or self.hblank_early)
+                self.irq_early_by = HBLANK_IRQ_EARLY if hblank else 0
+                if select & 0x40 and self._lyc_early() and not self.lyc_flag and not hblank:
+                    self.irq_early_by = LYC_IRQ_EARLY  # the dispatch sees it before IF does
                 if select & 0x10 and self.mode == 1 and self.ly == VBLANK_LINE and self.dot < 4:
                     # the VBlank STAT source: the dispatch sees it on time, IF shows it later
                     self.irq_early_by = MODE1_IRQ_DOT
