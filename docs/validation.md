@@ -158,7 +158,7 @@ reads come a fitted number of dots after the pop. Every fitted constant is marke
   stepper and a render stepper); that is the next step, not a constant.
 - **blargg `halt_bug`**: the screen matches the reference picture pixel for pixel (skip-boot and real
   boot ROM).
-- **GBMicrotest**: 403 of 513 pass (`scripts/gbmicrotest.py`; the passing set is held by
+- **GBMicrotest**: 446 of 513 pass (`scripts/gbmicrotest.py`; the passing set is held by
   `tests/test_gbmicrotest.py`). 31 more report no result by protocol (screens, benches). SameBoy's
   count is 476, so 81 are still open: the SCX-dependent HBlank `_if_`/`_nops_` variants (the IRQ
   phase inside an M-cycle), `int_oam_*`/`lcdon_to_oam_*` (see below), line 153 LY/LYC timing,
