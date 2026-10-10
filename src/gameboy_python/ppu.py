@@ -47,6 +47,7 @@ BGP_GLITCH_DOT = 1  # FITTED: the dot, counted from the write's, whose palette i
 # FITTED (Mealybug): dots from a pop to each register sample
 LCDC_DELAY = 3
 BGP_DELAY = 1
+SCY_LAG = 4  # FITTED (Gambatte scy/scy_during_m3_*): dots a SCY write takes to reach the fetcher
 OBP_DELAY = 4
 OBJ_SIZE_LAG = 0  # FITTED (Mealybug): dots LCDC.2 arrives late at an object fetch
 # FITTED (Mealybug): dots each background VRAM read is deferred past its fetcher step
@@ -98,6 +99,7 @@ class PPU:
         self.lcdc = 0
         self.f_events: list[list[int]] = []  # deferred fetcher reads [dots left, step]
         self.wx_hist = [0] * 16
+        self.scy_hist = [0] * 16
         self.lcdc_hist = [0] * 16  # LCDC as of each of the last dots (for the lagged bits)
         self.stat_select = 0  # STAT bits 6-3 as written
         self.scy = self.scx = 0
@@ -200,6 +202,8 @@ class PPU:
         del self.lcdc_hist[0]
         self.wx_hist.append(self.wx)
         del self.wx_hist[0]
+        self.scy_hist.append(self.scy)
+        del self.scy_hist[0]
         self.dot += 1
         if self.dot >= DOTS_PER_LINE:
             self._next_line()
@@ -239,7 +243,8 @@ class PPU:
         shadow = self.shadow
         assert shadow is not None
         shadow.lcdc = self.lcdc
-        shadow.scx, shadow.scy = self.scx, self.scy
+        shadow.scx = self.scx
+        shadow.scy = self.scy_hist[-SCY_LAG] if SCY_LAG else self.scy
         shadow.wx, shadow.wy = self.wx, self.wy
         shadow.bgp, shadow.obp0, shadow.obp1 = self.bgp, self.obp0, self.obp1
         g_dot, g_ly, g_value = self.bgp_glitch
