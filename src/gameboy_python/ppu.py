@@ -47,7 +47,8 @@ BGP_GLITCH_DOT = 1  # FITTED: the dot, counted from the write's, whose palette i
 # FITTED (Mealybug): dots from a pop to each register sample
 LCDC_DELAY = 3
 BGP_DELAY = 1
-SCY_LAG = 4  # FITTED (Gambatte scy/scy_during_m3_*): dots a SCY write takes to reach the fetcher
+SCY_LAG = 4
+  # FITTED (Gambatte scy/scy_during_m3_*): dots a SCY write takes to reach the fetcher
 OBP_DELAY = 4
 OBJ_SIZE_LAG = 0  # FITTED (Mealybug): dots LCDC.2 arrives late at an object fetch
 # FITTED (Mealybug): dots each background VRAM read is deferred past its fetcher step
@@ -769,6 +770,13 @@ class PPU:
             self.irq_halt_delay = 0
             self.irq_early_by = LYC_IRQ_EARLY
             self.raise_irq(1)
+
+    def compare_wy(self) -> None:
+        """WY==LY is compared whenever either changes, not only at a line's start: a WY written to
+        the current line number late in the line still starts the window on the next one
+        (Gambatte window/arg/late_wy_*)."""
+        if self.lcd_on and self.ly < VBLANK_LINE and self.ly == self.wy:
+            self.wy_hit = True
 
     def _oam_pulse(self) -> bool:
         """The line-start OAM source: a short pulse at dots 0-3 of each line, VBlank's first line

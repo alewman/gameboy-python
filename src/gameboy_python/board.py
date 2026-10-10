@@ -372,6 +372,7 @@ class GameBoy:
             self.ppu.obp1 = value
         elif low == 0x4A:
             self.ppu.wy = value
+            self.ppu.compare_wy()
         elif low == 0x4B:
             self.ppu.wx = value
         elif low == 0x50 and value and self.boot_mapped:
