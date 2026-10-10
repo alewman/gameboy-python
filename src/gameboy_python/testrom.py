@@ -97,9 +97,20 @@ def run_blargg_ram(gb: GameBoy, max_frames: int = 6000) -> RomResult:
     return RomResult("timeout", False, "", registers(gb), gb.t, gb.ppu.frames)
 
 
-def run_microtest(gb: GameBoy, frames: int = 4) -> RomResult:
-    """Run a GBMicrotest ROM for a few frames and read $FF82."""
+#: GBMicrotest ROMs from the suite's early style: no $FF82 report, a flag byte written to $8000 in
+#: a loop instead ($55 when the DMG value came out as expected; their sources, DMG build).
+VRAM_FLAG_ROMS = frozenset({"ppu_spritex_vs_scx.gb", "004-tima_boot_phase.gb"})
+
+
+def run_microtest(gb: GameBoy, frames: int = 4, vram_flag: bool = False) -> RomResult:
+    """Run a GBMicrotest ROM for a few frames and read $FF82 (or, for a ``VRAM_FLAG_ROMS`` ROM,
+    the flag at $8000)."""
     gb.run_frames(frames)
+    if vram_flag:
+        flag = gb.peek(0x8000)
+        return RomResult(
+            "microtest", flag == 0x55, f"flag ${flag:02X}, expected $55", registers(gb), gb.t, gb.ppu.frames
+        )
     result = gb.hram[0x02]
     return RomResult(
         "microtest",

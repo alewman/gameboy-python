@@ -69,7 +69,7 @@ class GameBoy:
         self._hide = 0  # IF bits raised early for the CPU's dispatch, not yet readable
         self._hide_left = 0
         self._late: list[list[int]] = []  # OAM interrupts held back while the CPU is halted
-        self.ppu = PPU(self._ppu_irq, machine.stat_write_glitch)
+        self.ppu = PPU(self._ppu_irq, machine.stat_write_glitch, stat_blocking=machine.stat_blocking)
         self.apu = APU()
         self.dma = OamDma(self._dma_source, self._dma_write)
         if self.boot_rom is None:

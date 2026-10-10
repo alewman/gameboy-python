@@ -73,6 +73,7 @@ class PPU:
         raise_irq: Callable[[int], None],
         stat_write_glitch: bool = False,
         _shadow: bool = False,
+        stat_blocking: bool = True,
     ) -> None:
         """A PPU is two: this one times the mode, the STAT line and the interrupts from register
         values at the pops; a *shadow* copy of the same machinery runs ``SHADOW_LAG`` dots behind
@@ -80,6 +81,10 @@ class PPU:
         self.is_shadow = _shadow
         self.raise_irq = raise_irq
         self.stat_write_glitch = stat_write_glitch
+        #: the STAT interrupt line is one OR: a source that rises while another holds it raises
+        #: nothing (every model but DMG 0, Mooneye ppu/stat_irq_blocking)
+        self.stat_blocking = stat_blocking
+        self._sources = (False, False, False, False)
         self.hblank_early = False  # mode 3 is within HBLANK_IRQ_EARLY pixels of its end
         self.mode0_dots = 0
         self.glitching = False
@@ -650,10 +655,9 @@ class PPU:
         self.lyc_flag = self._lyc_match()
         select = self.stat_select
         oam = bool(select & 0x20 and self._oam_pulse())
-        line = bool(
-            (select & 0x40 and self.lyc_flag)
-            or (select & 0x40 and self._lyc_early())
-            or (
+        sources = (
+            bool(select & 0x40 and (self.lyc_flag or self._lyc_early())),
+            bool(
                 select & 0x08
                 and (
                     (self.read_mode == 0)
@@ -661,10 +665,18 @@ class PPU:
                     else (self.mode == 0 or self.hblank_early)
                 )
                 and not (self.line0 and self.dot < self.mode3_start)
-            )
-            or (select & 0x10 and self.mode == 1)
-            or oam
+            ),
+            bool(select & 0x10 and self.mode == 1),
+            oam,
         )
+        line = any(sources)
+        # without blocking each source's own rising edge interrupts, line held high or not
+        rising = (
+            line and not self.stat_line
+            if self.stat_blocking
+            else any(now and not before for now, before in zip(sources, self._sources, strict=True))
+        )
+        self._sources = sources
         early_dot = DOTS_PER_LINE - OAM_IRQ_EARLY
         if OAM_IRQ_EARLY and select & 0x20 and self.dot == early_dot and not self.stat_line:
             following = 0 if self.ly == LAST_LINE else self.ly + 1
@@ -674,7 +686,7 @@ class PPU:
                 self.irq_halt_delay = OAM_IRQ_EARLY
                 self.irq_early_by = OAM_IRQ_EARLY
                 self.raise_irq(1)
-        if line and not self.stat_line:
+        if rising:
             if self.early_lyc153 and self.ly == LAST_LINE and not oam:
                 self.early_lyc153 = False  # already raised, early
             elif self.early_fired and oam:

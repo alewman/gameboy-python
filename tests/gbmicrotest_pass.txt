@@ -1,3 +1,4 @@
+004-tima_boot_phase.gb
 div_inc_timing_a.gb
 div_inc_timing_b.gb
 dma_0x1000.gb
@@ -108,7 +109,9 @@ int_lyc_nops.gb
 int_oam_halt.gb
 int_oam_incs.gb
 int_oam_nops.gb
+int_timer_halt.gb
 int_timer_halt_div_a.gb
+int_timer_halt_div_b.gb
 int_timer_incs.gb
 int_timer_nops.gb
 int_timer_nops_div_a.gb
@@ -119,6 +122,7 @@ int_vblank1_nops.gb
 int_vblank2_halt.gb
 int_vblank2_incs.gb
 int_vblank2_nops.gb
+is_if_set_during_ime0.gb
 lcdon_halt_to_vblank_int_a.gb
 lcdon_halt_to_vblank_int_b.gb
 lcdon_nops_to_vblank_int_a.gb
@@ -272,6 +276,8 @@ poweron_oam_184.gb
 poweron_oam_233.gb
 poweron_oam_234.gb
 poweron_oam_235.gb
+poweron_obp0_000.gb
+poweron_obp1_000.gb
 poweron_sb_000.gb
 poweron_sc_000.gb
 poweron_scx_000.gb
@@ -323,6 +329,7 @@ ppu_sprite0_scx6_a.gb
 ppu_sprite0_scx6_b.gb
 ppu_sprite0_scx7_a.gb
 ppu_sprite0_scx7_b.gb
+ppu_spritex_vs_scx.gb
 sprite4_0_a.gb
 sprite4_0_b.gb
 sprite4_1_a.gb
@@ -472,7 +479,3 @@ win8_a.gb
 win8_b.gb
 win9_a.gb
 win9_b.gb
-poweron_obp0_000.gb
-poweron_obp1_000.gb
-int_timer_halt.gb
-int_timer_halt_div_b.gb
