@@ -180,3 +180,26 @@ reads come a fitted number of dots after the pop. Every fitted constant is marke
   sees WX 4 dots late; one ROM (`oam_int_if_edge_c`) fell out.
 - Not started: Mealybug's `dmg_b` pictures for `lcdc_bg_en_change` and
   `win_en_change_multiple_wx`.
+
+## Results: milestone 3, the OAM bug (2026-10-09)
+
+Implemented per Pan Docs `OAM_Corruption_Bug.md`: every M-cycle whose bus address is in
+$FE00-$FEFF while the PPU scans (dots 0-79 of a visible line, not the first line after LCD on)
+corrupts the row being read, with the write, read and read-plus-increment patterns, rows 0 and
+1 spared; an idle cycle that steps BC, DE, HL, SP or PC into that range counts as a write
+(`PPU.corrupt_oam`, `Board._bug`, DMG only: `Machine.oam_bug`). The scan reads row *n* at dot
+4n (`OAM_BUG_START` = 0, fitted).
+
+- **blargg `oam_bug`**: 1, 2, 3, 4, 5, 6 and 8 pass (`tests/test_blargg.py`); Mooneye
+  `oam_dma/sources-GS` and `bits/mem_oam` were already in the 66.
+- **`7-timing_effect` is open.** It corrupts OAM at every `inc de` offset across a scan, prints
+  each changed OAM, and checksums the output. In the board every row 1-19 corrupts, which makes
+  19 prints; the ROM's log lives in cartridge RAM ($A004-$BFFF, 8 KiB) and 15 prints overflow it into
+  work RAM, so the ROM derails (no result). Capping the last corruptible row at 4-14 completes
+  with a wrong checksum every time (none equals $7D792E7C), and so did the read and read-plus-
+  increment patterns for the idle cycle. DMG-C therefore corrupts fewer or different iterations
+  than any of these; the likely places are the end of the corruptible window and the first
+  corruptible row. I stopped fitting by checksum without a second oracle: SameBoy's rule (rows
+  8-bytes-aligned from index 0, 2 dots per object) agrees with the board on the first row, and
+  the dmg-sim die model (default simplified OAM) does not model the bug.
+- Not done: Gambatte `oam_access/*` and `oamdma/*` dmg08 results.

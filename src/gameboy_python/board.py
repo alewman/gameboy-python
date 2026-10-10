@@ -35,6 +35,9 @@ IF_WRITE_PHASE = 0  # FITTED: IF bits raised in a write's own M-cycle survive th
 TIMER_HALT_DELAY = 4  # FITTED (GBMicrotest int_timer_halt, int_timer_halt_div_b)
 
 
+OAM_IDLE_KIND = "write"  # the OAM-bug pattern an IDU step without an access causes
+
+
 class GameBoy:
     """One console: a machine row, a cartridge, an optional boot ROM, and all the units."""
 
@@ -152,6 +155,7 @@ class GameBoy:
 
     def _idle(self, address: int) -> None:
         self._tick()
+        self._bug(address, OAM_IDLE_KIND if self.cpu.idu else None)
         self.ppu.after_access()
         self.timer.finish()
 
@@ -166,8 +170,13 @@ class GameBoy:
 
     # ----- the bus ------------------------------------------------------------------------
 
+    def _bug(self, address: int, kind: str | None) -> None:
+        if kind and self.machine.oam_bug and 0xFE00 <= address <= 0xFEFF:
+            self.ppu.corrupt_oam(kind)
+
     def _read(self, address: int) -> int:
         self._tick()
+        self._bug(address, "readinc" if self.cpu.idu else "read")
         value = self._load(address)
         self.ppu.after_access()
         self.timer.finish()
@@ -175,6 +184,7 @@ class GameBoy:
 
     def _write(self, address: int, value: int) -> None:
         self._tick()
+        self._bug(address, "write")
         self._store(address, value)
         self.ppu.after_access()
         self.timer.finish()

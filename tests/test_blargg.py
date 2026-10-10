@@ -42,3 +42,23 @@ def test_mem_timing_2_cartridge_ram_protocol():
     path = BLARGG / "mem_timing-2" / "mem_timing.gb"
     result = run_blargg_ram(GameBoy(load_cartridge(path.read_bytes())))
     assert result.protocol == "blargg-ram" and result.passed, result.text
+
+
+OAM_BUG = BLARGG / "oam_bug" / "rom_singles"
+#: 7-timing_effect is not here: its output checksum covers every corrupted iteration, and the
+#: board corrupts more of them than DMG-C does (docs/validation.md "OAM bug").
+OAM_BUG_PASSING = [
+    "1-lcd_sync",
+    "2-causes",
+    "3-non_causes",
+    "4-scanline_timing",
+    "5-timing_bug",
+    "6-timing_no_bug",
+    "8-instr_effect",
+]
+
+
+@pytest.mark.parametrize("name", OAM_BUG_PASSING)
+def test_oam_bug(name):
+    result = run_blargg_ram(GameBoy(load_cartridge((OAM_BUG / f"{name}.gb").read_bytes())))
+    assert result.protocol == "blargg-ram" and result.passed, result.text

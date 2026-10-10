@@ -89,6 +89,8 @@ def run_blargg_ram(gb: GameBoy, max_frames: int = 6000) -> RomResult:
             check = 0
             if len(ram) > 4 and bytes(ram[1:4]) == b"\xde\xb0\x61" and ram[0] != 0x80:
                 text = bytes(ram[4:]).split(b"\0")[0].decode("ascii", "replace")
+                if not text:  # the status byte is cleared for a moment while the text is rewritten
+                    continue
                 return RomResult(
                     "blargg-ram", ram[0] == 0, text, registers(gb), gb.t, gb.ppu.frames
                 )

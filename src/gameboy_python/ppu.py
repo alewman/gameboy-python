@@ -20,6 +20,8 @@ from collections.abc import Callable
 from gameboy_python.machines import DOTS_PER_LINE
 
 MODE2_END = 80
+OAM_BUG_LAST_ROW = 19  # FITTED (blargg oam_bug 7): the last row that can be corrupted
+OAM_BUG_START = 0  # FITTED (blargg oam_bug): the dot at which the scan reads row 0
 MODE_READ_LAG = 4  # FITTED: STAT and the CPU's VRAM/OAM locks see the mode 4 dots late (Mooneye
 # intr_2_mode0_timing, intr_2_mode3_timing, intr_2_oam_ok_timing); interrupts do not
 OAM_IRQ_EARLY = (
@@ -283,6 +285,47 @@ class PPU:
             self.window_active = False
             if self.ly == self.wy:
                 self.wy_hit = True
+
+    # ----- the OAM corruption bug (DMG): Pan Docs OAM_Corruption_Bug.md ---------------------------
+
+    def oam_row(self) -> int | None:
+        """The OAM row the PPU is reading this M-cycle, or None outside the scan."""
+        if not self.lcd_on or self.ly >= VBLANK_LINE or self.line0:
+            return None
+        row = (self.dot - OAM_BUG_START) // 4
+        return row if 0 <= row <= OAM_BUG_LAST_ROW else None
+
+    def corrupt_oam(self, kind: str) -> None:
+        """An address in $FE00-$FEFF on the bus during the scan: ``kind`` is 'read', 'write' or
+        'readinc' (a read in the cycle the IDU steps the same register)."""
+        row = self.oam_row()
+        if row is None:
+            return
+        oam = self.oam
+
+        def word(r: int, w: int) -> int:
+            return oam[r * 8 + w * 2] | (oam[r * 8 + w * 2 + 1] << 8)
+
+        def put(r: int, w: int, value: int) -> None:
+            oam[r * 8 + w * 2] = value & 0xFF
+            oam[r * 8 + w * 2 + 1] = (value >> 8) & 0xFF
+
+        def copy_row(src: int, dst: int) -> None:
+            oam[dst * 8 : dst * 8 + 8] = oam[src * 8 : src * 8 + 8]
+
+        if kind == "readinc" and 4 <= row < 19:
+            a, b, c, d = word(row - 2, 0), word(row - 1, 0), word(row, 0), word(row - 1, 2)
+            put(row - 1, 0, (b & (a | c | d)) | (a & c & d))
+            copy_row(row - 1, row)
+            copy_row(row - 1, row - 2)
+        if row == 0:
+            return
+        a, b, c = word(row, 0), word(row - 1, 0), word(row - 1, 2)
+        if kind == "write":
+            put(row, 0, ((a ^ c) & (b ^ c)) ^ c)
+        else:
+            put(row, 0, b | (a & c))
+        oam[row * 8 + 2 : row * 8 + 8] = oam[(row - 1) * 8 + 2 : (row - 1) * 8 + 8]
 
     # ----- OAM scan -----------------------------------------------------------------------
 
