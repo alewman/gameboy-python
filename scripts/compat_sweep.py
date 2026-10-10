@@ -73,7 +73,7 @@ def sameboy_frames(rom: bytes, frames: int, boot: bytes, keep: int) -> list[byte
     pixels = (ctypes.c_uint32 * (256 * 224))()
     lib.GB_set_pixels_output(gb, pixels)
     lib.GB_load_boot_rom_from_buffer(gb, boot, len(boot))
-    path = ROOT / "reference" / "build" / "compat_rom.tmp"
+    path = ROOT / "reference" / "build" / f"compat_rom_{os.getpid()}.tmp"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(rom)
     lib.GB_load_rom(gb, str(path).encode())

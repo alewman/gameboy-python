@@ -14,6 +14,7 @@ The ``_outaudio`` tests are ``scripts/gambatte_audio.py``'s.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from multiprocessing import Pool
@@ -98,20 +99,26 @@ def judge(frame: bytes, tests: list[tuple[str, str]]) -> list[bool]:
     return out
 
 
-def run(rom: Path) -> list[tuple[str, str, bool]]:
+def run(args: tuple[Path, bool, bool]) -> list[tuple[str, str, bool, bool | None]]:
+    rom, skip_boot, with_sameboy = args
     tests = plan(rom)
     if not tests:
         return []
-    boot, label = find_boot_rom("DMG")
-    if label != "real boot ROM":
+    boot, label = (None, "") if skip_boot else find_boot_rom("DMG")
+    if not skip_boot and label != "real boot ROM":
         raise SystemExit("no real DMG boot ROM")
     gb = GameBoy(load_cartridge(rom.read_bytes()), boot_rom=boot)
-    end = FRAMES * FRAME_T
+    end = (15 if skip_boot else FRAMES) * FRAME_T
     step = gb.cpu.step
     while gb.t < end:
         step()
     frame = bytes(gb.ppu.frame)
-    return [(rom.name, k, ok) for (k, _), ok in zip(tests, judge(frame, tests), strict=True)]
+    ours = judge(frame, tests)
+    theirs = sameboy(rom) if with_sameboy else [None] * len(tests)
+    return [
+        (rom.name, k, ok, sb)
+        for (k, _), ok, sb in zip(tests, ours, theirs, strict=True)
+    ]
 
 
 def sameboy(rom: Path) -> list[bool]:
@@ -129,17 +136,27 @@ def main() -> int:
     parser.add_argument("--write", type=Path)
     parser.add_argument("--only", help="a subdirectory of the suite, e.g. m2int_m2stat")
     parser.add_argument("--sameboy", action="store_true")
+    parser.add_argument("--skip-boot", action="store_true", help="start from the post-boot state, 15 frames")
+    parser.add_argument("--json", type=Path)
+    parser.add_argument("--sameboy-from", type=Path, help="reuse the SameBoy column of an earlier --json")
     parser.add_argument("--jobs", type=int, default=14)
     args = parser.parse_args()
     base = SUITE / args.only if args.only else SUITE
     roms = [p for p in sorted(base.rglob("*")) if p.suffix in (".gb", ".gbc") and plan(p)]
+    work = [(p, args.skip_boot, args.sameboy) for p in roms]
     with Pool(args.jobs) as pool:
-        results = [r for rs in pool.imap(run, roms, chunksize=4) for r in rs]
+        results = [r for rs in pool.imap(run, work, chunksize=2) for r in rs]
+    if args.sameboy_from:
+        old = {(n, k): sb for n, k, _ok, sb in json.loads(args.sameboy_from.read_text())}
+        results = [(n, k, ok, old.get((n, k))) for n, k, ok, _sb in results]
+        args.sameboy = True
+    if args.json:
+        args.json.write_text(json.dumps([[*r[:2], r[2], r[3]] for r in results]))
     passed = [r for r in results if r[2]]
-    print(f"{len(passed)} of {len(results)} agree with the DMG-08 ({len(roms)} ROMs)")
+    print(f"{len(passed)} of {len(results)} agree with the DMG-08 ({len(roms)} ROMs)", flush=True)
     where = {p.name: p for p in roms}
     by_dir: dict[str, list[int]] = {}
-    for name, _kind, ok in results:
+    for name, _kind, ok, _sb in results:
         tally = by_dir.setdefault(where[name].parent.name, [0, 0])
         tally[0] += ok
         tally[1] += 1
@@ -147,19 +164,17 @@ def main() -> int:
         if a != b:
             print(f"  {d}: {a}/{b}")
     if args.sameboy:
-        theirs: dict[tuple[str, str], bool] = {}
-        for rom in roms:
-            for (kind, _), ok in zip(plan(rom), sameboy(rom), strict=True):
-                theirs[rom.name, kind] = ok
         table = {(a, b): 0 for a in (True, False) for b in (True, False)}
-        for name, kind, ok in results:
-            table[ok, theirs[name, kind]] += 1
-        print("board / SameBoy: both pass %d, both fail %d, board only %d, SameBoy only %d" % (
-            table[True, True], table[False, False], table[True, False], table[False, True]))
-        for name, kind, ok in results:
+        for _name, _kind, ok, sb in results:
+            table[ok, sb] += 1
+        print(
+            "board / SameBoy: both pass %d, both fail %d, board only %d, SameBoy only %d"
+            % (table[True, True], table[False, False], table[True, False], table[False, True])
+        )
+        for name, kind, ok, sb in results:
             if not ok:
-                print(f"  fails {'(SameBoy too)' if not theirs[name, kind] else '(SameBoy passes)'}"
-                      f" {where[name].relative_to(SUITE)} [{kind}]")
+                note = "(SameBoy too)" if not sb else "(SameBoy passes)"
+                print(f"  fails {note} {where[name].relative_to(SUITE)} [{kind}]")
     if args.write:
         args.write.write_text("".join(f"{r[0]} {r[1]}\n" for r in passed))
     return 0

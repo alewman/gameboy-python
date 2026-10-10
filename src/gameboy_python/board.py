@@ -32,6 +32,7 @@ POST_BOOT_DMG = {"a": 0x01, "b": 0x00, "c": 0x13, "d": 0x00, "e": 0xD8, "h": 0x0
 IF_WRITE_PHASE = 0  # FITTED: IF bits raised in a write's own M-cycle survive the write
 
 
+SERIAL_IF_HIDE = 4  # dots; fitted, see _serial_irq
 TIMER_HALT_DELAY = 4  # FITTED (GBMicrotest int_timer_halt, int_timer_halt_div_b)
 
 
@@ -63,7 +64,7 @@ class GameBoy:
         # The counter's power-on phase: DIV reads in Mooneye boot_div-dmgABCmgb need the counter
         # 4 T ahead of the M-cycle count since reset (fitted; the only phase that passes it)
         self.timer.counter = 4
-        self.serial = Serial(raise_irq)
+        self.serial = Serial(self._serial_irq)
         self.joypad = Joypad(raise_irq)
         self._late_bits = 0  # IF bits raised in the last dots of the current M-cycle
         self._hide = 0  # IF bits raised early for the CPU's dispatch, not yet readable
@@ -105,6 +106,14 @@ class GameBoy:
             self._late.append([TIMER_HALT_DELAY, bit])
         else:
             self.cpu.request_interrupt(bit)
+
+    def _serial_irq(self, bit: int) -> None:
+        """The serial interrupt reaches the CPU's dispatch on time while IF shows it
+        SERIAL_IF_HIDE dots later (FITTED: Gambatte serial/*_read_if_*)."""
+        self.cpu.request_interrupt(bit)
+        if SERIAL_IF_HIDE:
+            self._hide |= 1 << bit
+            self._hide_left = SERIAL_IF_HIDE
 
     def _ppu_irq(self, bit: int) -> None:
         """A PPU interrupt. A halted CPU sees the STAT ones a fitted number of dots after the PPU
@@ -186,6 +195,12 @@ class GameBoy:
     def _write(self, address: int, value: int) -> None:
         self._tick()
         self._bug(address, "write")
+        dma = self.dma
+        if dma.active and dma.index and not self.machine.cgb_hardware:
+            if address < 0xFE00 and bus_of(address) == dma.bus != INTERNAL:
+                # a CPU write on the bus the DMA is reading: the two drive it together and the
+                # byte that lands in OAM is their AND (DMG; Gambatte oamdma_src*_busypush*)
+                self.ppu.oam[dma.index - 1] &= value
         self._store(address, value)
         self.ppu.after_access()
         self.timer.finish()
@@ -194,8 +209,10 @@ class GameBoy:
         """What the CPU reads at ``address`` this M-cycle."""
         dma = self.dma
         if dma.active:
-            if 0xFE00 <= address < 0xFEA0:
-                return 0xFF  # OAM reads return $FF while the DMA owns it
+            if 0xFE00 <= address < 0xFF00:
+                # reads of the whole $FExx page return $FF while the DMA owns OAM (Gambatte
+                # oamdma_src*_busypopFE9F/FEFF read $FEA0 and $FEFF as $FF, DMG-08)
+                return 0xFF
             if address < 0xFE00 and bus_of(address) == dma.bus != INTERNAL:
                 return dma.byte  # bus conflict: the CPU gets the DMA's byte
         return self.peek(address)
