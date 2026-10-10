@@ -27,6 +27,15 @@ from gameboy_python.timer import Timer
 #: post-boot register values for DMG-CPU A/B/C (Pan Docs Power_Up_Sequence.md "CPU registers",
 #: confirmed by Mooneye boot_regs-dmgABC); F's Z is always set, H and C follow the header checksum
 POST_BOOT_DMG = {"a": 0x01, "b": 0x00, "c": 0x13, "d": 0x00, "e": 0xD8, "h": 0x01, "l": 0x4D}
+#: ... and for a CGB (Pan Docs Power_Up_Sequence.md): a CGB game, and a DMG game in compatibility mode
+POST_BOOT_CGB = {"a": 0x11, "b": 0x00, "c": 0x00, "d": 0xFF, "e": 0x56, "h": 0x00, "l": 0x0D}
+POST_BOOT_CGB_COMPAT = {"a": 0x11, "b": 0x00, "c": 0x00, "d": 0x00, "e": 0x08, "h": 0x99, "l": 0x1A}
+
+#: the CGB boot ROM is $0000-$00FF and $0200-$08FF; $0100-$01FF is the cartridge header
+CGB_BOOT_SIZE = 0x900
+#: STOP's speed switch halts the CPU this many units (4 per M-cycle) unless an interrupt ends it
+#: earlier (SameBoy ``speed_switch_halt_countdown``; Gambatte speedchange)
+SPEED_SWITCH_HALT = 0x20008
 
 
 IF_WRITE_PHASE = 0  # FITTED: IF bits raised in a write's own M-cycle survive the write
@@ -50,13 +59,30 @@ class GameBoy:
     ) -> None:
         self.machine = machine
         self.cartridge = cartridge
-        self.t = 0  # T-cycles since power-on
-        self.wram = bytearray(0x2000)
+        self.t = 0  # PPU dots (4.19 MHz T-cycles of real time) since power-on
+        cgb = self.cgb = machine.cgb_hardware
+        self.wram = bytearray(0x8000 if cgb else 0x2000)
+        self.svbk = 1  # the WRAM bank at $D000 (CGB mode: SVBK, 0 reads as 1)
         self.hram = bytearray(0x7F)
         self.boot_rom = bytes(boot_rom) if boot_rom is not None else None
         self.boot_mapped = self.boot_rom is not None
-        if self.boot_rom is not None and len(self.boot_rom) != 0x100:
-            raise ValueError("a DMG boot ROM is 256 bytes")
+        size = CGB_BOOT_SIZE if cgb else 0x100
+        if self.boot_rom is not None and len(self.boot_rom) != size:
+            raise ValueError(f"a {machine.model.upper()} boot ROM is {size} bytes")
+        self.double_speed = False
+        self.key1 = 0  # bit 0: a speed switch is armed
+        self._switch_wait = 0  # units left of the speed switch's halt
+        self.key0 = 0
+        self.rp = 0
+        self.undocumented = [0, 0, 0, 0]  # $FF72-$FF75
+        self.svbk_register = self.opri_register = 0
+        self.hdma_src = self.hdma_dst = 0
+        self.hdma_blocks = 0  # 16-byte blocks left
+        self.hdma_hblank = False  # an HBlank transfer is armed
+        self.hdma_due = False  # a block is to run before the next instruction
+        self._idle_units = 0
+        self._last_mode = 0
+        self._hdma_mode = 0
 
         self.cpu = SM83(self._read, self._write, self._idle, stop=self._stop)
         raise_irq = self.cpu.request_interrupt
@@ -70,9 +96,15 @@ class GameBoy:
         self._hide = 0  # IF bits raised early for the CPU's dispatch, not yet readable
         self._hide_left = 0
         self._late: list[list[int]] = []  # OAM interrupts held back while the CPU is halted
-        self.ppu = PPU(self._ppu_irq, machine.stat_write_glitch, stat_blocking=machine.stat_blocking)
+        self.ppu = PPU(
+            self._ppu_irq, machine.stat_write_glitch, stat_blocking=machine.stat_blocking, cgb=cgb
+        )
+        self.ppu.cgb_mode = cgb  # the boot ROM runs in CGB mode and picks compatibility by KEY0
         self.apu = APU()
         self.dma = OamDma(self._dma_source, self._dma_write)
+        self._cpu_step = self.cpu.step
+        if cgb:
+            self.cpu.step = self.step  # instruction boundaries are where HDMA blocks run
         if self.boot_rom is None:
             self._skip_boot()
 
@@ -82,6 +114,9 @@ class GameBoy:
         """The state the DMG boot ROM leaves at $0100 (Pan Docs Power_Up_Sequence.md)."""
         header = self.cartridge.header
         f = 0x80 | (0x30 if header.header_checksum != 0 else 0)
+        if self.cgb:
+            self._skip_boot_cgb()
+            return
         self.cpu.restore_state(CPUState(**POST_BOOT_DMG, f=f, sp=0xFFFE, pc=0x0100, if_=0x01))
         # DIV $AB; the low byte is the counter phase at handoff: what dmg-sim's
         # quickboot leaves on this board and the only phase that passes Mooneye boot_div-dmgABCmgb
@@ -94,6 +129,35 @@ class GameBoy:
         # the PPU is late in line 153 (LY reads 0, mode 1, STAT $85) at handoff, as quickboot
         # leaves it
         self.ppu.place(153, 396, 1)
+        self.apu.skip_boot()
+        self.boot_mapped = False
+
+    def _skip_boot_cgb(self) -> None:
+        """The state the CGB boot ROM leaves at $0100 (Pan Docs Power_Up_Sequence.md). A DMG game
+        is left in compatibility mode with the boot ROM's default palettes (white to black)."""
+        header = self.cartridge.header
+        cgb_game = header.cgb_enhanced
+        regs = POST_BOOT_CGB if cgb_game else POST_BOOT_CGB_COMPAT
+        self.cpu.restore_state(
+            CPUState(**regs, f=0x80, sp=0xFFFE, pc=0x0100, if_=0x01)
+        )
+        ppu = self.ppu
+        ppu.cgb_mode = cgb_game
+        ppu.opri = 0 if cgb_game else 1
+        self.key0 = header.cgb_flag if cgb_game else 0x04
+        self.timer.counter = 0x2678 if cgb_game else 0x267C  # FITTED later; DIV reads $26/$27
+        self.serial.sc = 0
+        self.dma.register = 0
+        ppu.bgp = 0xFC
+        for palette in (ppu.bg_pal, ppu.obj_pal):
+            for entry in range(8):
+                for colour, word in enumerate((0x7FFF, 0x5AD6, 0x294A, 0x0000)):
+                    palette[entry * 8 + colour * 2 : entry * 8 + colour * 2 + 2] = word.to_bytes(
+                        2, "little"
+                    )
+        ppu.write_lcdc(0x91)
+        ppu.stat_select = 0
+        ppu.place(0, 396, 1)
         self.apu.skip_boot()
         self.boot_mapped = False
 
@@ -133,8 +197,15 @@ class GameBoy:
 
     def _tick(self) -> None:
         """One M-cycle of the whole board."""
-        self.t += 4
+        dots = 2 if self.double_speed else 4  # the PPU and APU run at the single-speed rate
+        self.t += dots
         self._late_bits = 0
+        if self._switch_wait:
+            self._switch_wait -= 4
+            if self._switch_wait <= 0 or not self.cpu.halted:
+                if self._switch_wait <= 0:
+                    self.cpu.halted = False
+                self._switch_wait = 0
         if self._hide:
             self._hide_left -= 4
             if self._hide_left <= 0:
@@ -150,12 +221,18 @@ class GameBoy:
             self._late = held
         timer = self.timer
         timer.tick()
-        if timer.previous & 0x1000 and not timer.counter & 0x1000:
-            self.apu.frame_tick()  # DIV-APU: a falling edge of the system counter's bit 12
-        self.apu.tick(4)
+        apu_bit = 0x2000 if self.double_speed else 0x1000
+        if timer.previous & apu_bit and not timer.counter & apu_bit:
+            self.apu.frame_tick()  # DIV-APU: a falling edge of the system counter's bit 12 (13)
+        self.apu.tick(dots)
         self.serial.tick(timer.previous, timer.counter)
-        self.ppu.tick()
+        self.ppu.tick(dots)
         self.dma.tick()
+        if self.hdma_hblank:
+            mode = self.ppu.mode
+            if mode == 0 and self._last_mode != 0 and self.ppu.lcd_on:
+                self.hdma_due = True  # an HBlank transfer's next block
+            self._last_mode = mode
 
     def _idle(self, address: int) -> None:
         self._tick()
@@ -165,14 +242,23 @@ class GameBoy:
 
     def _write_div(self) -> None:
         """Writing DIV clears the counter: a high bit 12 falls, which ticks DIV-APU."""
-        if self.timer.counter & 0x1000:
+        if self.timer.counter & (0x2000 if self.double_speed else 0x1000):
             self.apu.frame_tick()
         self.timer.write_div()
 
     def _stop(self, pending: bool):
         """STOP on a DMG: it stops the oscillator and clears DIV; an interrupt that is already
         pending makes it a one-byte no-op (SonoSooS "NOP and STOP"; SameBoy stop()). The joypad
-        interrupt wakes it. CGB speed switching is phase 2."""
+        interrupt wakes it. On a CGB in CGB mode with KEY1 bit 0 set (and no button held) it
+        switches speed instead: the CPU halts for SPEED_SWITCH_HALT units unless an interrupt
+        wakes it first (SameBoy stop())."""
+        if self.cgb and self.ppu.cgb_mode and self.key1 & 1 and self.joypad.read() & 0x0F == 0x0F:
+            self.double_speed = not self.double_speed
+            self.key1 = 0
+            if pending:
+                return StopResult(StopAction.NOP, consume_operand=False)
+            self._switch_wait = SPEED_SWITCH_HALT
+            return StopResult(StopAction.HALT)
         if pending:
             return StopResult(StopAction.NOP, consume_operand=False)
         self._write_div()
@@ -217,41 +303,65 @@ class GameBoy:
                 return dma.byte  # bus conflict: the CPU gets the DMA's byte
         return self.peek(address)
 
+    def _boot_at(self, address: int) -> bool:
+        """The boot ROM covers $0000-$00FF, and on a CGB $0200-$08FF too."""
+        return self.boot_mapped and (address < 0x100 or (self.cgb and 0x200 <= address < 0x900))
+
+    def _wram_index(self, address: int) -> int:
+        """Offset into WRAM; $D000-$DFFF (and its echo) is the SVBK bank in CGB mode."""
+        index = address & 0x0FFF
+        if address & 0x1000:
+            return (self.svbk << 12) | index
+        return index
+
     def peek(self, address: int) -> int:
         """The byte at ``address`` as the CPU would read it now, with no side effects and no
         DMA conflict (debuggers, harnesses)."""
         if address < 0x8000:
-            if address < 0x100 and self.boot_mapped:
+            if self._boot_at(address):
                 return self.boot_rom[address]  # type: ignore[index]
             value = self.cartridge.read(address, self.t)
             return 0xFF if value is None else value
         if address < 0xA000:
-            return 0xFF if self.ppu.vram_locked else self.ppu.vram[address - 0x8000]
+            if self.ppu.vram_locked:
+                return 0xFF
+            return self.ppu.vram[address - 0x8000 + (self.ppu.vram_bank << 13)]
         if address < 0xC000:
             value = self.cartridge.read(address, self.t)
             return 0xFF if value is None else value
         if address < 0xFE00:
-            return self.wram[address & 0x1FFF]
+            return self.wram[self._wram_index(address)]
         if address < 0xFEA0:
             return 0xFF if self.ppu.oam_locked else self.ppu.oam[address - 0xFE00]
         if address < 0xFF00:
-            return 0xFF if self.ppu.oam_locked else 0x00  # DMG: $00 when OAM is free
+            if self.ppu.oam_locked:
+                return 0xFF
+            return self._fea0(address)
         if address < 0xFF80:
             return self._io_read(address)
         if address < 0xFFFF:
             return self.hram[address - 0xFF80]
         return self.cpu.ie
 
+    def _fea0(self, address: int) -> int:
+        """$FEA0-$FEFF with OAM free: $00 on a DMG; on CGB E the high nibble of the low address
+        byte twice; before E a RAM area masked per revision (not modelled: reads as that)."""
+        kind = self.machine.fea0_read
+        if kind == "high_nibble_twice":
+            nibble = (address >> 4) & 0xF
+            return nibble | (nibble << 4)
+        return 0x00
+
     def _store(self, address: int, value: int) -> None:
         if address < 0x8000:
             self.cartridge.write(address, value, self.t)
         elif address < 0xA000:
             if not self.ppu.vram_write_locked:
-                self.ppu.vram[address - 0x8000] = value
+                self.ppu.vram[address - 0x8000 + (self.ppu.vram_bank << 13)] = value
         elif address < 0xC000:
             self.cartridge.write(address, value, self.t)
         elif address < 0xFE00:
-            self.wram[address & 0x1FFF] = value
+            self.wram[self._wram_index(address)] = value
         elif address < 0xFEA0:
             if not self.ppu.oam_write_locked and not self.dma.active:
                 self.ppu.oam[address - 0xFE00] = value
@@ -267,15 +377,15 @@ class GameBoy:
 
     def _dma_source(self, address: int) -> int:
         """A DMA source read, on the bus the source page is on (no locks apply)."""
-        if address < 0x100 and self.boot_mapped:
+        if self._boot_at(address):
             value = self.boot_rom[address]  # type: ignore[index]
         elif address < 0x8000 or 0xA000 <= address < 0xC000:
             value = self.cartridge.read(address, self.t)
             value = 0xFF if value is None else value
         elif address < 0xA000:
-            value = self.ppu.vram[address - 0x8000]
+            value = self.ppu.vram[address - 0x8000 + (self.ppu.vram_bank << 13)]
         else:
-            value = self.wram[address & 0x1FFF]
+            value = self.wram[self._wram_index(address)]
         return value
 
     def _dma_write(self, index: int, value: int) -> None:
@@ -293,6 +403,7 @@ class GameBoy:
         if low == 0x01:
             return self.serial.sb
         if low == 0x02:
+            self.serial.cgb_mode = self.ppu.cgb_mode
             return self.serial.read_sc()
         if low == 0x04:
             return self.timer.read_div()
@@ -328,7 +439,45 @@ class GameBoy:
             return ppu.wy
         if low == 0x4B:
             return ppu.wx
+        if self.cgb:
+            return self._cgb_io_read(low)
         return 0xFF  # unmapped registers read 1 (Mooneye bits/unused_hwio-GS)
+
+    def _cgb_io_read(self, low: int) -> int:
+        """The registers only a CGB has (SameBoy ``GB_read_memory``, Pan Docs CGB_Registers.md);
+        outside CGB mode most read $FF."""
+        ppu = self.ppu
+        mode = ppu.cgb_mode
+        if low == 0x4D:
+            return (self.key1 & 1) | 0x7E | (0x80 if self.double_speed else 0) if mode else 0xFF
+        if low == 0x4F:
+            return 0xFE | ppu.vram_bank
+        if low == 0x50:
+            return 0xFE | (not self.boot_mapped)
+        if low == 0x55:
+            active = self.hdma_blocks and (self.hdma_hblank or self.hdma_due)
+            return ((0 if active else 0x80) | ((self.hdma_blocks - 1) & 0x7F)) if mode else 0xFF
+        if low == 0x56:
+            return (self.rp & 0xC1) | 0x3E if mode else 0xFF
+        if low in (0x68, 0x6A):
+            return (ppu.ocps if low == 0x6A else ppu.bcps) | 0x40
+        if low in (0x69, 0x6B):
+            if not mode and not self.boot_mapped:
+                return 0xFF
+            return ppu.read_palette(low == 0x6B)
+        if low == 0x6C:
+            return 0xFE | self.opri_register
+        if low == 0x70:
+            return 0xF8 | self.svbk_register if mode else 0xFF
+        if low in (0x72, 0x73):
+            return self.undocumented[low - 0x72]
+        if low == 0x74:
+            return self.undocumented[2] if mode else 0xFF
+        if low == 0x75:
+            return self.undocumented[3] | 0x8F
+        if low in (0x76, 0x77):
+            return self.apu.pcm(low - 0x76)
+        return 0xFF
 
     def _io_write(self, address: int, value: int) -> None:
         low = address & 0xFF
@@ -340,6 +489,7 @@ class GameBoy:
         elif low == 0x01:
             self.serial.write_sb(value)
         elif low == 0x02:
+            self.serial.cgb_mode = self.ppu.cgb_mode
             self.serial.write_sc(value)
         elif low == 0x04:
             self._write_div()
@@ -375,15 +525,129 @@ class GameBoy:
             self.ppu.compare_wy()
         elif low == 0x4B:
             self.ppu.wx = value
-        elif low == 0x50 and value and self.boot_mapped:
+        elif low == 0x50 and value & 1 and self.boot_mapped:
             self.boot_mapped = False  # the boot ROM switches itself off; it cannot come back
+        elif self.cgb:
+            self._cgb_io_write(low, value)
+
+    def _cgb_io_write(self, low: int, value: int) -> None:
+        ppu = self.ppu
+        mode = ppu.cgb_mode
+        if low == 0x4C:
+            if self.boot_mapped:
+                ppu.cgb_mode = not value & 0xC  # the boot ROM tells the PPU which mode to be in
+                self.key0 = value
+        elif low == 0x4D:
+            if mode:
+                self.key1 = value & 1
+        elif low == 0x4F:
+            if mode:
+                ppu.vram_bank = value & 1
+        elif 0x51 <= low <= 0x54:
+            if mode:
+                self._hdma_address(low, value)
+        elif low == 0x55:
+            if mode:
+                self._hdma_control(value)
+        elif low == 0x56:
+            self.rp = value
+        elif low in (0x68, 0x6A):
+            if low == 0x6A:
+                ppu.ocps = value
+            else:
+                ppu.bcps = value
+        elif low in (0x69, 0x6B):
+            if mode or self.boot_mapped:
+                ppu.write_palette(low == 0x6B, value)
+        elif low == 0x6C:
+            if self.boot_mapped or self.key0 & 8:
+                self.opri_register = value & 1
+                ppu.opri = value & 1
+            elif mode:
+                self.opri_register = value & 1
+        elif low == 0x70:
+            if mode or self.boot_mapped:
+                self.svbk_register = value & 7
+                self.svbk = value & 7 or 1
+        elif low in (0x72, 0x73):
+            self.undocumented[low - 0x72] = value
+        elif low == 0x74:
+            if mode:
+                self.undocumented[2] = value
+        elif low == 0x75:
+            self.undocumented[3] = value & 0x70
+
+    def _hdma_address(self, low: int, value: int) -> None:
+        if low == 0x51:
+            self.hdma_src = (self.hdma_src & 0x00F0) | (value << 8)
+            if self.hdma_src >= 0xE000:
+                self.hdma_src |= 0xF000
+        elif low == 0x52:
+            self.hdma_src = (self.hdma_src & 0xFF00) | (value & 0xF0)
+        elif low == 0x53:
+            self.hdma_dst = (self.hdma_dst & 0x00F0) | ((value & 0x1F) << 8)
+        else:
+            self.hdma_dst = (self.hdma_dst & 0xFF00) | (value & 0xF0)
+
+    def _hdma_control(self, value: int) -> None:
+        """$FF55: bit 7 chooses HBlank (1) or general (0); bits 6-0 are the length in 16-byte blocks
+        minus one. Clearing bit 7 while an HBlank transfer runs stops it."""
+        self.hdma_blocks = (value & 0x7F) + 1
+        if not value & 0x80 and self.hdma_hblank:
+            self.hdma_hblank = False
+            return
+        self.hdma_hblank = bool(value & 0x80)
+        if not self.hdma_hblank or (self.ppu.read_mode == 0 and self.ppu.lcd_on):
+            self.hdma_due = True
 
     # ----- running ------------------------------------------------------------------------
 
     def step(self) -> int:
         """Execute one CPU boundary; returns the M-cycles it took (the units have already
         advanced inside the callbacks)."""
-        return self.cpu.step()
+        if self.hdma_due and not self.cpu.halted:
+            self._hdma_run()
+        return self._cpu_step()
+
+    # ----- CGB DMA (HDMA/GDMA) --------------------------------------------------------------
+
+    def _hdma_run(self) -> None:
+        """Run the armed transfer's current block with the CPU stopped: 16 bytes at one byte per
+        2 dots (SameBoy ``GB_hdma_run``: one M-cycle of start-up, 8 M-cycles a block at single
+        speed, 16 at double). A general-purpose transfer runs every block back to back; an HBlank
+        one a block per HBlank."""
+        dma_dots = 1 if self.double_speed else 2
+        self.hdma_due = False
+        self._hdma_wait(dma_dots)
+        while self.hdma_blocks:
+            for _ in range(16):
+                byte = self._hdma_source(self.hdma_src)
+                self._hdma_wait(dma_dots)
+                self.ppu.vram[(self.ppu.vram_bank << 13) + (self.hdma_dst & 0x1FFF)] = byte
+                self.hdma_src = (self.hdma_src + 1) & 0xFFFF
+                self.hdma_dst = (self.hdma_dst + 1) & 0xFFFF
+            self.hdma_blocks -= 1
+            if not self.hdma_blocks:
+                self.hdma_hblank = False
+            if self.hdma_hblank:
+                break
+        if not self.double_speed:
+            self._hdma_wait(dma_dots)
+
+    def _hdma_wait(self, units: int) -> None:
+        """Advance the board ``units`` CPU units (4 per M-cycle) with the CPU stopped."""
+        self._idle_units += units
+        while self._idle_units >= 4:
+            self._idle_units -= 4
+            self._tick()
+            self.ppu.after_access()
+            self.timer.finish()
+
+    def _hdma_source(self, address: int) -> int:
+        """HDMA reads cartridge, VRAM-less sources only: ROM, cartridge RAM and WRAM (else $FF)."""
+        if address < 0x8000 or 0xA000 <= address < 0xE000:
+            return self._dma_source(address)
+        return 0xFF
 
     def capture_state(self) -> CPUState:
         """The CPU's state, so a ``DebugSession`` can drive the board as its target; the

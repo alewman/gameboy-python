@@ -29,5 +29,34 @@ def png_bytes(shades: bytes, width: int = 160, height: int = 144, palette=GREYS)
     )
 
 
+def rgb_png_bytes(frame: bytes, width: int = 160, height: int = 144) -> bytes:
+    """A CGB frame (RGB555, 16 bits little-endian per pixel) as a 24-bit PNG; channels are scaled
+    ``v * 255 / 31`` as the reference pictures (cgb-acid2, Mealybug) were made."""
+    scale = [round(v * 255 / 31) for v in range(32)]
+    rows = bytearray()
+    for y in range(height):
+        rows.append(0)
+        for x in range(width):
+            i = (y * width + x) * 2
+            word = frame[i] | (frame[i + 1] << 8)
+            rows += bytes((scale[word & 31], scale[(word >> 5) & 31], scale[(word >> 10) & 31]))
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(bytes(rows), 6))
+        + chunk(b"IEND", b"")
+    )
+
+
+def write_rgb_png(path: Path, frame: bytes) -> None:
+    path.write_bytes(rgb_png_bytes(frame))
+
+
 def write_png(path: Path, shades: bytes) -> None:
     path.write_bytes(png_bytes(shades))

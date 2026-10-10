@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 SERIAL_CLOCK_BIT = 8  # 4194304 / 512 = 8192 Hz
+FAST_CLOCK_BIT = 3  # CGB mode, SC bit 1: 262144 Hz (Pan Docs Serial_Data_Transfer_(Link_Cable).md)
 SERIAL_PHASE_T = 4  # the divider's edges come this many T-cycles before the counter's
 SERIAL_FINISH_DELAY = 1  # M-cycles from the eighth edge to the last shift showing
 
@@ -27,6 +28,7 @@ class Serial:
         self.shifted = 0
         self._finish_in = 0  # M-cycles until the eighth shift and SC's clearing show
         self.master = True  # the divider's toggle flip-flop
+        self.cgb_mode = False  # SC bit 1 (the fast clock) exists only in CGB mode
         self.output = bytearray()  # every byte that finished shifting out, for test harnesses
 
     def tick(self, previous: int, counter: int) -> None:
@@ -38,8 +40,9 @@ class Serial:
                 self.sc &= 0x7F
         if self.sc & 0x81 != 0x81 or self._finish_in:
             return
-        before = (previous + SERIAL_PHASE_T) >> SERIAL_CLOCK_BIT & 1
-        after = (counter + SERIAL_PHASE_T) >> SERIAL_CLOCK_BIT & 1
+        bit = FAST_CLOCK_BIT if self.sc & 2 else SERIAL_CLOCK_BIT
+        before = (previous + SERIAL_PHASE_T) >> bit & 1
+        after = (counter + SERIAL_PHASE_T) >> bit & 1
         if before and not after:
             self.shifted += 1
             if self.shifted == 8:
@@ -57,10 +60,10 @@ class Serial:
         self.sb = value
 
     def write_sc(self, value: int) -> None:
-        self.sc = value & 0x81
+        self.sc = value & (0x83 if self.cgb_mode else 0x81)
         if value & 0x80:
             self.shifted = 0
             self.output.append(self.sb)  # the byte as it leaves (MSB first on the wire)
 
     def read_sc(self) -> int:
-        return self.sc | 0x7E
+        return self.sc | (0x7C if self.cgb_mode else 0x7E)

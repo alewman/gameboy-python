@@ -28,6 +28,10 @@ LOCAL = {
         "Nintendo - Game Boy/[BIOS] Nintendo Game Boy Boot ROM (Japan) (En).zip",
         "26e71cf01e301e5dc40e987cd2ecbf6d0276245890ac829db2a25323da86818e",
     ),
+    "CGB": (
+        "Nintendo - Game Boy Color/[BIOS] Nintendo Game Boy Color Boot ROM (World) (Rev 1).zip",
+        "b4f2e416a35eef52cba161b159c7c8523a92594facb924b3ede0d722867c50c7",
+    ),
     "MGB": (
         "Nintendo - Game Boy/[BIOS] Nintendo Game Boy Pocket Boot ROM (World).zip",
         "a8cb5f4f1f16f2573ed2ecd8daedb9c5d1dd2c30a481f9b179b5d725d95eafe2",

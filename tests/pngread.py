@@ -9,6 +9,28 @@ from pathlib import Path
 
 def read_shades(path: Path) -> tuple[bytes, int, int]:
     """Return (shades 0-3, 0 the lightest, width, height) of a DMG-grey picture."""
+    pixels, width, height, depth, ctype = _decode(path)
+    top = (1 << depth) - 1 if ctype == 0 else 255  # a grey sample's full-scale value
+    shades = bytearray()
+    for pixel in pixels:
+        grey = pixel[0] * 255 // top
+        assert len({*pixel[:3]}) == 1 and round(grey / 85) * 85 == grey, f"not a DMG grey: {pixel}"
+        shades.append(3 - grey // 85)
+    return bytes(shades), width, height
+
+
+def read_rgb555(path: Path) -> tuple[list[int], int, int]:
+    """Return (RGB555 words, width, height): each 8-bit channel scaled back to 5 bits the way the
+    reference pictures were made (v * 255 / 31)."""
+    pixels, width, height, _depth, _ctype = _decode(path)
+    words = []
+    for pixel in pixels:
+        r, g, b = (round(c * 31 / 255) for c in (pixel * 3 if len(pixel) == 1 else pixel)[:3])
+        words.append(r | (g << 5) | (b << 10))
+    return words, width, height
+
+
+def _decode(path: Path) -> tuple[list[tuple[int, ...]], int, int, int, int]:
     data = path.read_bytes()
     pos = 8
     palette: list[tuple[int, ...]] = []
@@ -64,10 +86,4 @@ def read_shades(path: Path) -> tuple[bytes, int, int]:
                 pixels.append(palette[line[x]])
             else:
                 pixels.append(tuple(line[x * channels : x * channels + min(channels, 3)]))
-    top = (1 << depth) - 1 if ctype == 0 else 255  # a grey sample's full-scale value
-    shades = bytearray()
-    for pixel in pixels:
-        grey = pixel[0] * 255 // top
-        assert len({*pixel[:3]}) == 1 and round(grey / 85) * 85 == grey, f"not a DMG grey: {pixel}"
-        shades.append(3 - grey // 85)
-    return bytes(shades), width, height
+    return pixels, width, height, depth, ctype

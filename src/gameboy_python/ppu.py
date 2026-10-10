@@ -15,6 +15,7 @@ writes dropped), nothing locked with the LCD off. The mode edges are fitted to M
 
 from __future__ import annotations
 
+from array import array
 from collections.abc import Callable
 
 from gameboy_python.machines import DOTS_PER_LINE
@@ -76,11 +77,21 @@ class PPU:
         stat_write_glitch: bool = False,
         _shadow: bool = False,
         stat_blocking: bool = True,
+        cgb: bool = False,
     ) -> None:
         """A PPU is two: this one times the mode, the STAT line and the interrupts from register
         values at the pops; a *shadow* copy of the same machinery runs ``SHADOW_LAG`` dots behind
         it, shares VRAM and OAM, sees the registers as they are by then, and draws the picture."""
         self.is_shadow = _shadow
+        #: CGB hardware: two VRAM banks and palette RAM; ``cgb_mode`` is false when the boot ROM
+        #: chose the DMG-compatible mode (KEY0), where BGP/OBPn still pick the shades
+        self.cgb = cgb
+        self.cgb_mode = False
+        self.opri = 0 if cgb else 1  # $FF6C bit 0: 1 = objects ordered by X (DMG), 0 = by OAM index
+        self.vram_bank = 0  # the bank the CPU sees ($FF4F)
+        self.bg_pal = bytearray(64)
+        self.obj_pal = bytearray(64)
+        self.bcps = self.ocps = 0
         self.raise_irq = raise_irq
         self.stat_write_glitch = stat_write_glitch
         #: the STAT interrupt line is one OR: a source that rises while another holds it raises
@@ -95,7 +106,7 @@ class PPU:
         self.irq_early_by = 0  # dots before its real time the interrupt just raised came
         self.irq_halt_delay = 0  # dots later a halted CPU sees the STAT interrupt just raised
         self.sub = 0  # the dot within the M-cycle being ticked (0-3)
-        self.vram = bytearray(0x2000)
+        self.vram = bytearray(0x4000 if cgb else 0x2000)
         self.oam = bytearray(0xA0)
         self.lcdc = 0
         self.f_events: list[list[int]] = []  # deferred fetcher reads [dots left, step]
@@ -114,8 +125,10 @@ class PPU:
         self.lyc_flag = False
         self.stat_line = False
         self.frames = 0  # VBlanks since power-on
-        self.framebuffer = bytearray(SCREEN_W * SCREEN_H)  # shades 0-3, being drawn
-        self.frame = bytes(SCREEN_W * SCREEN_H)  # the last completed picture
+        # shades 0-3 (DMG); on CGB hardware RGB555 words, 16 bits per pixel little-endian in
+        # ``frame``, the last completed picture
+        self.framebuffer = array("H", [0x7FFF] * (SCREEN_W * SCREEN_H)) if cgb else bytearray(SCREEN_W * SCREEN_H)
+        self.frame = self._blank()
         # per-line state
         self.line_objs: list[
             tuple[int, int, int, int, int]
@@ -136,9 +149,9 @@ class PPU:
         self.mode0_dot = 0
         self.m3 = self.skip = self.fetch_col = 0
         self.bg: list[tuple[list[int], int]] = []
-        self.obj_fifo: list[tuple[int, int]] = []
+        self.obj_fifo: list[tuple[int, int, int]] = []
         self.f_step = self.f_dot = 0
-        self.ticket = [0, 0, 0, 0]
+        self.ticket = [0, 0, 0, 0, 0]
         self.ticket_col = 0
         self.obj_lo = self.obj_hi = 0
         self.dummy = False
@@ -152,11 +165,17 @@ class PPU:
         self.win_started_wx = -1
         self.shadow: PPU | None = None
         if not _shadow:
-            self.shadow = PPU(_ignore_irq, False, _shadow=True)
+            self.shadow = PPU(_ignore_irq, False, _shadow=True, cgb=cgb)
             self.shadow.vram = self.vram
             self.shadow.oam = self.oam
+            self.shadow.bg_pal = self.bg_pal
+            self.shadow.obj_pal = self.obj_pal
 
     # ----- state --------------------------------------------------------------------------
+
+    def _blank(self) -> bytes:
+        """A white screen: shade 0, or RGB555 $7FFF on CGB hardware."""
+        return (b"\xff\x7f" if self.cgb else b"\x00") * (SCREEN_W * SCREEN_H)
 
     @property
     def lcd_on(self) -> bool:
@@ -244,6 +263,7 @@ class PPU:
         shadow = self.shadow
         assert shadow is not None
         shadow.lcdc = self.lcdc
+        shadow.cgb_mode, shadow.opri = self.cgb_mode, self.opri
         shadow.scx = self.scx
         shadow.scy = self.scy_hist[-SCY_LAG] if SCY_LAG else self.scy
         shadow.wx, shadow.wy = self.wx, self.wy
@@ -284,7 +304,7 @@ class PPU:
             self.mode3_start = MODE2_END - LINE0_LEAD
         if self.ly == VBLANK_LINE:
             self.frames += 1
-            self.frame = bytes((self.shadow or self).framebuffer)
+            self.frame = (self.shadow or self).framebuffer.tobytes() if self.cgb else bytes((self.shadow or self).framebuffer)
             self.mode = 1
             self.irq_early_by = VBLANK_IF_LATE
             self.irq_halt_delay = 0
@@ -365,7 +385,7 @@ class PPU:
         self.window_active = False
         self.free_skip = 0
         self.bg: list[tuple[list[int], int]] = []  # the background FIFO: (tile ticket, bit)
-        self.obj_fifo: list[tuple[int, int]] = []  # (colour, flags) for the next pixels
+        self.obj_fifo: list[tuple[int, int, int]] = []  # (colour, flags, OAM index) for the next pixels
         self.f_step = 0  # 0 tile, 1 data low, 2 data high, 3 waiting to push
         self.f_dot = 0
         self.fetch_col = 0
@@ -398,12 +418,17 @@ class PPU:
                 row = (self.ly + self.scy) & 255
                 index = base + (row >> 3) * 32 + (((self.scx >> 3) + col) & 31)
             ticket[0] = self.vram[index]
+            if self.cgb_mode:
+                ticket[4] = self.vram[0x2000 + index]  # the tile's attributes, from bank 1
             return
         tile = ticket[0]
         signed = 0x1000 + ((tile ^ 0x80) - 0x80) * 16
         address = tile * 16 if lcdc & 0x10 else signed
         row = self.window_line if window else (self.ly + self.scy) & 255
-        address += (row & 7) * 2 + (step - 1)
+        attr = ticket[4]
+        if attr & 0x40:
+            row = 7 - (row & 7)  # vertical flip
+        address += (row & 7) * 2 + (step - 1) + (0x2000 if attr & 8 else 0)
         ticket[step] = self.vram[address]
         if step == 2:
             ticket[3] = 1
@@ -424,7 +449,7 @@ class PPU:
             self.f_dot += 1
             if self.f_dot == (MAP_READ_DOT, LOW_READ_DOT, HIGH_READ_DOT)[step]:
                 if step == 0:
-                    self.ticket = [0, 0, 0, 0]
+                    self.ticket = [0, 0, 0, 0, 0]
                     self.ticket_col = self.fetch_col
                     self.fetch_col += 1
                 args = (step, self.ticket, self.window_active, self.ticket_col)
@@ -445,7 +470,8 @@ class PPU:
                 self.dummy = False
                 self.fetch_col = 0
             else:
-                self.bg = [(self.ticket, b) for b in range(7, -1, -1)]
+                bits = range(8) if self.ticket[4] & 0x20 else range(7, -1, -1)  # horizontal flip
+                self.bg = [(self.ticket, b) for b in bits]
                 if self.free_skip:
                     del self.bg[: self.free_skip]
                     self.free_skip = 0
@@ -459,7 +485,7 @@ class PPU:
         self.obj_dots -= 1
         entry = self.obj_entry
         assert entry is not None
-        ox, _index, tile, flags, oy = entry
+        ox, index, tile, flags, oy = entry
         for read_at, is_high in ((self.obj_low_at, 0), (self.obj_high_at, 1)):
             if self.obj_dots == read_at:
                 height = 16 if self._lcdc_ago(OBJ_SIZE_LAG) & 4 else 8
@@ -468,13 +494,14 @@ class PPU:
                     row = height - 1 - row
                 if height == 16:
                     tile &= 0xFE
-                data = self.vram[tile * 16 + row * 2 + is_high]
+                bank = 0x2000 if self.cgb_mode and flags & 8 else 0
+                data = self.vram[bank + tile * 16 + row * 2 + is_high]
                 if is_high:
                     self.obj_hi = data
                 else:
                     self.obj_lo = data
         if self.obj_dots == 0:
-            self._merge_object(ox, flags)
+            self._merge_object(ox, flags, index)
             self.obj_entry = None
 
     def _start_object_fetch(self, entry: tuple[int, int, int, int, int]) -> None:
@@ -503,17 +530,18 @@ class PPU:
         self.obj_tiles_waited.add(key)
         return wait
 
-    def _merge_object(self, ox: int, flags: int) -> None:
+    def _merge_object(self, ox: int, flags: int, index: int) -> None:
         skip = max(0, 8 - ox)  # the part hanging off the left edge
         fifo = self.obj_fifo
         while len(fifo) < 8 - skip:
-            fifo.append((0, 0))
+            fifo.append((0, 0, 255))
+        by_index = self.cgb_mode and not self.opri & 1  # CGB: the lower OAM index wins
         for i in range(skip, 8):
             bit = i if flags & 0x20 else 7 - i
             colour = ((self.obj_lo >> bit) & 1) | (((self.obj_hi >> bit) & 1) << 1)
             slot = i - skip
-            if colour and not fifo[slot][0]:
-                fifo[slot] = (colour, flags)
+            if colour and (not fifo[slot][0] or (by_index and index < fifo[slot][2])):
+                fifo[slot] = (colour, flags, index)
 
     def _step_pixel(self) -> None:
         self.m3 += 1
@@ -545,11 +573,11 @@ class PPU:
                 # WX reached again after the window started: a colour-0 pixel is pushed (Pan Docs
                 # pixel_fifo.md "The Window")
                 self.win_started_wx = wx
-                self.bg.insert(0, ([0, 0, 0, 1], 0))
+                self.bg.insert(0, ([0, 0, 0, 1, 0], 0))
             if (
                 not self.window_active
                 and win_lcdc & 0x20
-                and win_lcdc & 1
+                and (win_lcdc & 1 or self.cgb_mode)
                 and self.wy_hit
                 and (x + 7 == wx or (x == 0 and wx < 7))
             ):
@@ -584,7 +612,7 @@ class PPU:
             if self.skip:
                 self.skip -= 1
             else:
-                obj = self.obj_fifo.pop(0) if self.obj_fifo else (0, 0)
+                obj = self.obj_fifo.pop(0) if self.obj_fifo else (0, 0, 255)
                 d = self.dot
                 if self.is_shadow:
                     self.pipe.append(
@@ -640,15 +668,26 @@ class PPU:
             self.framebuffer[rec[10] * SCREEN_W + rec[0]] = self._pixel(rec)
         self.pipe = keep
 
-    @staticmethod
-    def _pixel(rec: list) -> int:
-        _x, (ticket, bit), (colour, flags), _a, _b, _c, lcdc, bgp, obp0, obp1, _ly = rec
+    def _rgb(self, palette: bytearray, number: int, colour: int) -> int:
+        """RGB555 colour ``colour`` of palette ``number`` in palette RAM."""
+        i = number * 8 + colour * 2
+        return (palette[i] | (palette[i + 1] << 8)) & 0x7FFF
+
+    def _pixel(self, rec: list) -> int:
+        _x, (ticket, bit), (colour, flags, _i), _a, _b, _c, lcdc, bgp, obp0, obp1, _ly = rec
         bg = ((ticket[1] >> bit) & 1) | (((ticket[2] >> bit) & 1) << 1)
+        if self.cgb_mode:
+            # LCDC.0 clear: the background loses its priority over objects; it is still drawn
+            if colour and lcdc & 2 and (not lcdc & 1 or not ((flags | ticket[4]) & 0x80 and bg)):
+                return self._rgb(self.obj_pal, flags & 7, colour)
+            return self._rgb(self.bg_pal, ticket[4] & 7, bg)
         if not lcdc & 1:
             bg = 0
         if colour and lcdc & 2 and not (flags & 0x80 and bg):
-            return ((obp1 if flags & 0x10 else obp0) >> (colour * 2)) & 3
-        return (bgp >> (bg * 2)) & 3
+            shade = ((obp1 if flags & 0x10 else obp0) >> (colour * 2)) & 3
+            return self._rgb(self.obj_pal, (flags >> 4) & 1, shade) if self.cgb else shade
+        shade = (bgp >> (bg * 2)) & 3
+        return self._rgb(self.bg_pal, 0, shade) if self.cgb else shade
 
     @property
     def visible_ly(self) -> int:
@@ -819,8 +858,9 @@ class PPU:
             if self.shadow is not None:
                 self.shadow.lcdc = value
                 self.shadow.write_lcdc(value)
-            self.framebuffer[:] = bytes(SCREEN_W * SCREEN_H)  # the screen goes blank (white)
-            self.frame = bytes(SCREEN_W * SCREEN_H)
+            blank = self._blank()  # the screen goes blank (white)
+            self.framebuffer[:] = array("H", blank) if self.cgb else blank
+            self.frame = blank
         elif not was_on and self.lcd_on:  # LCD on: line 0 starts now, but late
             self.ly = 0
             self.dot = LINE0_START_DOT
@@ -853,6 +893,29 @@ class PPU:
         (Mealybug m3_bgp_change: each band is one pixel wider at both edges)."""
         self.bgp_glitch = (self.dot, self.ly, self.bgp | value)
         self.bgp = value
+
+    # ----- CGB palette RAM ($FF68-$FF6B) ----------------------------------------------------------
+
+    @property
+    def palettes_blocked(self) -> bool:
+        """Palette RAM is out of reach of the CPU while the LCD is drawing (Pan Docs Palettes.md)."""
+        return self.lcd_on and self.read_mode == 3
+
+    def read_palette(self, obj: bool) -> int:
+        if self.palettes_blocked:
+            return 0xFF
+        return (self.obj_pal if obj else self.bg_pal)[(self.ocps if obj else self.bcps) & 0x3F]
+
+    def write_palette(self, obj: bool, value: int) -> None:
+        spec = self.ocps if obj else self.bcps
+        if not self.palettes_blocked:
+            (self.obj_pal if obj else self.bg_pal)[spec & 0x3F] = value
+        if spec & 0x80:  # auto-increment, even when the write was blocked
+            spec = 0x80 | ((spec + 1) & 0x3F)
+            if obj:
+                self.ocps = spec
+            else:
+                self.bcps = spec
 
     def write_lyc(self, value: int) -> None:
         self.lyc = value

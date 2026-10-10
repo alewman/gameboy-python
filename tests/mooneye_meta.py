@@ -23,12 +23,35 @@ def passes_on_dmg_abc(source: str) -> bool:
     return any(d in ("DMG", "DMG ABC") for d in devices)
 
 
-def applicable() -> list[str]:
-    """Names (path under acceptance/, no extension) of the ROMs that apply to DMG-CPU B."""
+def passes_on_cgb_e(source: str) -> bool:
+    """A pass list naming ``CGB`` or ``CGB ABCDE`` (not ``CGB 0``, nor only the AGB)."""
+    match = re.search(r"^;\s*pass:\s*(.+)$", source, re.MULTILINE)
+    if not match:
+        return False
+    devices = [d.strip() for d in match.group(1).split(",")]
+    return any(d in ("CGB", "CGB ABCDE") for d in devices)
+
+
+def applicable(device: str = "dmg") -> list[str]:
+    """Names (path under acceptance/, no extension) of the ROMs that apply to DMG-CPU B (or, with
+    ``device="cgb"``, to a CPU CGB E)."""
     if not SOURCES.is_dir():
         return []
+    check = passes_on_cgb_e if device == "cgb" else passes_on_dmg_abc
     return [
         str(path.relative_to(SOURCES).with_suffix(""))
         for path in sorted(SOURCES.rglob("*.s"))
-        if passes_on_dmg_abc(path.read_text(errors="replace"))
+        if check(path.read_text(errors="replace"))
+    ]
+
+
+def applicable_misc() -> list[str]:
+    """The ``misc/`` ROMs that pass on a CPU CGB E (CGB-only tests live there)."""
+    root = SOURCES.parent / "misc"
+    if not root.is_dir():
+        return []
+    return [
+        str(path.relative_to(root).with_suffix(""))
+        for path in sorted(root.rglob("*.s"))
+        if passes_on_cgb_e(path.read_text(errors="replace"))
     ]
