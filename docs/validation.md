@@ -246,3 +246,90 @@ passed through the DMG high-pass (charge 0.999958 per T), which is off while eve
   different pages. The sweep now lines the two up by T-cycles. The stride-1 run is recorded
   separately once finished.
 - Open from earlier milestones is unchanged (see their sections).
+
+## Results: milestone 6, the hardware-captured sweep (2026-10-10)
+
+**GBMicrotest** (513 ROMs; `scripts/gbmicrotest.py --sameboy`): **481 pass**, 3 fail, 29 report no result by
+protocol. SameBoy beside it: 476 pass on both, 5 on the board only (`lyc1_int_if_edge_c`,
+`poweron_oam_000/005/070`, `ppu_spritex_vs_scx`), 1 on SameBoy only that is real (`win0_b`; the board
+fails it with $FF82 = $FF), and the rest silent. Two protocol fixes moved the count from 478: the run is
+30 frames, not 12 (`is_if_set_during_ime0` takes ~380 ms), and two early-style ROMs
+(`ppu_spritex_vs_scx`, `004-tima_boot_phase`) report not at $FF82 but as a flag byte written to
+$8000 in a loop ($55 = the DMG value came out as expected; their sources), held by
+`testrom.VRAM_FLAG_ROMS`. SameBoy's $FF82 on a silent bench is HRAM noise (it randomises HRAM: the
+same ROM read $20 and $01 in two runs), so "SameBoy passes" is only believed for ROMs whose source reports there.
+The 3 failures are the old ones: `halt_op_dupe_delay`, `stat_write_glitch_l154_d` (SameBoy fails
+both too), `win0_b`.
+
+**Gambatte `dmg08`** (1,784 ROMs, 1,784 verdicts: screen-digit and `_dmg08.png` picture tests with
+testrunner.cpp's rules; `scripts/gambatte_dmg08.py`, tabulated by `scripts/gambatte_table.py`). The
+`_outaudio` tests are `scripts/gambatte_audio.py`'s (76 of 87). The first run, from the real boot ROM,
+passed **1,322** (SameBoy 1,642: 1,288 on both, 34 board only, 354 SameBoy only, 108 neither). Skip-boot gave
+the same 1,322, so the post-boot hand-off is a faithful start and later runs use it (15 frames, minutes
+instead of hours). After the fixes below the skip-boot run passes **1,418** against SameBoy's 1,642:
+
+| all | tests | board | SameBoy |
+|---|---|---|---|
+|---|---|---|---|
+| arg | 50 | 43 | 50 |
+| bgtiledata | 16 | 0 | 8 |
+| bgtilemap | 16 | 0 | 12 |
+| dmgpalette_during_m3 | 13 | 7 | 7 |
+| enable_display | 68 | 63 | 67 |
+| halt | 82 | 71 | 80 |
+| irq_precedence | 20 | 14 | 20 |
+| lcdirq_precedence | 31 | 28 | 31 |
+| ly0 | 33 | 32 | 31 |
+| lyc153int_m2irq | 6 | 5 | 5 |
+| lycEnable | 78 | 67 | 74 |
+| m0enable | 68 | 53 | 64 |
+| m1 | 61 | 50 | 56 |
+| m2enable | 43 | 37 | 36 |
+| m2int_m0irq | 32 | 30 | 32 |
+| m2int_m2irq | 6 | 5 | 6 |
+| miscmstatirq | 139 | 132 | 137 |
+| oamdma | 393 | 293 | 326 |
+| on_screen | 18 | 2 | 12 |
+| scx | 8 | 7 | 8 |
+| scx_0363c0 | 36 | 0 | 24 |
+| scx_during_m3 | 8 | 3 | 7 |
+| scy | 24 | 9 | 20 |
+| serial | 36 | 28 | 36 |
+| sound | 50 | 48 | 49 |
+| sprites | 96 | 74 | 95 |
+| tima | 113 | 112 | 112 |
+| window | 135 | 100 | 132 |
+
+Fixed by this pass (each shown by a Gambatte group, none by tuning to a single ROM):
+
+- **OAM DMA bus reads**: while a DMA owns OAM, CPU reads of the whole $FExx page (not just $FE00-$FE9F)
+  return $FF (`oamdma_src*_busypopFE9F/FEFF`, 26 ROMs).
+- **DMG DMA/CPU write conflict**: a CPU write on the bus the DMA is reading is ANDed into the byte the DMA
+  just moved into OAM, DMG only (`oamdma_src*_busypush0001/8001/A001_2/FEA1/FF01/FF81`).
+- **Serial**: the interrupt reaches dispatch on time but IF, the final shift of SB and the clearing of SC
+  bit 7 show one M-cycle later (`SERIAL_IF_HIDE`, `SERIAL_FINISH_DELAY`): 20 to 28 of 36.
+- **SCY write lag** 4 dots (`SCY_LAG`, fitted; `scy_during_m3` 0 to 5 of 18, most of the rest within 8 to 16 pixels).
+- **WY == LY compared when WY is written**, not only at line start: `window/arg` 20 to 43 of 50.
+- **DMG 0**: the STAT line stops blocking (`Machine.stat_blocking`, now wired in the PPU): Mooneye
+  `stat_irq_blocking` fails on the DMG 0 machine as its header says and passes on DMG-B; the three DMG 0
+  boot tests (`boot_div/hwio/regs-dmg0`) pass from the DMG0 boot ROM (`tests/test_dmg0.py`).
+
+Open, with what is known (none is a C1 B/C difference on dmg-sim; those cannot be shown without a
+second DMG oracle and none was claimed):
+
+- **Pictures that differ by one tile column** (`bgtilemap` 0/16, `bgtiledata` 0/16, `scx_0363c0` 0/36,
+  `on_screen` 2/18, `scy` 9/24): the board's image matches except for a column of 8 by 128 pixels; the map
+  and data fetch reads against a mid-line VRAM write are about a dot off. `MAP_SHIFT` 2 to 6 changes none of
+  `bgtilemap`, so it is not that constant. SameBoy passes 12 of 16 of `bgtilemap`.
+- **`oamdma`** (293 of 393; SameBoy 326): the remaining `busypush*` ROMs (C001/E001/F001/A001/FE01, an MBC5
+  cartridge with RAM) read back values that are neither the DMA's nor the CPU's byte (`e = $12` from a
+  disabled RAM page after a push before the DMA; an open-bus value); `*rombankchange*`, `*srambankchange*`,
+  `busyread*` and the sprite-DMA `late_sp*` ROMs.
+- **Interrupt phase**, one M-cycle either way (`m0enable`, `m1`, `halt`, `lycEnable`, `irq_precedence`,
+  `enable_display`, `miscmstatirq`, `lcdirq_precedence`): the same family the Mooneye/GBMicrotest conflict of
+  milestone 2 was, fitted against those two; the Gambatte ROMs want the opposite of the fit for some.
+- **Window and sprites mode-3 length** (`window` 100/135, `sprites` 74/96, `scx_during_m3` 3/8): WX and
+  SCX edge cases of the fetcher.
+- **Serial** 8 ROMs: the DIV-write variants (`start_late_div_write_*`) and `start_wait_stop/sc80/clear_if`.
+- Where SameBoy fails too (104 ROMs, mostly `oamdma`, `bgtiledata`, `on_screen`, `dmgpalette_during_m3`) the
+  expected file may rest on a hardware revision the DMG-B model does not cover.
