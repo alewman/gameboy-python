@@ -228,3 +228,21 @@ passed through the DMG high-pass (charge 0.999958 per T), which is off while eve
   `ch2_init_reset_env_counter_timing_3/4/5/11`. The APU ticks a whole M-cycle at a time.
 - `audible()` is my reading of Gambatte's audio criterion (a routed channel, an enabled DAC, a
   non-zero digital value in the last frame), not the testrunner's code.
+
+## Results: milestone 5, the cartridges (2026-10-09)
+
+- **Mappers**: MBC1 (+ MBC1M multicart, detected by a second logo at $40104 in a 1 MiB image),
+  MBC2 (A8 selects RAMG/ROMB, 512 x 4-bit RAM, upper nibble reads 1s), MBC3 (+ RTC on an injectable
+  clock; registers raw 6/6/5/8/9-bit with the out-of-range counting rules; 48-byte BGB/SameBoy-style
+  save trailer), MMM01 (menu in the last 32 KiB), MBC5 (+ rumble).
+- **Mooneye `emulator-only`**: 28 of 28 (`mbc1` 13, `mbc2` 7, `mbc5` 8; `tests/test_cartridges.py`).
+- **rtc3test** (a detector, not a judge): basic and range pictures exact. `sub-second-writes` shows
+  TIMEOUT on every row; the clock logic was checked and the cause is not found.
+- **Compatibility sweep** (`scripts/compat_sweep.py`; No-Intro GB set read in place, real DMG boot
+  ROM, picture at frame 1500 against SameBoy DMG-B, last 30 frames window): the stride-100 sample is
+  **25 of 25 identical**, 6 CGB-only skipped. An earlier run showed 11 "differences"; every one was
+  the harness, not the board: `run_frames` counts VBlanks (the first call swallowed ~4.7 LCD-off
+  boot frames) while SameBoy counts 70,224-cycle frames from power-on, so attract-mode games sat at
+  different pages. The sweep now lines the two up by T-cycles. The stride-1 run is recorded
+  separately once finished.
+- Open from earlier milestones is unchanged (see their sections).

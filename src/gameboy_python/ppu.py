@@ -794,6 +794,8 @@ class PPU:
             if self.shadow is not None:
                 self.shadow.lcdc = value
                 self.shadow.write_lcdc(value)
+            self.framebuffer[:] = bytes(SCREEN_W * SCREEN_H)  # the screen goes blank (white)
+            self.frame = bytes(SCREEN_W * SCREEN_H)
         elif not was_on and self.lcd_on:  # LCD on: line 0 starts now, but late
             self.ly = 0
             self.dot = LINE0_START_DOT
