@@ -7,8 +7,7 @@
 
 ``--boot`` is ``skip`` (the default), ``real`` (your No-Intro boot ROM, read in place),
 ``quick`` (dmg-sim's quickboot), or a path to a raw or zipped image. ``--png FILE`` saves the
-last completed frame (grey shades, 160x144); sound arrives with the APU (milestone 4), so ``--wav``
-says so for now.
+last completed frame (grey shades, 160x144); ``--wav FILE`` saves the sound.
 """
 
 from __future__ import annotations
@@ -28,6 +27,16 @@ PROTOCOLS = {
     "blargg-serial": run_blargg_serial,
     "blargg-ram": run_blargg_ram,
 }
+
+
+def write_wav(path: Path, pcm: bytes, rate: int) -> None:
+    import wave
+
+    with wave.open(str(path), "wb") as out:
+        out.setnchannels(2)
+        out.setsampwidth(2)
+        out.setframerate(rate)
+        out.writeframes(pcm)
 
 
 def boot_image(choice: str) -> tuple[bytes | None, str]:
@@ -53,14 +62,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--trace", type=Path, metavar="FILE", help="write a JSONL trace")
     parser.add_argument("--steps", type=int, default=100_000, help="boundaries to trace")
     parser.add_argument("--png", type=Path, help="save the last completed frame as a PNG")
-    parser.add_argument("--wav", type=Path, help="(milestone 4: no audio yet)")
+    parser.add_argument("--wav", type=Path, help="save the sound as a 44.1 kHz 16-bit stereo WAV")
     args = parser.parse_args(argv)
-    if args.wav:
-        parser.error("sound needs the APU (milestone 4)")
     image, label = boot_image(args.boot)
     if image is None and args.boot not in ("skip", "real"):
         parser.error(f"no boot image for {args.boot!r}")
     gb = GameBoy(load_cartridge(args.rom.read_bytes()), boot_rom=image)
+    gb.apu.capture = args.wav is not None
     print(f"[{gb.cartridge.header.title!r}, {gb.cartridge.header.board}; {label}]", file=sys.stderr)
     if args.trace:
         with args.trace.open("w") as stream:
@@ -80,9 +88,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.png:
             write_png(args.png, gb.ppu.frame)
         return 0 if result.passed else 1
-    gb.run_frames(args.frames)
+    samples = bytearray()
+    for _ in range(args.frames):
+        gb.run_frames(1)
+        if args.wav:
+            samples += gb.apu.take_samples().tobytes()
     if args.png:
         write_png(args.png, gb.ppu.frame)
+    if args.wav:
+        write_wav(args.wav, bytes(samples), gb.apu.sample_rate)
     text = gb.serial.output.decode("ascii", "replace")
     sys.stdout.write(text if text.endswith("\n") or not text else text + "\n")
     print(f"[{gb.ppu.frames} frames, {gb.t} T]", file=sys.stderr)

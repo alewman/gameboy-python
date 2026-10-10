@@ -203,3 +203,28 @@ corrupts the row being read, with the write, read and read-plus-increment patter
   8-bytes-aligned from index 0, 2 dots per object) agrees with the board on the first row, and
   the dmg-sim die model (default simplified OAM) does not model the bug.
 - Not done: Gambatte `oam_access/*` and `oamdma/*` dmg08 results.
+
+## Results: milestone 4, the APU (2026-10-09)
+
+Four channels, DACs, NR50/NR51 mixing, NR52 power, a frame sequencer clocked by falling edges of the
+system counter's bit 12 (DIV-APU; a DIV write ticks it), every DMG quirk in Pan Docs "Obscure
+Behavior" that the judges reach (`gameboy_python/apu/__init__.py`, behind a boundary: it imports
+nothing from the board). `take_samples()` returns interleaved 16-bit stereo at 44.1 kHz;
+`--wav` saves it. **The mix is a labelled fit, not the analogue DMG**: DAC digital 0 maps to +1 and
+15 to -1, an off DAC to 0, NR51 pans, NR50 scales by (volume + 1) / 8, the sum is divided by 4 and
+passed through the DMG high-pass (charge 0.999958 per T), which is off while every DAC is off.
+
+- **blargg `dmg_sound`**: 12 of 12 (`tests/test_apu.py`; SameBoy 12/12, dmg-sim 11/12). Fitted
+  for 09, 10 and 12: `WAVE_TRIGGER_DELAY` = 6 T, `WAVE_WINDOW` = 2 T, the trigger-corruption age
+  window `CORRUPT_LO/HI` = 1..3 T (test 10 accepts several windows; none was picked by a second
+  oracle).
+- **SameSuite** `div_write_trigger`, `div_write_trigger_10` (the two that pass on DMG-B): pass. The
+  second needed one rule: the APU powered on while DIV's bit 12 is high starts at frame step 1.
+- **Gambatte `_outaudio`** (87 ROMs with a DMG-08 result; `scripts/gambatte_audio.py`, from the real
+  boot ROM, 15 frames, "audible in the last frame"): 76 agree, held by `tests/gambatte_audio_pass.txt`.
+  The 11 that disagree are sub-M-cycle phase tests (duty position at a retrigger, envelope counter
+  timing): `ch1_duty0_pos6_to_pos7_timing_1`, `ch1_duty0_to_duty3_pos3*`, `ch1_init_pos_1/5/7`,
+  `ch1_init_reset_sweep_counter_timing_4`, `ch2_init_env_counter_timing_2/3/4`,
+  `ch2_init_reset_env_counter_timing_3/4/5/11`. The APU ticks a whole M-cycle at a time.
+- `audible()` is my reading of Gambatte's audio criterion (a routed channel, an enabled DAC, a
+  non-zero digital value in the last frame), not the testrunner's code.

@@ -93,15 +93,7 @@ class GameBoy:
         # the PPU is late in line 153 (LY reads 0, mode 1, STAT $85) at handoff, as quickboot
         # leaves it
         self.ppu.place(153, 396, 1)
-        for address, value in (
-            (0x10, 0x80), (0x11, 0xBF), (0x12, 0xF3), (0x13, 0xFF), (0x14, 0xBF),
-            (0x16, 0x3F), (0x17, 0x00), (0x18, 0xFF), (0x19, 0xBF),
-            (0x1A, 0x7F), (0x1B, 0xFF), (0x1C, 0x9F), (0x1D, 0xFF), (0x1E, 0xBF),
-            (0x20, 0xFF), (0x21, 0x00), (0x22, 0x00), (0x23, 0xBF),
-            (0x24, 0x77), (0x25, 0xF3), (0x26, 0xF1),
-        ):  # fmt: skip
-            self.apu.power = True
-            self.apu.write(0xFF00 | address, value)
+        self.apu.skip_boot()
         self.boot_mapped = False
 
     # ----- time ---------------------------------------------------------------------------
@@ -149,6 +141,9 @@ class GameBoy:
             self._late = held
         timer = self.timer
         timer.tick()
+        if timer.previous & 0x1000 and not timer.counter & 0x1000:
+            self.apu.frame_tick()  # DIV-APU: a falling edge of the system counter's bit 12
+        self.apu.tick(4)
         self.serial.tick(timer.previous, timer.counter)
         self.ppu.tick()
         self.dma.tick()
@@ -159,13 +154,19 @@ class GameBoy:
         self.ppu.after_access()
         self.timer.finish()
 
+    def _write_div(self) -> None:
+        """Writing DIV clears the counter: a high bit 12 falls, which ticks DIV-APU."""
+        if self.timer.counter & 0x1000:
+            self.apu.frame_tick()
+        self.timer.write_div()
+
     def _stop(self, pending: bool):
         """STOP on a DMG: it stops the oscillator and clears DIV; an interrupt that is already
         pending makes it a one-byte no-op (SonoSooS "NOP and STOP"; SameBoy stop()). The joypad
         interrupt wakes it. CGB speed switching is phase 2."""
         if pending:
             return StopResult(StopAction.NOP, consume_operand=False)
-        self.timer.write_div()
+        self._write_div()
         return StopResult(StopAction.STOP)
 
     # ----- the bus ------------------------------------------------------------------------
@@ -315,6 +316,7 @@ class GameBoy:
     def _io_write(self, address: int, value: int) -> None:
         low = address & 0xFF
         if low >= 0x10 and low <= 0x3F:
+            self.apu.div_bit12 = bool(self.timer.counter & 0x1000)
             self.apu.write(address, value)
         elif low == 0x00:
             self.joypad.write(value)
@@ -323,7 +325,7 @@ class GameBoy:
         elif low == 0x02:
             self.serial.write_sc(value)
         elif low == 0x04:
-            self.timer.write_div()
+            self._write_div()
         elif low == 0x05:
             self.timer.write_tima(value)
         elif low == 0x06:
