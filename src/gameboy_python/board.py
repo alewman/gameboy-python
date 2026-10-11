@@ -42,7 +42,8 @@ IF_WRITE_PHASE = 0  # FITTED: IF bits raised in a write's own M-cycle survive th
 
 
 SERIAL_IF_HIDE = 4  # dots; fitted, see _serial_irq
-HDMA_START = 6  # units (4 per M-cycle) a transfer takes before its first byte; FITTED
+HDMA_START = 2  # units (4 per M-cycle) a transfer takes before its first byte; FITTED to Mooneye misc/boot_div
+# (the boot ROM's three GDMAs); Gambatte gdma_cycles_*_2 want 6 (open item, docs/validation.md)
 HDMA_START_DS = 6  # ... in double speed; FITTED
 HDMA_END = 2  # ... and after its last, at single speed; FITTED
 VBLANK_CGB_DELAY = 4  # FITTED (Mooneye misc/ppu/vblank_stat_intr-C)

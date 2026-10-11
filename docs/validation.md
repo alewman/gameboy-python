@@ -410,6 +410,27 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   `bgtiledata` 0 of 42 (the DMG's own tile-column offset, still open), `lycEnable` 109 of 147,
   `halt` 59 of 80, `enable_display` 88 of 116, `scy` 12 of 43, `cgbpal_m3` 29 of 44 (palette RAM
   reads and writes at the end of mode 3).
+* **Update (2026-10-11): CGB OAM-DMA bus rules written** from Gambatte's conflict map
+  (`memptrs.cpp`, `memory.cpp` `nontrivial_read/write`): a CGB source has its own conflict regions
+  (ROM/SRAM: everything but VRAM; VRAM: $8000-$9FFF; WRAM: $C000 up), a CPU read in them gets the
+  byte the DMA just moved (from $C000 up and a non-WRAM source: WRAM, in the half named by bit 4
+  of the DMA page), a CPU write lands in OAM (0 from a VRAM source) or in WRAM, and sources from
+  $E0 up are invalid ($FF). Gambatte `oamdma` 142 -> 369 of 418; whole `cgb04c` 2,120 -> 2,355+.
+  The remaining 49 `oamdma` are `late_sp*` / speedchange timing (not looked at) and
+  `busypushFEA1/FF01`, which are a **revision difference**: Gambatte's CGB C has RAM at
+  $FEA0-$FEFF (address bits 3-4 ignored), the board's CGB E reads a nibble pattern there.
+* **GDMA start-up conflict.** The start-up that fits Gambatte's `gdma_cycles_*_2` pairs (6 units)
+  moves the real boot ROM's hand-off DIV counter 12 units late (its three GDMAs, all in VBlank
+  from WRAM) and fails Mooneye `misc/boot_div-cgbABCDE` (hardware, all CGB revisions), which
+  passed before the fit. Neither VBlank nor a WRAM source separates the cases (both tried; the
+  Gambatte tests also read from WRAM and run in VBlank). `HDMA_START` is back to 2: the
+  Gambatte `dma` group is then 132 of 229 instead of 134 (13 `gdma/hdma_*_2` ROMs lost, 11
+  `hdma_*late*/m3halt*` gained). Open: what the real start-up depends on.
+* **Compatibility sweep, stride 1 (DMG board, real boot ROM, frame 1500, vs SameBoy DMG-B)**:
+  3,064 ROMs: 1,822 same, 60 near, **249 differ**, 19 unsupported, 914 skipped (CGB only). Not
+  triaged. Largest cluster: 14 Pokemon Gold/Silver ROMs at 215 px, all on lines 0-1 and 65-80
+  (a mid-frame scroll-register effect, i.e. mode-3 timing; SameBoy is a detector, so which side is
+  right is open). 15 ROMs differ by one pixel.
 * **Mealybug CGB D, 18 of 21 differ** by 10 to 8,300 pixels, mostly the mode-3 register-change
   tests; the DMG board's fits are used unchanged and CGB has its own latencies.
 * **cgb-acid-hell**: 2 pixels.
