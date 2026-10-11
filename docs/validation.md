@@ -333,3 +333,86 @@ second DMG oracle and none was claimed):
 - **Serial** 8 ROMs: the DIV-write variants (`start_late_div_write_*`) and `start_wait_stop/sc80/clear_if`.
 - Where SameBoy fails too (104 ROMs, mostly `oamdma`, `bgtiledata`, `on_screen`, `dmgpalette_during_m3`) the
   expected file may rest on a hardware revision the DMG-B model does not cover.
+
+## Results: milestone 7, the CGB (2026-10-10, first pass)
+
+The CGB board is the `cgb` machine row (CPU CGB E, decided 2026-10-05). It boots from the real CGB
+boot ROM (No-Intro "World (Rev 1)", read in place and SHA-checked) or from a skip-boot state
+measured by running that ROM on this board (DIV counter `$1E9C`, line 144 dot 164, white
+background palettes). Everything below is a first pass with the fitting still to do; numbers are
+from the dates in the headings, SameBoy is not tabulated beside the CGB runs yet.
+
+| Suite | Result | How |
+|---|---|---|
+| Mooneye acceptance + misc, the ROMs whose `pass:` list names CGB (58) | **58 of 58** | `scripts/mooneye_cgb.py` (acceptance from skip-boot, `misc/boot_*` from the real boot ROM) |
+| cgb-acid2 | **pixel-exact** (0 of 23,040) | `scripts/cgb_picture.py`, real boot ROM, 300 frames |
+| blargg `cgb_sound` | **12 of 12** | `run_blargg_ram` |
+| cgb-acid-hell | 2 pixels differ | same |
+| Gambatte `cgb04c` (the testrunner's CGB verdicts, 3,221) | **2,120** (65.8 %) | `scripts/gambatte_dmg08.py --cgb --skip-boot` |
+| SameSuite (76) | 23 | `scripts/cgb_suites.py same-suite` |
+| AGE, the ROMs verified on CGB E (28) | 7 | `scripts/cgb_suites.py age` |
+| Mealybug CGB D pictures (21) | 3 pixel-exact | `scripts/cgb_pictures.py` |
+
+### What was built
+
+CGB registers (KEY0/KEY1, VBK, SVBK, HDMA1-5, RP, BCPS/BCPD/OCPS/OCPD, OPRI, the undocumented
+`$FF72-$FF75`, PCM12/PCM34); two VRAM banks and eight WRAM banks; BG attributes (palette, bank,
+flips, BG-to-OAM priority), object palettes and bank, LCDC.0 as master priority, object
+priority by OAM index (OPRI) with the DMG-compatible mode on top (the boot ROM sets it through
+KEY0); HDMA and GDMA; the STOP speed switch (CPU, timer, DMA at twice the rate, PPU and APU at the
+single-speed rate, the DIV-APU bit moving from 12 to 13); the CGB boot ROM at `$0000-$00FF` and
+`$0200-$08FF`; the serial port's fast clock; the APU's CGB differences. The picture is RGB555,
+two bytes a pixel in `PPU.frame` on CGB hardware.
+
+### Found by the tests and fixed
+
+* **OPRI starts at 0 on a CGB** (the boot ROM never writes it for a CGB game): cgb-acid2's mole
+  was drawn with the DMG's X-ordered priority. Fixed: 12 pixels to 0.
+* **The TAC-disable glitch exists on the CGB E** (Mooneye `timer/rapid_toggle`, verified on CGB;
+  Pan Docs says it does not). The `tac_disable_glitch` field of the machine row is now True.
+* **The CGB's VBlank interrupt is 4 dots after the line-144 OAM one** (Mooneye
+  `misc/ppu/vblank_stat_intr-C` against the `-GS` ROM): `VBLANK_CGB_DELAY`, FITTED.
+* **LY reads 153 for 8 dots on a CGB E, not 4** (AGE `ly-cgbE`, `ly-ncmE`: the extra M-cycle in
+  both speeds; 6 dots in double speed because of where the read lands).
+* **The speed switch** halts the CPU for `0x20008` units unless an interrupt wakes it first
+  (SameBoy `stop()`); the first version cancelled the halt at once and hung 50 SameSuite ROMs.
+* **HDMA/GDMA timing**: a byte takes 2 units at single speed and 4 at double (an M-cycle is 4);
+  the start-up is fitted at 6 units in both speeds (`HDMA_START`; Gambatte `gdma_cycles_*`,
+  `hdma_cycles_*` pairs all pass at 6 at single speed). dma 127 to 134 of 229.
+* **APU on CGB** (blargg `cgb_sound` 7 to 12 of 12): powering off clears the length counters
+  and keeps them read-only; wave RAM is reachable at any time while CH3 plays; a CH3 trigger
+  corrupts nothing.
+* **Halt-wake**: the DMG's fitted extra dots for a halted CPU also hold on the CGB for the STAT
+  interrupts (Mooneye `intr_2_*` fail without them); an experiment that removed them was
+  reverted.
+
+### Open items, with the evidence
+
+* **SameSuite APU, 47 ROMs** (`channel_1` 21 of 21, `channel_2` 15 of 17, `channel_4` 9 of 13,
+  `channel_3` 4 of 17, `div_trigger_volume_10`, `div_write_trigger_volume_10`): they read PCM12 and
+  PCM34 at M-cycle resolution and expect the CGB E's 2 MHz-tick behaviour. `channel_1_delay` and
+  `channel_2_delay` show the first duty sample arriving a few ticks early (ours `80 80 80 80 80 00
+  00 80`, expected `00 80 80 80 80 80 80 00`). SameBoy models this with a per-channel countdown
+  in 2 MHz ticks, a trigger delay of 4 or 6 ticks by the divider phase (`lf_div`), a suppressed
+  first sample and revision branches (`apu.c`, NR14 write); this board's pulse channel is a 4-T
+  counter with none of that. The next step is an APU at that resolution (a milestone of its own).
+* **SameSuite DMA**: `gdma_addr_mask` and `hdma_lcd_off` fail; not looked at.
+* **AGE, 21 ROMs**: the `oam`, `vram`, `stat-mode*`, `speed-switch` and `halt-m0-interrupt` ROMs.
+  `oam-read-ncmE` raw timing rows (`scripts/age_diag.py --timing`) show our OAM lock agreeing with
+  the expected rows up to the E-only positions (`EFF` in the ROM's table): on an E the OAM stays
+  locked one M-cycle longer after mode 3 for particular SCX alignments. Not modelled.
+* **Gambatte `cgb04c`, 1,101 failing verdicts.** The reference is a CPU CGB C and the board is a
+  CGB E, so some are expected differences, but the large groups are real: `oamdma` 142 of 418 (the
+  CGB's OAM-DMA bus rules are not written: the DMG's AND conflict is switched off and nothing
+  replaces it), `speedchange` 129 of 206 (`speedchange*_div_*`, `tima*`, `ch2_nr52` and the
+  `ly44_m3` ones), `dma` 134 of 229 (the late/halt/speedchange HDMA variants), `space` 145 of
+  226, `window` 145 of 195, `sprites` 114 of 151, `scx_0761c0` 0 of 84, `bgtilemap` and
+  `bgtiledata` 0 of 42 (the DMG's own tile-column offset, still open), `lycEnable` 109 of 147,
+  `halt` 59 of 80, `enable_display` 88 of 116, `scy` 12 of 43, `cgbpal_m3` 29 of 44 (palette RAM
+  reads and writes at the end of mode 3).
+* **Mealybug CGB D, 18 of 21 differ** by 10 to 8,300 pixels, mostly the mode-3 register-change
+  tests; the DMG board's fits are used unchanged and CGB has its own latencies.
+* **cgb-acid-hell**: 2 pixels.
+* **Not done**: SameBoy columns for the CGB runs, the SGB and AGB rows, DMG0/CGB0 revisions of
+  the CGB, the real-boot and skip-boot equivalence check for CGB (the DMG's was identical), and
+  the CGB speed-switch's PPU "odd mode".

@@ -35,5 +35,5 @@ def _runner():
 def test_passes(name, kind):
     runner = _runner()
     rom = next(SUITE.rglob(name))
-    results = runner.run((rom, True, False))
+    results = runner.run((rom, True, False, False))
     assert any(ok for _n, k, ok, _sb in results if k == kind), f"{name} [{kind}]"
