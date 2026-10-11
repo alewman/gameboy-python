@@ -35,7 +35,9 @@ POST_BOOT_CGB_COMPAT = {"a": 0x11, "b": 0x00, "c": 0x00, "d": 0x00, "e": 0x08, "
 CGB_BOOT_SIZE = 0x900
 #: STOP's speed switch halts the CPU this many units (4 per M-cycle) unless an interrupt ends it
 #: earlier (SameBoy ``speed_switch_halt_countdown``; Gambatte speedchange)
-SPEED_SWITCH_HALT = 0x20008
+SPEED_SWITCH_HALT = 0x20008  # units, switching from double to single speed
+SPEED_SWITCH_HALT_TO_DOUBLE = 0x20008  # ... and from single to double; FITTED
+SPEED_SWITCH_TIMER_LAG = 0  # units; 8 gains 2 Gambatte speedchange ROMs (CGB C) but fails AGE spsw-stop-prefetch (CGB E)
 
 
 IF_WRITE_PHASE = 0  # FITTED: IF bits raised in a write's own M-cycle survive the write
@@ -218,6 +220,7 @@ class GameBoy:
             if self._switch_wait <= 0:
                 self.cpu.halted = False
                 self._switch_wait = 0
+                self.timer.counter = (self.timer.counter - SPEED_SWITCH_TIMER_LAG) & 0xFFFF
             elif self._switch_halted and not self.cpu.halted:
                 self._switch_wait = 0  # an interrupt woke it first
         else:
@@ -269,12 +272,13 @@ class GameBoy:
         switches speed instead: the CPU halts for SPEED_SWITCH_HALT units unless an interrupt
         wakes it first (SameBoy stop())."""
         if self.cgb and self.ppu.cgb_mode and self.key1 & 1 and self.joypad.read() & 0x0F == 0x0F:
+            self._write_div()  # the switch clears DIV like any STOP (Gambatte stop(), SameBoy)
             self.double_speed = not self.double_speed
             self.ppu.double_speed = self.double_speed
             self.key1 = 0
             if pending:
                 return StopResult(StopAction.NOP, consume_operand=False)
-            self._switch_wait = SPEED_SWITCH_HALT
+            self._switch_wait = SPEED_SWITCH_HALT if not self.double_speed else SPEED_SWITCH_HALT_TO_DOUBLE
             return StopResult(StopAction.HALT)
         if pending:
             return StopResult(StopAction.NOP, consume_operand=False)
