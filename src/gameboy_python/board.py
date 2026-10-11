@@ -105,7 +105,7 @@ class GameBoy:
             self._ppu_irq, machine.stat_write_glitch, stat_blocking=machine.stat_blocking, cgb=cgb
         )
         self.ppu.cgb_mode = cgb  # the boot ROM runs in CGB mode and picks compatibility by KEY0
-        self.apu = APU()
+        self.apu = APU(cgb=cgb)
         self.dma = OamDma(self._dma_source, self._dma_write)
         self._cpu_step = self.cpu.step
         if cgb:
