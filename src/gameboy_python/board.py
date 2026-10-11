@@ -298,7 +298,13 @@ class GameBoy:
         self._tick()
         self._bug(address, "write")
         dma = self.dma
-        if dma.active and dma.index and not self.machine.cgb_hardware:
+        if dma.active and dma.index and self.machine.cgb_hardware:
+            if self._cgb_dma_conflict(address):
+                self._cgb_dma_write(address, value)
+                self.ppu.after_access()
+                self.timer.finish()
+                return
+        elif dma.active and dma.index:
             if address < 0xFE00 and bus_of(address) == dma.bus != INTERNAL:
                 # a CPU write on the bus the DMA is reading: the two drive it together and the
                 # byte that lands in OAM is their AND (DMG; Gambatte oamdma_src*_busypush*)
@@ -310,12 +316,16 @@ class GameBoy:
     def _load(self, address: int) -> int:
         """What the CPU reads at ``address`` this M-cycle."""
         dma = self.dma
+        if dma.active and self.machine.cgb_hardware:
+            if self._cgb_dma_conflict(address):
+                return self._cgb_dma_read(address)
         if dma.active:
             if 0xFE00 <= address < 0xFF00:
                 # reads of the whole $FExx page return $FF while the DMA owns OAM (Gambatte
                 # oamdma_src*_busypopFE9F/FEFF read $FEA0 and $FEFF as $FF, DMG-08)
                 return 0xFF
-            if address < 0xFE00 and bus_of(address) == dma.bus != INTERNAL:
+            if (address < 0xFE00 and bus_of(address) == dma.bus != INTERNAL
+                    and not self.machine.cgb_hardware):
                 return dma.byte  # bus conflict: the CPU gets the DMA's byte
         return self.peek(address)
 
@@ -391,8 +401,51 @@ class GameBoy:
 
     # ----- DMA hooks ----------------------------------------------------------------------
 
+    # Gambatte's CGB conflict map (memptrs.cpp): which 4 KiB regions the CPU shares with the DMA
+    # by the kind of source; bit n = region $n000.
+    _CGB_CONFLICT = {"rom": 0xFCFF, "sram": 0xFCFF, "vram": 0x0300, "wram": 0xF000, "bad": 0xFCFF}
+
+    def _cgb_dma_kind(self) -> str:
+        page = self.dma.base
+        if page < 0x80:
+            return "rom"
+        if page < 0xA0:
+            return "vram"
+        if page < 0xC0:
+            return "sram"
+        return "wram" if page < 0xE0 else "bad"
+
+    def _cgb_dma_conflict(self, address: int) -> bool:
+        return address < 0xFE00 and bool(self._CGB_CONFLICT[self._cgb_dma_kind()] >> (address >> 12) & 1)
+
+    def _dma_wram_index(self, address: int) -> int:
+        # the WRAM half is named by bit 4 of the DMA page, not by SVBK's bank at $C000
+        if (self.dma.base >> 4) & 1:
+            return (self.svbk << 12) | (address & 0xFFF)
+        return address & 0xFFF
+
+    def _cgb_dma_read(self, address: int) -> int:
+        # the CPU gets the byte the DMA just moved; from $C000 up and a non-WRAM source it reads
+        # WRAM instead (Gambatte nontrivial_read)
+        kind = self._cgb_dma_kind()
+        if kind != "wram" and address >= 0xC000:
+            return self.wram[self._dma_wram_index(address)]
+        value = self.ppu.oam[self.dma.index - 1]
+        if kind == "vram":
+            self.ppu.oam[self.dma.index - 1] = 0
+        return value
+
+    def _cgb_dma_write(self, address: int, value: int) -> None:
+        kind = self._cgb_dma_kind()
+        if address < 0xC000:
+            self.ppu.oam[self.dma.index - 1] = 0 if kind == "vram" else value
+        elif kind != "wram":
+            self.wram[self._dma_wram_index(address)] = value
+
     def _dma_source(self, address: int) -> int:
         """A DMA source read, on the bus the source page is on (no locks apply)."""
+        if self.cgb and self.dma.base >= 0xE0:
+            return 0xFF  # CGB: sources from $E0 up are invalid (Gambatte oam_dma_src_invalid)
         if self._boot_at(address):
             value = self.boot_rom[address]  # type: ignore[index]
         elif address < 0x8000 or 0xA000 <= address < 0xC000:

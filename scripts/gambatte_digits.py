@@ -20,7 +20,7 @@ from gameboy_python.boot import find_boot_rom  # noqa: E402
 from gameboy_python.machines import DMG_B  # noqa: E402
 
 
-def digits(frame: bytes, count: int = 6) -> str:
+def digits(frame: bytes, count: int = 8) -> str:
     out = ""
     for i in range(count):
         for ch, tile in g.TILES.items():
