@@ -24,13 +24,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from gameboy_python import GameBoy, load_cartridge  # noqa: E402
+from gameboy_python import MACHINES, GameBoy, load_cartridge  # noqa: E402
+from gameboy_python.machines import DMG_B  # noqa: E402
 from gameboy_python.boot import find_boot_rom  # noqa: E402
-from pngread import read_shades  # noqa: E402
+from pngread import read_rgb888, read_shades  # noqa: E402
 
 SUITE = ROOT / "tests/test_roms/gbtr/gambatte"
 FRAME_T = 70224
 FRAMES = 334 + 15
+CGB_FRAMES = 186 + 15  # testrunner.cpp: the CGB boot ROM's frames and 15 more
 
 # testrunner.cpp's 8x8 digit tiles: 3 black, 0 the lightest
 
@@ -60,18 +62,20 @@ def _glyphs() -> dict[str, bytes]:
 TILES = _glyphs()
 
 
-def plan(rom: Path) -> list[tuple[str, str]]:
-    """The DMG tests this ROM carries: ("out", digits) or ("png", path)."""
+def plan(rom: Path, cgb: bool = False) -> list[tuple[str, str]]:
+    """The tests this ROM carries for the DMG-08 (or, with ``cgb``, the CGB-04c, the testrunner's
+    CGB): ("out", digits) or ("png", path). A ROM named ``..._out`` with neither marker is CGB-only."""
     stem = rom.with_suffix("").name
     tests: list[tuple[str, str]] = []
-    for marker in ("dmg08_cgb04c_out", "dmg08_out"):
-        if marker in stem:
+    markers = ("dmg08_cgb04c_out", "cgb04c_out", "_out") if cgb else ("dmg08_cgb04c_out", "dmg08_out")
+    for marker in markers:
+        if marker in stem and (not cgb or marker != "_out" or "dmg08_out" not in stem):
             tail = stem[stem.index(marker) + len(marker) :]
             if not tail.startswith("audio"):
                 match = re.match(r"[0-9a-fA-F]+", tail)
                 tests.append(("out", match.group(0).lower() if match else ""))
             break
-    for suffix in ("_dmg08_cgb04c.png", "_dmg08.png"):
+    for suffix in (("_dmg08_cgb04c.png", "_cgb04c.png") if cgb else ("_dmg08_cgb04c.png", "_dmg08.png")):
         png = rom.with_name(rom.with_suffix("").name + suffix)
         if png.exists():
             tests.append(("png", str(png)))
@@ -88,33 +92,53 @@ def matches_out(frame: bytes, digits: str) -> bool:
     return True
 
 
-def judge(frame: bytes, tests: list[tuple[str, str]]) -> list[bool]:
+def lut(word: int) -> int:
+    """Gambatte's testrunner colour for an RGB555 word, as 0xRRGGBB (its ``lut`` in runTestRom)."""
+    r, g, b = word & 31, (word >> 5) & 31, (word >> 10) & 31
+    return (((13 * r + 2 * g + b) >> 1) << 16) | (((3 * g + b) << 1) << 8) | ((3 * r + 2 * g + 11 * b) >> 1)
+
+
+def cgb_shades(frame: bytes) -> bytes:
+    """A CGB frame as the digit tests see it: white 0, black 3, anything else 9 (matches nothing)."""
+    out = bytearray()
+    for i in range(0, len(frame), 2):
+        word = (frame[i] | (frame[i + 1] << 8)) & 0x7FFF
+        out.append(0 if word == 0x7FFF else 3 if word == 0 else 9)
+    return bytes(out)
+
+
+def judge(frame: bytes, tests: list[tuple[str, str]], cgb: bool = False) -> list[bool]:
     out = []
+    shades = cgb_shades(frame) if cgb else frame
     for kind, what in tests:
         if kind == "out":
-            out.append(matches_out(frame, what))
+            out.append(matches_out(shades, what))
+        elif cgb:
+            pixels, width, height = read_rgb888(Path(what))
+            got = [lut(frame[i] | (frame[i + 1] << 8)) & 0xF8F8F8 for i in range(0, len(frame), 2)]
+            out.append((width, height) == (160, 144) and got == [p & 0xF8F8F8 for p in pixels])
         else:
-            shades, width, height = read_shades(Path(what))
-            out.append((width, height) == (160, 144) and shades == frame)
+            expected, width, height = read_shades(Path(what))
+            out.append((width, height) == (160, 144) and expected == frame)
     return out
 
 
-def run(args: tuple[Path, bool, bool]) -> list[tuple[str, str, bool, bool | None]]:
-    rom, skip_boot, with_sameboy = args
-    tests = plan(rom)
+def run(args: tuple[Path, bool, bool, bool]) -> list[tuple[str, str, bool, bool | None]]:
+    rom, skip_boot, with_sameboy, cgb = args
+    tests = plan(rom, cgb)
     if not tests:
         return []
-    boot, label = (None, "") if skip_boot else find_boot_rom("DMG")
+    boot, label = (None, "") if skip_boot else find_boot_rom("CGB" if cgb else "DMG")
     if not skip_boot and label != "real boot ROM":
-        raise SystemExit("no real DMG boot ROM")
-    gb = GameBoy(load_cartridge(rom.read_bytes()), boot_rom=boot)
-    end = (15 if skip_boot else FRAMES) * FRAME_T
+        raise SystemExit("no real boot ROM")
+    gb = GameBoy(load_cartridge(rom.read_bytes()), MACHINES["cgb"] if cgb else DMG_B, boot_rom=boot)
+    end = (15 if skip_boot else (CGB_FRAMES if cgb else FRAMES)) * FRAME_T
     step = gb.cpu.step
     while gb.t < end:
         step()
     frame = bytes(gb.ppu.frame)
-    ours = judge(frame, tests)
-    theirs = sameboy(rom) if with_sameboy else [None] * len(tests)
+    ours = judge(frame, tests, cgb)
+    theirs = sameboy(rom) if with_sameboy and not cgb else [None] * len(tests)
     return [
         (rom.name, k, ok, sb)
         for (k, _), ok, sb in zip(tests, ours, theirs, strict=True)
@@ -140,10 +164,11 @@ def main() -> int:
     parser.add_argument("--json", type=Path)
     parser.add_argument("--sameboy-from", type=Path, help="reuse the SameBoy column of an earlier --json")
     parser.add_argument("--jobs", type=int, default=14)
+    parser.add_argument("--cgb", action="store_true", help="the CGB-04c verdicts, on the CGB E board")
     args = parser.parse_args()
     base = SUITE / args.only if args.only else SUITE
-    roms = [p for p in sorted(base.rglob("*")) if p.suffix in (".gb", ".gbc") and plan(p)]
-    work = [(p, args.skip_boot, args.sameboy) for p in roms]
+    roms = [p for p in sorted(base.rglob("*")) if p.suffix in (".gb", ".gbc") and plan(p, args.cgb)]
+    work = [(p, args.skip_boot, args.sameboy, args.cgb) for p in roms]
     with Pool(args.jobs) as pool:
         results = [r for rs in pool.imap(run, work, chunksize=2) for r in rs]
     if args.sameboy_from:

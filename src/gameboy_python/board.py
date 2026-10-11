@@ -73,6 +73,7 @@ class GameBoy:
         self.double_speed = False
         self.key1 = 0  # bit 0: a speed switch is armed
         self._switch_wait = 0  # units left of the speed switch's halt
+        self._switch_halted = False
         self.key0 = 0
         self.rp = 0
         self.undocumented = [0, 0, 0, 0]  # $FF72-$FF75
@@ -208,10 +209,15 @@ class GameBoy:
         self._late_bits = 0
         if self._switch_wait:
             self._switch_wait -= 4
-            if self._switch_wait <= 0 or not self.cpu.halted:
-                if self._switch_wait <= 0:
-                    self.cpu.halted = False
+            if self.cpu.halted:
+                self._switch_halted = True
+            if self._switch_wait <= 0:
+                self.cpu.halted = False
                 self._switch_wait = 0
+            elif self._switch_halted and not self.cpu.halted:
+                self._switch_wait = 0  # an interrupt woke it first
+        else:
+            self._switch_halted = False
         if self._hide:
             self._hide_left -= 4
             if self._hide_left <= 0:
@@ -260,6 +266,7 @@ class GameBoy:
         wakes it first (SameBoy stop())."""
         if self.cgb and self.ppu.cgb_mode and self.key1 & 1 and self.joypad.read() & 0x0F == 0x0F:
             self.double_speed = not self.double_speed
+            self.ppu.double_speed = self.double_speed
             self.key1 = 0
             if pending:
                 return StopResult(StopAction.NOP, consume_operand=False)

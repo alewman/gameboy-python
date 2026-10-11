@@ -86,6 +86,9 @@ class PPU:
         #: CGB hardware: two VRAM banks and palette RAM; ``cgb_mode`` is false when the boot ROM
         #: chose the DMG-compatible mode (KEY0), where BGP/OBPn still pick the shades
         self.cgb = cgb
+        #: dots LY reads 153 for at the start of line 153: 4 on a DMG, 8 on a CGB E (AGE ly-cgbE)
+        self.ly153_dots = 8 if cgb else 4
+        self.double_speed = False  # the CPU runs at twice the PPU's rate (set by the board)
         self.cgb_mode = False
         self.opri = 0 if cgb else 1  # $FF6C bit 0: 1 = objects ordered by X (DMG), 0 = by OAM index
         self.vram_bank = 0  # the bank the CPU sees ($FF4F)
@@ -693,7 +696,7 @@ class PPU:
     def visible_ly(self) -> int:
         """LY as software reads it: on line 153 it reads 153 for only the first few dots and then
         0 for the rest of the line (Pan Docs STAT.md; Gambatte hwtests/ly0, lyc153int_m2irq)."""
-        return 0 if self.ly == LAST_LINE and self.dot >= 4 else self.ly
+        return 0 if self.ly == LAST_LINE and self.dot >= self.ly153_dots - (2 if self.double_speed else 0) else self.ly
 
     def _update_stat_line(self) -> None:
         # (and for the first 4 dots of a new line it reads as false: Mooneye lcdon_timing-GS)

@@ -22,12 +22,27 @@ def read_shades(path: Path) -> tuple[bytes, int, int]:
 def read_rgb555(path: Path) -> tuple[list[int], int, int]:
     """Return (RGB555 words, width, height): each 8-bit channel scaled back to 5 bits the way the
     reference pictures were made (v * 255 / 31)."""
-    pixels, width, height, _depth, _ctype = _decode(path)
+    pixels, width, height, depth, ctype = _decode(path)
+    top = (1 << depth) - 1 if ctype == 0 else 255  # grey samples are not 8-bit scaled
     words = []
     for pixel in pixels:
-        r, g, b = (round(c * 31 / 255) for c in (pixel * 3 if len(pixel) == 1 else pixel)[:3])
+        if len(pixel) == 1:
+            pixel = (pixel[0] * 255 // top,) * 3
+        r, g, b = (round(c * 31 / 255) for c in pixel[:3])
         words.append(r | (g << 5) | (b << 10))
     return words, width, height
+
+
+def read_rgb888(path: Path) -> tuple[list[int], int, int]:
+    """Return (0xRRGGBB pixels, width, height)."""
+    pixels, width, height, depth, ctype = _decode(path)
+    top = (1 << depth) - 1 if ctype == 0 else 255
+    out = []
+    for p in pixels:
+        if len(p) == 1:
+            p = (p[0] * 255 // top,) * 3
+        out.append(p[0] << 16 | p[1] << 8 | p[2])
+    return out, width, height
 
 
 def _decode(path: Path) -> tuple[list[tuple[int, ...]], int, int, int, int]:
