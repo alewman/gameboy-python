@@ -42,6 +42,9 @@ IF_WRITE_PHASE = 0  # FITTED: IF bits raised in a write's own M-cycle survive th
 
 
 SERIAL_IF_HIDE = 4  # dots; fitted, see _serial_irq
+HDMA_START = 6  # units (4 per M-cycle) a transfer takes before its first byte; FITTED
+HDMA_START_DS = 6  # ... in double speed; FITTED
+HDMA_END = 2  # ... and after its last, at single speed; FITTED
 VBLANK_CGB_DELAY = 4  # FITTED (Mooneye misc/ppu/vblank_stat_intr-C)
 TIMER_HALT_DELAY = 4  # FITTED (GBMicrotest int_timer_halt, int_timer_halt_div_b)
 
@@ -629,9 +632,9 @@ class GameBoy:
         2 dots (SameBoy ``GB_hdma_run``: one M-cycle of start-up, 8 M-cycles a block at single
         speed, 16 at double). A general-purpose transfer runs every block back to back; an HBlank
         one a block per HBlank."""
-        dma_dots = 1 if self.double_speed else 2
+        dma_dots = 4 if self.double_speed else 2  # units a byte takes: 4 make an M-cycle
         self.hdma_due = False
-        self._hdma_wait(dma_dots)
+        self._hdma_wait(HDMA_START_DS if self.double_speed else HDMA_START)
         while self.hdma_blocks:
             for _ in range(16):
                 byte = self._hdma_source(self.hdma_src)
@@ -645,7 +648,7 @@ class GameBoy:
             if self.hdma_hblank:
                 break
         if not self.double_speed:
-            self._hdma_wait(dma_dots)
+            self._hdma_wait(HDMA_END)
 
     def _hdma_wait(self, units: int) -> None:
         """Advance the board ``units`` CPU units (4 per M-cycle) with the CPU stopped."""

@@ -165,7 +165,20 @@ def main() -> int:
     parser.add_argument("--sameboy-from", type=Path, help="reuse the SameBoy column of an earlier --json")
     parser.add_argument("--jobs", type=int, default=14)
     parser.add_argument("--cgb", action="store_true", help="the CGB-04c verdicts, on the CGB E board")
+    parser.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="MODULE.NAME=VALUE",
+        help="override a module constant before the run (fitting experiments), e.g. board.HDMA_START=4",
+    )
     args = parser.parse_args()
+    import importlib
+
+    for item in args.set:
+        target, value = item.split("=")
+        module, name = target.rsplit(".", 1)
+        setattr(importlib.import_module(f"gameboy_python.{module}"), name, int(value, 0))
     base = SUITE / args.only if args.only else SUITE
     roms = [p for p in sorted(base.rglob("*")) if p.suffix in (".gb", ".gbc") and plan(p, args.cgb)]
     work = [(p, args.skip_boot, args.sameboy, args.cgb) for p in roms]
