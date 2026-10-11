@@ -42,6 +42,7 @@ IF_WRITE_PHASE = 0  # FITTED: IF bits raised in a write's own M-cycle survive th
 
 
 SERIAL_IF_HIDE = 4  # dots; fitted, see _serial_irq
+VBLANK_CGB_DELAY = 4  # FITTED (Mooneye misc/ppu/vblank_stat_intr-C)
 TIMER_HALT_DELAY = 4  # FITTED (GBMicrotest int_timer_halt, int_timer_halt_div_b)
 
 
@@ -143,21 +144,21 @@ class GameBoy:
         )
         ppu = self.ppu
         ppu.cgb_mode = cgb_game
-        ppu.opri = 0 if cgb_game else 1
+        ppu.opri = self.opri_register = 0 if cgb_game else 1
         self.key0 = header.cgb_flag if cgb_game else 0x04
-        self.timer.counter = 0x2678 if cgb_game else 0x267C  # FITTED later; DIV reads $26/$27
+        # measured by running the real CGB boot ROM on this board (2026-10-10, cgb-acid2): DIV
+        # counter $1E9C, the PPU at line 144 dot 164, white background palettes. FITTED to that
+        # run for a CGB game; the compatibility-mode values are the same, unmeasured.
+        self.timer.counter = 0x1E9C
         self.serial.sc = 0
-        self.dma.register = 0
+        self.dma.register = 0xFF
         ppu.bgp = 0xFC
-        for palette in (ppu.bg_pal, ppu.obj_pal):
-            for entry in range(8):
-                for colour, word in enumerate((0x7FFF, 0x5AD6, 0x294A, 0x0000)):
-                    palette[entry * 8 + colour * 2 : entry * 8 + colour * 2 + 2] = word.to_bytes(
-                        2, "little"
-                    )
+        for entry in range(8):
+            ppu.bg_pal[entry * 8 : entry * 8 + 8] = b"\xff\x7f" * 4
+        ppu.bcps, ppu.ocps = 0x80, 0x81
         ppu.write_lcdc(0x91)
         ppu.stat_select = 0
-        ppu.place(0, 396, 1)
+        ppu.place(144, 164, 1)
         self.apu.skip_boot()
         self.boot_mapped = False
 
@@ -183,6 +184,11 @@ class GameBoy:
         """A PPU interrupt. A halted CPU sees the STAT ones a fitted number of dots after the PPU
         raises them (``ppu.irq_halt_delay``); the line-start OAM one reaches the CPU's dispatch a
         cycle before its IF bit shows."""
+        if bit == 0 and self.cgb and VBLANK_CGB_DELAY:
+            # CGB: the VBlank interrupt comes this many dots after the line-144 OAM one (Mooneye
+            # misc/ppu/vblank_stat_intr-C; the DMG's are simultaneous)
+            self._late.append([VBLANK_CGB_DELAY, 0])
+            return
         delay = self.ppu.irq_halt_delay if bit == 1 and self.cpu.halted else 0
         if delay and self.ppu.sub + delay >= 4:
             self._late.append([self.ppu.sub + delay, bit])
