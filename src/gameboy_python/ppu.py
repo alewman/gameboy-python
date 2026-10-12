@@ -62,6 +62,7 @@ SKIP_LATCH_DOT = 4  # FITTED (Mealybug m3_scx_low_3_bits): last dot SCX's low bi
 MAP_READ_DOT = LOW_READ_DOT = HIGH_READ_DOT = 2  # which dot (1 or 2) of its step each fetch reads
 OBJ_FETCH_DOTS = 6
 FIRST_OBJECT_DISCOUNT = 3  # FITTED to Mooneye ppu/intr_2_mode0_timing_sprites
+FIRST_OBJECT_DISCOUNT_DS = 2  # FITTED (Gambatte cgb04c sprites/space in double speed, 261 -> 341 of 380); AGE stat-mode-sprites (single speed) needs 3
 VBLANK_LINE = 144
 LAST_LINE = 153
 SCREEN_W = 160
@@ -517,7 +518,7 @@ class PPU:
         dots = OBJ_FETCH_DOTS
         if not self.penalised:  # FITTED: the first object on a line costs less
             self.penalised = True
-            dots -= FIRST_OBJECT_DISCOUNT
+            dots -= FIRST_OBJECT_DISCOUNT_DS if self.cgb_mode and self.double_speed else FIRST_OBJECT_DISCOUNT
         self.obj_dots = dots
         self.obj_low_at = max(dots - 3, 0)
         self.obj_high_at = max(dots - 5, 0)

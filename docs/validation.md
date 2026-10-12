@@ -440,6 +440,14 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
   mixed on the sprite lines (rows 0-15 fetch a mixed tile): the fetch phase is open.
+* **First-object cost in double speed**: the first object on a line costs 3 fewer dots than the
+  full fetch (`FIRST_OBJECT_DISCOUNT`, Mooneye). In double speed Gambatte's CGB ROMs want 2
+  (`FIRST_OBJECT_DISCOUNT_DS`): `sprites` + `space` go from 261 to 346 of 380, all of the
+  gain in the `_ds_` ROMs (111 of the 119 earlier failures; they failed for odd sprite counts).
+  The same value in single speed breaks AGE `stat-mode-sprites` (CGB B/C/E) and DMG prefers 3
+  (74 of 96 against 69), hence the split. Why double speed differs is open. The regenerated
+  pass list is 2,458 (was 2,355): 25 earlier passes were lost (`speedchange*_tima`/`ch2_nr52`,
+  `late_sizechange_sp*`, a few `hdma_late_*m3halt*`) and 128 gained.
 * **Mealybug CGB D, 18 of 21 differ** by 10 to 8,300 pixels, mostly the mode-3 register-change
   tests; the DMG board's fits are used unchanged and CGB has its own latencies.
 * **cgb-acid-hell**: 2 pixels.
