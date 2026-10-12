@@ -51,6 +51,8 @@ BGP_DELAY = 1
 SCY_LAG = 4
   # FITTED (Gambatte scy/scy_during_m3_*): dots a SCY write takes to reach the fetcher
 OBP_DELAY = 4
+BG_MAP_LAG = 4  # FITTED (Gambatte bgtilemap): dots LCDC.3 (map select) arrives late at the fetcher
+BG_DATA_LAG = 4  # ... and LCDC.4 (tile data select); both make Gambatte bgtilemap/bgtiledata rows below the sprites exact
 OBJ_SIZE_LAG = 0  # FITTED (Mealybug): dots LCDC.2 arrives late at an object fetch
 # FITTED (Mealybug): dots each background VRAM read is deferred past its fetcher step
 MAP_SHIFT = 4
@@ -265,7 +267,11 @@ class PPU:
     def _step_shadow(self) -> None:
         shadow = self.shadow
         assert shadow is not None
-        shadow.lcdc = self.lcdc
+        shadow.lcdc = (
+            (self.lcdc & ~0x18)
+            | (self._lcdc_ago(BG_MAP_LAG) & 0x08)
+            | (self._lcdc_ago(BG_DATA_LAG) & 0x10)
+        )
         shadow.cgb_mode, shadow.opri = self.cgb_mode, self.opri
         shadow.scx = self.scx
         shadow.scy = self.scy_hist[-SCY_LAG] if SCY_LAG else self.scy

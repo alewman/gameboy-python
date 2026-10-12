@@ -431,6 +431,15 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   triaged. Largest cluster: 14 Pokemon Gold/Silver ROMs at 215 px, all on lines 0-1 and 65-80
   (a mid-frame scroll-register effect, i.e. mode-3 timing; SameBoy is a detector, so which side is
   right is open). 15 ROMs differ by one pixel.
+* **Speed switch (Gambatte `speedchange`, CGB C)**: STOP now resets DIV, taking the group from
+  129 to 132 of 206. The halt length is 0x20008 units; a timer lag of 8 units gains 2 more ROMs
+  but fails AGE `spsw-stop-prefetch` (CGB E), so `SPEED_SWITCH_TIMER_LAG` stays 0 (a revision
+  difference or an open item). Remaining 74: APU timing (`ch2_nr52`), `tima`, `ly44_m3` STAT,
+  `m2int`.
+* **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
+  fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
+  16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
+  mixed on the sprite lines (rows 0-15 fetch a mixed tile): the fetch phase is open.
 * **Mealybug CGB D, 18 of 21 differ** by 10 to 8,300 pixels, mostly the mode-3 register-change
   tests; the DMG board's fits are used unchanged and CGB has its own latencies.
 * **cgb-acid-hell**: 2 pixels.
