@@ -457,6 +457,8 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
 * **`LYC_IRQ_EARLY` tried and rejected**: 3 (or 2) gains 4 of 147 in Gambatte `lycEnable` but, over
   the whole CGB list, loses 319 and gains 121; on DMG it breaks GBMicrotest `int_lyc_*`. Stays 4.
   Lesson: judge a timing constant on the whole list, not on the group it was swept on.
+* **`LINE0_START_DOT` re-swept on the whole CGB list** (2026-10-12): 2 gives 2,430, 6 gives 2,438,
+  the fitted 4 gives 2,463 (`enable_display` 88 of 116 at 4, 81 at 2 and 6). 4 stays.
 * **Mealybug CGB D, 18 of 21 differ** by 10 to 8,300 pixels, mostly the mode-3 register-change
   tests; the DMG board's fits are used unchanged and CGB has its own latencies.
 * **cgb-acid-hell**: 2 pixels.
