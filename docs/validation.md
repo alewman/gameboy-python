@@ -448,6 +448,12 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   (74 of 96 against 69), hence the split. Why double speed differs is open. The regenerated
   pass list is 2,458 (was 2,355): 25 earlier passes were lost (`speedchange*_tima`/`ch2_nr52`,
   `late_sizechange_sp*`, a few `hdma_late_*m3halt*`) and 128 gained.
+* **Window comparator lag (timing PPU)**: `WX_LAG` 4 -> 1. Gambatte CGB `window` 143 -> 148 of
+  193 (0 and 1 tie; 2: 146, 3: 144, 6: 141); `WIN_LAG` 2 and 4 are worse (136, 129). The
+  Mealybug fit is carried by `SHADOW_WX_LAG`, unchanged, and GBMicrotest, Mooneye (DMG, CGB),
+  the pictures and both Gambatte lists pass. Pass list 2,463 (2 lost, 7 gained).
+* **`OBJ_SIZE_LAG`** 1 and 3 change nothing on the CGB `sprites` group; the three
+  `late_sizechange_sp*_ds_1` ROMs lost to the double-speed discount stay open.
 * **Mealybug CGB D, 18 of 21 differ** by 10 to 8,300 pixels, mostly the mode-3 register-change
   tests; the DMG board's fits are used unchanged and CGB has its own latencies.
 * **cgb-acid-hell**: 2 pixels.

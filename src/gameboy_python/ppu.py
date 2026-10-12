@@ -34,7 +34,7 @@ LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interr
 WX_GLITCH = 0  # 1 = Pan Docs' WX-reached-again colour-0 pixel; it made wx_4/5 worse, so off
 SHADOW_LAG = 2  # the pixel-drawing PPU runs this many dots behind the one that times STAT
 SHADOW_WX_LAG = 4
-WX_LAG = 4  # FITTED (Mealybug): the window comparator sees WX this many dots late
+WX_LAG = 1  # FITTED (Gambatte cgb04c window 143 -> 148 of 193 at 0 or 1; was 4, the shadow's SHADOW_WX_LAG carries the Mealybug fit): the timing PPU's window comparator sees WX this many dots late
 WIN_LAG = 0  # ... and LCDC.5/.0 this many
 WINDOW_HEAD = 4  # FITTED (GBMicrotest win*): fetcher dots the window restart gets for free
 WINDOW_EDGE_HEAD = 6  # ... when the window starts at the left edge (WX < 7)
