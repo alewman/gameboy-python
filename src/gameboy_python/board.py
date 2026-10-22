@@ -667,13 +667,15 @@ class GameBoy:
 
     def _hdma_control(self, value: int) -> None:
         """$FF55: bit 7 chooses HBlank (1) or general (0); bits 6-0 are the length in 16-byte blocks
-        minus one. Clearing bit 7 while an HBlank transfer runs stops it."""
+        minus one. Clearing bit 7 while an HBlank transfer runs stops it. An HBlank transfer
+        armed in mode 0 runs its first block at once, also with the LCD off, where no further
+        HBlank comes (SameSuite ``hdma_lcd_off``, ``gdma_addr_mask``)."""
         self.hdma_blocks = (value & 0x7F) + 1
         if not value & 0x80 and self.hdma_hblank:
             self.hdma_hblank = False
             return
         self.hdma_hblank = bool(value & 0x80)
-        if not self.hdma_hblank or (self.ppu.read_mode == 0 and self.ppu.lcd_on):
+        if not self.hdma_hblank or self.ppu.read_mode == 0:
             self.hdma_due = True
 
     # ----- running ------------------------------------------------------------------------

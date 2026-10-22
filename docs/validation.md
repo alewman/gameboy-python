@@ -349,7 +349,7 @@ from the dates in the headings, SameBoy is not tabulated beside the CGB runs yet
 | blargg `cgb_sound` | **12 of 12** | `run_blargg_ram` |
 | cgb-acid-hell | 2 pixels differ | same |
 | Gambatte `cgb04c` (the testrunner's CGB verdicts, 3,221) | **2,120** (65.8 %) | `scripts/gambatte_dmg08.py --cgb --skip-boot` |
-| SameSuite, the ROMs that apply to a CGB E (69; 2026-10-21) | **67** (APU 63 of 63) | `scripts/cgb_suites.py same-suite` |
+| SameSuite, the ROMs that apply to a CGB E (69; 2026-10-22) | **69** (APU 63 of 63) | `scripts/cgb_suites.py same-suite` |
 | AGE, the ROMs verified on CGB E (28) | 7 | `scripts/cgb_suites.py age` |
 | Mealybug CGB D pictures (21) | 3 pixel-exact | `scripts/cgb_pictures.py` |
 
@@ -392,13 +392,17 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   writes glitch the LFSR (the deterministic variants only). Duty 2 corrected to
   `1 0 0 0 0 1 1 1`. SameSuite ROMs whose device suffix does not name E (`-cgb0B`, `-cgb0BC`,
   `-A`, `-cgb0`, `-cgbB`) are no longer counted: they record other revisions.
+* **An HBlank transfer started with the LCD off copies one block at once** (SameSuite
+  `hdma_lcd_off`, `gdma_addr_mask`; Gambatte `hdma_disabled_display_1`): `$FF55` with bit 7 set
+  runs its first block whenever STAT reads mode 0, which includes the LCD off (SameBoy starts
+  it the same way); no further HBlank comes, so the rest waits. Gambatte CGB pass list 2,467
+  (0 lost; 3 sweep ROMs from the APU rebuild and this one gained).
 * **Halt-wake**: the DMG's fitted extra dots for a halted CPU also hold on the CGB for the STAT
   interrupts (Mooneye `intr_2_*` fail without them); an experiment that removed them was
   reverted.
 
 ### Open items, with the evidence
 
-* **SameSuite DMA**: `gdma_addr_mask` and `hdma_lcd_off` fail; not looked at.
 * **AGE, 21 ROMs**: the `oam`, `vram`, `stat-mode*`, `speed-switch` and `halt-m0-interrupt` ROMs.
   `oam-read-ncmE` raw timing rows (`scripts/age_diag.py --timing`) show our OAM lock agreeing with
   the expected rows up to the E-only positions (`EFF` in the ROM's table): on an E the OAM stays
