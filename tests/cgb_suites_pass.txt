@@ -2,6 +2,7 @@ age-test-roms/halt/ei-halt-dmgC-cgbBCE.gb
 age-test-roms/halt/halt-prefetch-dmgC-cgbBCE.gb
 age-test-roms/ly/ly-cgbE.gb
 age-test-roms/ly/ly-ncmE.gb
+age-test-roms/speed-switch/spsw-div-cgbBCE.gb
 age-test-roms/speed-switch/spsw-stop-prefetch-cgbBCE.gb
 age-test-roms/stat-interrupt/stat-int-ncmBCE.gb
 age-test-roms/stat-mode-sprites/stat-mode-sprites-dmgC-cgbBCE.gb
