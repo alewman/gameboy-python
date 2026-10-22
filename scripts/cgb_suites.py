@@ -39,7 +39,14 @@ def roms(suite: str) -> list[Path]:
     root = BASE / ("same-suite" if suite == "same-suite" else "age-test-roms")
     found = sorted(root.rglob("*.gb"))
     if suite == "same-suite":
-        return [p for p in found if "sgb" not in p.parts]
+        # a trailing device suffix (-cgb0B, -cgbDE, -A) names the revisions the ROM was captured
+        # on; it applies to a CGB E only when the group names E
+        return [
+            p
+            for p in found
+            if "sgb" not in p.parts
+            and (not (m := re.search(r"-([A-Za-z0-9]+)\.gb$", p.name)) or re.fullmatch(r"cgb[0-9A-Z]*E", m.group(1)))
+        ]
     return [p for p in found if applies_age(p.name)]
 
 

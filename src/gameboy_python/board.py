@@ -243,6 +243,8 @@ class GameBoy:
         apu_bit = 0x2000 if self.double_speed else 0x1000
         if timer.previous & apu_bit and not timer.counter & apu_bit:
             self.apu.frame_tick()  # DIV-APU: a falling edge of the system counter's bit 12 (13)
+        elif not timer.previous & apu_bit and timer.counter & apu_bit:
+            self.apu.secondary_tick()  # and the rising edge half a period later
         self.apu.tick(dots)
         self.serial.tick(timer.previous, timer.counter)
         self.ppu.tick(dots)

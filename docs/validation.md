@@ -349,7 +349,7 @@ from the dates in the headings, SameBoy is not tabulated beside the CGB runs yet
 | blargg `cgb_sound` | **12 of 12** | `run_blargg_ram` |
 | cgb-acid-hell | 2 pixels differ | same |
 | Gambatte `cgb04c` (the testrunner's CGB verdicts, 3,221) | **2,120** (65.8 %) | `scripts/gambatte_dmg08.py --cgb --skip-boot` |
-| SameSuite (76) | 23 | `scripts/cgb_suites.py same-suite` |
+| SameSuite, the ROMs that apply to a CGB E (69; 2026-10-21) | **67** (APU 63 of 63) | `scripts/cgb_suites.py same-suite` |
 | AGE, the ROMs verified on CGB E (28) | 7 | `scripts/cgb_suites.py age` |
 | Mealybug CGB D pictures (21) | 3 pixel-exact | `scripts/cgb_pictures.py` |
 
@@ -382,20 +382,22 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
 * **APU on CGB** (blargg `cgb_sound` 7 to 12 of 12): powering off clears the length counters
   and keeps them read-only; wave RAM is reachable at any time while CH3 plays; a CH3 trigger
   corrupts nothing.
+* **SameSuite APU, 63 of 63 applicable** (2026-10-21): the pulse channels now count in
+  2 MHz ticks with SameBoy's start-up rules (a trigger delay from the tick phase `lf_div`, a held
+  first sample, the CGB D/E phantom duty step, the NRx4 frequency-change undo); the volume
+  envelope is a 3-bit countdown clocked by DIV-APU's falling edge and reloaded and armed on the
+  rising edge half a period later (`APU.secondary_tick`), with the NRx2 write glitches
+  (separate DMG and CGB forms); the CGB sweep runs its calculation a few 1 MHz ticks after the
+  event; the CGB noise channel steps a 14-bit counter in 2 MHz ticks and NR43 clock-select
+  writes glitch the LFSR (the deterministic variants only). Duty 2 corrected to
+  `1 0 0 0 0 1 1 1`. SameSuite ROMs whose device suffix does not name E (`-cgb0B`, `-cgb0BC`,
+  `-A`, `-cgb0`, `-cgbB`) are no longer counted: they record other revisions.
 * **Halt-wake**: the DMG's fitted extra dots for a halted CPU also hold on the CGB for the STAT
   interrupts (Mooneye `intr_2_*` fail without them); an experiment that removed them was
   reverted.
 
 ### Open items, with the evidence
 
-* **SameSuite APU, 47 ROMs** (`channel_1` 21 of 21, `channel_2` 15 of 17, `channel_4` 9 of 13,
-  `channel_3` 4 of 17, `div_trigger_volume_10`, `div_write_trigger_volume_10`): they read PCM12 and
-  PCM34 at M-cycle resolution and expect the CGB E's 2 MHz-tick behaviour. `channel_1_delay` and
-  `channel_2_delay` show the first duty sample arriving a few ticks early (ours `80 80 80 80 80 00
-  00 80`, expected `00 80 80 80 80 80 80 00`). SameBoy models this with a per-channel countdown
-  in 2 MHz ticks, a trigger delay of 4 or 6 ticks by the divider phase (`lf_div`), a suppressed
-  first sample and revision branches (`apu.c`, NR14 write); this board's pulse channel is a 4-T
-  counter with none of that. The next step is an APU at that resolution (a milestone of its own).
 * **SameSuite DMA**: `gdma_addr_mask` and `hdma_lcd_off` fail; not looked at.
 * **AGE, 21 ROMs**: the `oam`, `vram`, `stat-mode*`, `speed-switch` and `halt-m0-interrupt` ROMs.
   `oam-read-ncmE` raw timing rows (`scripts/age_diag.py --timing`) show our OAM lock agreeing with
