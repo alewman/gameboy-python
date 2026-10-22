@@ -37,7 +37,6 @@ CGB_BOOT_SIZE = 0x900
 #: earlier (SameBoy ``speed_switch_halt_countdown``; Gambatte speedchange)
 SPEED_SWITCH_HALT = 0x20008  # units, switching from double to single speed
 SPEED_SWITCH_HALT_TO_DOUBLE = 0x20008  # ... and from single to double; FITTED
-SPEED_SWITCH_TIMER_LAG = 0  # units; 8 gains 2 Gambatte speedchange ROMs (CGB C) but fails AGE spsw-stop-prefetch (CGB E)
 
 
 IF_WRITE_PHASE = 0  # FITTED: IF bits raised in a write's own M-cycle survive the write
@@ -79,6 +78,8 @@ class GameBoy:
         self.double_speed = False
         self.key1 = 0  # bit 0: a speed switch is armed
         self._switch_wait = 0  # units left of the speed switch's halt
+        self._div_reset_due = False  # a speed switch's STOP clears DIV in its operand read
+        self._div_hold = 0  # M-cycles the counter then stands still for
         self._switch_halted = False
         self.key0 = 0
         self.rp = 0
@@ -220,7 +221,6 @@ class GameBoy:
             if self._switch_wait <= 0:
                 self.cpu.halted = False
                 self._switch_wait = 0
-                self.timer.counter = (self.timer.counter - SPEED_SWITCH_TIMER_LAG) & 0xFFFF
             elif self._switch_halted and not self.cpu.halted:
                 self._switch_wait = 0  # an interrupt woke it first
         else:
@@ -239,7 +239,16 @@ class GameBoy:
                     held.append(item)
             self._late = held
         timer = self.timer
-        timer.tick()
+        if self._div_reset_due:
+            self._div_reset_due = False
+            timer.tick()
+            self._write_div()
+            timer.previous = timer.counter  # the reset's falling edges were counted by _write_div
+        elif self._div_hold:
+            self._div_hold -= 1
+            timer.tick(0)
+        else:
+            timer.tick()
         apu_bit = 0x2000 if self.double_speed else 0x1000
         if timer.previous & apu_bit and not timer.counter & apu_bit:
             self.apu.frame_tick()  # DIV-APU: a falling edge of the system counter's bit 12 (13)
@@ -274,7 +283,16 @@ class GameBoy:
         switches speed instead: the CPU halts for SPEED_SWITCH_HALT units unless an interrupt
         wakes it first (SameBoy stop())."""
         if self.cgb and self.ppu.cgb_mode and self.key1 & 1 and self.joypad.read() & 0x0F == 0x0F:
-            self._write_div()  # the switch clears DIV like any STOP (Gambatte stop(), SameBoy)
+            # the switch clears DIV like any STOP (Gambatte stop(), SameBoy), at the end of STOP's
+            # operand read: a counter bit that is still high there makes its falling edge
+            # (Gambatte speedchange*_tima _1/_2 pairs move STOP by one M-cycle). With IME off the
+            # CPU then holds the reset one M-cycle more (SameBoy enter_stop_mode;
+            # Gambatte speedchange*_div pairs).
+            if pending:
+                self._write_div()
+            else:
+                self._div_reset_due = True
+            self._div_hold = not self.cpu.ime
             self.double_speed = not self.double_speed
             self.ppu.double_speed = self.double_speed
             self.key1 = 0

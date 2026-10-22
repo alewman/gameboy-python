@@ -350,7 +350,7 @@ from the dates in the headings, SameBoy is not tabulated beside the CGB runs yet
 | cgb-acid-hell | 2 pixels differ | same |
 | Gambatte `cgb04c` (the testrunner's CGB verdicts, 3,221) | **2,120** (65.8 %) | `scripts/gambatte_dmg08.py --cgb --skip-boot` |
 | SameSuite, the ROMs that apply to a CGB E (69; 2026-10-22) | **69** (APU 63 of 63) | `scripts/cgb_suites.py same-suite` |
-| AGE, the ROMs verified on CGB E (28) | 7 | `scripts/cgb_suites.py age` |
+| AGE, the ROMs verified on CGB E (28; 2026-10-22) | 8 | `scripts/cgb_suites.py age` |
 | Mealybug CGB D pictures (21) | 3 pixel-exact | `scripts/cgb_pictures.py` |
 
 ### What was built
@@ -442,6 +442,17 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   but fails AGE `spsw-stop-prefetch` (CGB E), so `SPEED_SWITCH_TIMER_LAG` stays 0 (a revision
   difference or an open item). Remaining 74: APU timing (`ch2_nr52`), `tima`, `ly44_m3` STAT,
   `m2int`.
+* **Speed switch, the DIV reset (2026-10-22)**: SameBoy (`cgb-c` and `cgb-e` alike) passes 62 of
+  the 74, so they are not revision differences, and AGE `spsw-stop-prefetch` (verified on CGB B,
+  C and E) rules out the end-of-halt lag. The switch now clears DIV at the end of STOP's operand
+  read, not at its opcode (Gambatte `speedchange*_tima` `_1`/`_2` pairs move STOP by one M-cycle
+  and count the falling edge of a still-high timer bit), and with IME off the counter then stands
+  still one M-cycle (SameBoy `enter_stop_mode` holds the CPU's DIV-reset signal). The lag is
+  gone. `speedchange` 132 -> 141 of 206, AGE 7 -> 8 (`spsw-div`), Gambatte CGB pass list 2,480
+  (26 gained, 13 lost, all in this group). The 13 are the other halves of pairs that straddle
+  one M-cycle: `ch2_nr52_*_2b` (before: the `_2a` halves failed; length expiry against the
+  DIV-APU edge lands inside an M-cycle) and four `tima0[1-3]` variants. They need sub-M-cycle
+  phase between the counter and the CPU, which the board does not model.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
