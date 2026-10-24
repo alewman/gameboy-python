@@ -453,6 +453,20 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   one M-cycle: `ch2_nr52_*_2b` (before: the `_2a` halves failed; length expiry against the
   DIV-APU edge lands inside an M-cycle) and four `tima0[1-3]` variants. They need sub-M-cycle
   phase between the counter and the CPU, which the board does not model.
+* **Mode 3's end in double speed (2026-10-23)**: of the 394 failing ROMs whose names mark double
+  speed or a speed change, SameBoy `cgb-e` passes 296, so most are not revision differences. In
+  double speed STAT now shows mode 0 with no extra lag (`MODE0_READ_LAG_DS` 0; single speed keeps
+  1), and the CGB palettes stay locked 2 dots longer than STAT shows mode 3 (`PAL_HOLD_DS`;
+  SameBoy also frees the palettes after STAT and VRAM). Swept over those 1,186 ROMs: lag 0/1/2
+  give 839/817/802 and the palette hold 0/1/2/3/4/6 on top gives 839/841/843/841/839/837.
+  Gambatte CGB pass list 2,480 -> 2,506 (28 gained: `*_ds` m3stat, `vramw_m3end`,
+  `gdma/hdma_cycles`, pre/postread/write, two `speedchange*_ly44`; 2 lost, both passed by SameBoy:
+  `gdma_cycles_2xshort_ds_1`, `offset1_lyc99int_m0stat_count_scx2_ds_1`). SameSuite 69, Mooneye
+  CGB 58, AGE 8 unchanged. Tried and rejected: shifting the PPU by whole dots at the switch
+  (+-1 dot loses about 115; +-2 swaps which half of each `ly44` pair passes). The `ly44_m3` pairs
+  left (about 13) want mode 0 one dot earlier than any read lag gives; in double speed that is
+  inside an M-cycle, the same sub-M-cycle phase as the `tima`/`ch2_nr52` pairs. The largest group
+  SameBoy passes, `scx_during_m3`, fails in single speed and on DMG too (fetcher, above).
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays

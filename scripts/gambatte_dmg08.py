@@ -159,6 +159,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--write", type=Path)
     parser.add_argument("--only", help="a subdirectory of the suite, e.g. m2int_m2stat")
+    parser.add_argument("--match", help="only ROMs whose file name matches this regular expression")
     parser.add_argument("--sameboy", action="store_true")
     parser.add_argument("--skip-boot", action="store_true", help="start from the post-boot state, 15 frames")
     parser.add_argument("--json", type=Path)
@@ -181,6 +182,8 @@ def main() -> int:
         setattr(importlib.import_module(f"gameboy_python.{module}"), name, int(value, 0))
     base = SUITE / args.only if args.only else SUITE
     roms = [p for p in sorted(base.rglob("*")) if p.suffix in (".gb", ".gbc") and plan(p, args.cgb)]
+    if args.match:
+        roms = [p for p in roms if re.search(args.match, p.name)]
     work = [(p, args.skip_boot, args.sameboy, args.cgb) for p in roms]
     with Pool(args.jobs) as pool:
         results = [r for rs in pool.imap(run, work, chunksize=2) for r in rs]

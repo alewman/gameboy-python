@@ -30,6 +30,10 @@ OAM_IRQ_EARLY = (
 )
 HBLANK_IRQ_EARLY = 2  # FITTED (GBMicrotest hblank_int_scx*): pixels before the end it fires
 MODE0_READ_LAG = 1  # FITTED (GBMicrotest ppu_sprite0_scx*): STAT shows mode 0 this many dots after
+MODE0_READ_LAG_DS = 0  # FITTED: the same in double speed (Gambatte cgb04c *_ds m3stat, vramw_m3end,
+# gdma/hdma_cycles)
+PAL_HOLD_DS = 2  # FITTED (Gambatte cgbpal_m3end_ds): dots the CGB palettes stay locked after STAT
+# leaves mode 3 in double speed (SameBoy frees them after STAT and VRAM too)
 LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interrupt)
 WX_GLITCH = 0  # 1 = Pan Docs' WX-reached-again colour-0 pixel; it made wx_4/5 worse, so off
 SHADOW_LAG = 2  # the pixel-drawing PPU runs this many dots behind the one that times STAT
@@ -146,6 +150,7 @@ class PPU:
         self.window_line = 0  # the window's own line counter
         self.window_used = False  # window pixels drawn on this line
         self.wy_hit = False  # WY == LY seen this frame
+        self.pal_hold = 0  # dots the CGB palettes stay locked after read_mode leaves 3
         self.read_mode = 0  # the mode as the CPU sees it: ``mode`` from MODE_READ_LAG dots ago
         self._recent = [0] * MODE_READ_LAG
         self.pipe: list[list] = []  # popped pixels waiting for their register samples
@@ -257,11 +262,19 @@ class PPU:
         self._recent.append(self.mode)
         lagged = self._recent.pop(0)
         self.mode0_dots = self.mode0_dots + 1 if self.mode == 0 else 0
-        lag = MODE0_READ_LAG if not (self.penalised or self.window_used) else MODE_READ_LAG
+        lag = (
+            (MODE0_READ_LAG_DS if self.double_speed else MODE0_READ_LAG)
+            if not (self.penalised or self.window_used)
+            else MODE_READ_LAG
+        )
         if lagged == 3 and self.mode == 0 and self.mode0_dots > lag:
             lagged = 0  # the end of mode 3 shows up in STAT sooner than the start of it does
         if lagged == 1 and self.mode == 2:
             lagged = 0  # the first dots of line 0 read as mode 0, not VBlank's 1
+        if self.pal_hold:
+            self.pal_hold -= 1
+        if self.read_mode == 3 and lagged != 3:
+            self.pal_hold = PAL_HOLD_DS if self.double_speed else 0
         self.read_mode = lagged
         self._update_stat_line()
 
@@ -909,7 +922,7 @@ class PPU:
     @property
     def palettes_blocked(self) -> bool:
         """Palette RAM is out of reach of the CPU while the LCD is drawing (Pan Docs Palettes.md)."""
-        return self.lcd_on and self.read_mode == 3
+        return self.lcd_on and (self.read_mode == 3 or self.pal_hold > 0)
 
     def read_palette(self, obj: bool) -> int:
         if self.palettes_blocked:
