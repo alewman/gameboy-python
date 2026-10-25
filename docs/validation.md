@@ -495,9 +495,12 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   ROMs: per directory, up to 10 whose verdict flipped across the fitting sweeps and the pass lists'
   history, plus 2 stable passes. It reports regressions and gains against the pass lists. The whole
   lists and slow suites stay the gate before a commit; with `--list`, the same runner spreads the
-  pytest suites over cores (5.3 hours of wall clock here; the serial run reached a third in 7). The
-  PPU has 86 attributes at f31b320 (90 now), past PyPy's 80 at which an instance turns into a
-  dict: a likely part of every sweep's slowness, open.
+  pytest suites over cores (5.3 hours of wall clock here; the serial run reached a third in 7).
+* **PyPy and the PPU's attributes (2026-10-25)**: the PPU had 86 attributes at f31b320 (90 after
+  the SCX work), past the 79 PyPy keeps in a fixed layout, so it and its shadow were dicts.
+  `__slots__` lifts the limit: dmg-acid2 runs 3.1 -> 9.3 frames per CPU-second and cgb-acid2
+  0.88 -> 7.3. The smoke gate went from 8 minutes to under 4. `tests/test_pypy_layout.py` fails
+  if any object of the board reaches 80 attributes without slots.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays

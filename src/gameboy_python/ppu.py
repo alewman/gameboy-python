@@ -87,6 +87,24 @@ def _ignore_irq(bit: int) -> None:
 
 
 class PPU:
+    # PyPy keeps an instance's attributes in a fixed layout only up to 79; past that every
+    # ``self.x`` is a dict lookup. Slots have no such limit: with them dmg-acid2 runs 3x as fast
+    # and cgb-acid2 8x (tests/test_pypy_layout.py keeps it so).
+    __slots__ = (
+        "_recent", "_sources", "bcps", "bg", "bg_pal", "bgp", "bgp_glitch", "cgb", "cgb_mode",
+        "dot", "double_speed", "drawing", "dropped", "dummy", "early_fired", "early_lyc153",
+        "f_dot", "f_events", "f_step", "fetch_col", "frame", "framebuffer", "frames", "free_skip",
+        "glitching", "hblank_early", "irq_early_by", "irq_halt_delay", "is_shadow", "lcdc",
+        "lcdc_hist", "line0", "line_objs", "ly", "ly153_dots", "lyc", "lyc_flag", "m3", "mode",
+        "mode0_dot", "mode0_dots", "mode3_start", "next_obj", "oam", "obj_dots", "obj_entry",
+        "obj_fifo", "obj_hi", "obj_high_at", "obj_lo", "obj_low_at", "obj_pal", "obj_tiles_waited",
+        "obj_wait_left", "obp0", "obp1", "ocps", "opri", "pal_hold", "penalised", "pipe",
+        "raise_irq", "read_mode", "scx", "scx_hist", "scy", "scy_hist", "shadow", "skip",
+        "skip_scan", "stat_blocking", "stat_line", "stat_select", "stat_write_glitch", "sub",
+        "t1_obj", "t1_x", "ticket", "ticket_col", "vram", "vram_bank", "win_started_wx",
+        "window_active", "window_line", "window_used", "wx", "wx_hist", "wy", "wy_hit", "x"
+    )
+
     def __init__(
         self,
         raise_irq: Callable[[int], None],
