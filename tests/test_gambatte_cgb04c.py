@@ -1,6 +1,6 @@
 """Gambatte's ``cgb04c`` hardware tests on the CGB E board: keep passing what it passes today.
 
-``tests/gambatte_cgb04c_pass.txt`` (2,120 verdicts, written by ``scripts/gambatte_dmg08.py --cgb
+``tests/gambatte_cgb04c_pass.txt`` (2,565 verdicts, written by ``scripts/gambatte_dmg08.py --cgb
 --skip-boot --write``) lists them; this holds every STRIDE-th one, from the CGB post-boot state.
 Gambatte's reference is a CPU CGB C (04c); the board is a CGB E, so the open items are not all
 bugs (docs/validation.md "Results: milestone 7"). Rerun the script after a change that touches
@@ -36,6 +36,6 @@ def _runner():
 @pytest.mark.parametrize("name,kind", ENTRIES)
 def test_passes(name, kind):
     runner = _runner()
-    rom = next(SUITE.rglob(name))
+    rom = SUITE / name
     results = runner.run((rom, True, False, True))
     assert any(ok for _n, k, ok, _sb in results if k == kind), f"{name} [{kind}]"

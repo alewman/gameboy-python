@@ -1,6 +1,6 @@
 """Gambatte's ``dmg08`` hardware tests: the board must keep passing what it passes today.
 
-``tests/gambatte_dmg08_pass.txt`` (1,418 verdicts, written from ``scripts/gambatte_dmg08.py --json``)
+``tests/gambatte_dmg08_pass.txt`` (1,462 verdicts, written from ``scripts/gambatte_dmg08.py --json``)
 lists them; running all takes hours, so this holds every STRIDE-th one, from the post-boot state
 (the real-boot run gave the same total). Rerun the script after a change that touches timing.
 """
@@ -34,6 +34,6 @@ def _runner():
 @pytest.mark.parametrize("name,kind", ENTRIES)
 def test_passes(name, kind):
     runner = _runner()
-    rom = next(SUITE.rglob(name))
+    rom = SUITE / name
     results = runner.run((rom, True, False, False))
     assert any(ok for _n, k, ok, _sb in results if k == kind), f"{name} [{kind}]"

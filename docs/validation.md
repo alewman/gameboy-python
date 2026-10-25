@@ -467,6 +467,37 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   left (about 13) want mode 0 one dot earlier than any read lag gives; in double speed that is
   inside an M-cycle, the same sub-M-cycle phase as the `tima`/`ch2_nr52` pairs. The largest group
   SameBoy passes, `scx_during_m3`, fails in single speed and on DMG too (fetcher, above).
+* **SCX in mode 3 (2026-10-25)**: the map column is now SameBoy's, `(SCX + position + 8 - (cgb
+  && !during_object_fetch)) / 8`. The position is taken at the map step's first dot, and SCX
+  `SCX_COL_DOT` (2) dots later; once an object has been fetched on the line it is
+  `SCX_COL_DOT_OBJ` (5), because our fetches after one run 3 dots early against SameBoy's
+  (instrumented SameBoy fetch logs). Column 0 takes `SCX >> 3` at its step's first dot. The
+  fine scroll is no longer latched at the start of the line: pixels are dropped until their count
+  matches `SCX & 7`, seen `SKIP_LAG` (7) dots late (SameBoy compares from dot 89; ours compares
+  later). The CGB's -1 is skipped for a map step begun during an object fetch, which cgb-acid2
+  needs (120 pixels off without it). Gambatte `scx_during_m3`: DMG 3 -> 37 of 44, CGB 58 of 97.
+  Gambatte DMG pass list 1,426 -> 1,462 and CGB 2,506 -> 2,565, nothing lost. The gains outside
+  the group are `m2int_m3stat/scx` `late_scx4_*` and `enable_display`
+  `ly0_late_scx7_m3stat_scx0_1`. dmg-acid2, cgb-acid2 and Mealybug `m3_scx_high_5_bits` and
+  `m3_scx_low_3_bits` stay exact (all 24 Mealybug scores unchanged), and Mooneye, blargg,
+  GBMicrotest 481 and AGE 8 are unchanged. Sweeps: `SKIP_LAG` 2-5 give 30-31 of the DMG group, 6
+  gives 35 but breaks `m3_scx_low_3_bits`, 7 gives 37 and 8 gives 36. `SCX_COL_DOT`/`_OBJ` at
+  2/5 is the only pair that keeps both Mealybug SCX pictures (2/4 and 2/6 break `high_5_bits`).
+  SameBoy fails 3 of the DMG group too (`scx_0761c0` v2 and v3, `scx_m3_extend`). Of the 7 the
+  board fails, 4 differ only on row 0 (line-0 interrupt timing, open) and the rest are `spx0/1/2`.
+* **Pass lists keyed by path (2026-10-25)**: `scripts/gambatte_dmg08.py` named results by file name,
+  and the `scx_during_m3/scx_*` subdirectories repeat names, so verdicts collided. Results and both
+  pass lists are now keyed by the ROM's path in the suite. The DMG list was also stale: regenerated
+  at f31b320 it held 1,426, not 1,418 (+9 `bgtilemap`/`late_wx`, -1 `late_wx_wx03_2`).
+* **The smoke gate**: `scripts/smoke.py` runs `tests/smoke.txt`, a curated slice for the loop
+  between edits. It holds the classics that must stay exact (acid2, the exact Mealybug pictures,
+  Mooneye, blargg timing and OAM bug, cgb-acid2, AGE and SameSuite register tests) and 315 Gambatte
+  ROMs: per directory, up to 10 whose verdict flipped across the fitting sweeps and the pass lists'
+  history, plus 2 stable passes. It reports regressions and gains against the pass lists. The whole
+  lists and slow suites stay the gate before a commit; with `--list`, the same runner spreads the
+  pytest suites over cores (5.3 hours of wall clock here; the serial run reached a third in 7). The
+  PPU has 86 attributes at f31b320 (90 now), past PyPy's 80 at which an instance turns into a
+  dict: a likely part of every sweep's slowness, open.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays

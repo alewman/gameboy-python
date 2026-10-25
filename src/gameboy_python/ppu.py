@@ -54,6 +54,16 @@ LCDC_DELAY = 3
 BGP_DELAY = 1
 SCY_LAG = 4
   # FITTED (Gambatte scy/scy_during_m3_*): dots a SCY write takes to reach the fetcher
+# FITTED (Gambatte scx_during_m3, Mealybug m3_scx_high_5_bits, dmg-acid2, cgb-acid2; SameBoy
+# display.c's fetcher, x = (SCX + position + 8 - (cgb && !during_object_fetch)) / 8): a map read
+# takes its column from SCX this many dots after its step's first dot, and the screen position at
+# that first dot
+SCX_COL_DOT = 2
+SCX_COL_DOT_OBJ = 5  # ... once an object has been fetched (our fetches then run 3 dots early)
+SCX_COL0_DOT = 0  # column 0: SCX >> 3 at its step's first dot (scx_during_m3 variants 3 and 4)
+# FITTED (Gambatte scx_during_m3, Mealybug m3_scx_low_3_bits): dots late the fine-scroll drop
+# sees SCX
+SKIP_LAG = 7
 OBP_DELAY = 4
 BG_MAP_LAG = 4  # FITTED (Gambatte bgtilemap): dots LCDC.3 (map select) arrives late at the fetcher
 BG_DATA_LAG = 4  # ... and LCDC.4 (tile data select); both make Gambatte bgtilemap/bgtiledata rows below the sprites exact
@@ -62,7 +72,6 @@ OBJ_SIZE_LAG = 0  # FITTED (Mealybug): dots LCDC.2 arrives late at an object fet
 MAP_SHIFT = 4
 LOW_SHIFT = 4
 HIGH_SHIFT = 4
-SKIP_LATCH_DOT = 4  # FITTED (Mealybug m3_scx_low_3_bits): last dot SCX's low bits are read
 MAP_READ_DOT = LOW_READ_DOT = HIGH_READ_DOT = 2  # which dot (1 or 2) of its step each fetch reads
 OBJ_FETCH_DOTS = 6
 FIRST_OBJECT_DISCOUNT = 3  # FITTED to Mooneye ppu/intr_2_mode0_timing_sprites
@@ -122,6 +131,7 @@ class PPU:
         self.f_events: list[list[int]] = []  # deferred fetcher reads [dots left, step]
         self.wx_hist = [0] * 16
         self.scy_hist = [0] * 16
+        self.scx_hist = [0] * 16
         self.lcdc_hist = [0] * 16  # LCDC as of each of the last dots (for the lagged bits)
         self.stat_select = 0  # STAT bits 6-3 as written
         self.scy = self.scx = 0
@@ -235,6 +245,8 @@ class PPU:
         del self.wx_hist[0]
         self.scy_hist.append(self.scy)
         del self.scy_hist[0]
+        self.scx_hist.append(self.scx)
+        del self.scx_hist[0]
         self.dot += 1
         if self.dot >= DOTS_PER_LINE:
             self._next_line()
@@ -403,7 +415,9 @@ class PPU:
         self.drawing = True
         self.x = 0
         self.m3 = 0
-        self.skip = self.scx & 7  # latched now: later SCX writes move tiles, not the fine scroll
+        # the fine scroll: pixels are dropped until their count matches SCX's low bits (SameBoy)
+        self.skip = 1
+        self.dropped = 0
         self.next_obj = 0
         self.window_active = False
         self.free_skip = 0
@@ -411,6 +425,8 @@ class PPU:
         self.obj_fifo: list[tuple[int, int, int]] = []  # (colour, flags, OAM index) for the next pixels
         self.f_step = 0  # 0 tile, 1 data low, 2 data high, 3 waiting to push
         self.f_dot = 0
+        self.t1_x = 0
+        self.t1_obj = False
         self.fetch_col = 0
         self.dummy = True  # the first fetch is thrown away (Pan Docs Rendering.md, "first12")
         self.penalised = False  # an object has been fetched on this line
@@ -424,7 +440,9 @@ class PPU:
     def _lcdc_ago(self, lag: int) -> int:
         return self.lcdc_hist[-lag] if lag else self.lcdc
 
-    def _fetch_read(self, step: int, ticket: list[int], window: bool, col: int) -> None:
+    def _fetch_read(
+        self, step: int, ticket: list[int], window: bool, col: int, pos: int = 0, obj: bool = False
+    ) -> None:
         """The VRAM read of one fetcher step, with the registers as they are *now*; ``ticket``
         collects a tile's [map byte, data low, data high, done]."""
         if not self.is_shadow:  # this PPU only needs the timing, not the data
@@ -439,7 +457,14 @@ class PPU:
             else:
                 base = 0x1C00 if lcdc & 8 else 0x1800
                 row = (self.ly + self.scy) & 255
-                index = base + (row >> 3) * 32 + (((self.scx >> 3) + col) & 31)
+                # this read runs MAP_SHIFT + MAP_READ_DOT - 1 dots after its step's first dot
+                ago = MAP_SHIFT + MAP_READ_DOT
+                if not col:
+                    tile_x = (self.scx_hist[SCX_COL0_DOT - ago] >> 3) & 31
+                else:
+                    scx = self.scx_hist[(SCX_COL_DOT_OBJ if self.penalised else SCX_COL_DOT) - ago]
+                    tile_x = ((scx + pos + 8 - (self.cgb and not obj)) >> 3) & 31
+                index = base + (row >> 3) * 32 + tile_x
             ticket[0] = self.vram[index]
             if self.cgb_mode:
                 ticket[4] = self.vram[0x2000 + index]  # the tile's attributes, from bank 1
@@ -470,12 +495,16 @@ class PPU:
         step = self.f_step
         if step < 3:
             self.f_dot += 1
+            if self.f_dot == 1 and step == 0:
+                self.t1_x = self.x  # the map column's position is taken on the step's first dot
+                self.t1_obj = self.obj_entry is not None  # ... during an object's fetch
             if self.f_dot == (MAP_READ_DOT, LOW_READ_DOT, HIGH_READ_DOT)[step]:
                 if step == 0:
                     self.ticket = [0, 0, 0, 0, 0]
                     self.ticket_col = self.fetch_col
                     self.fetch_col += 1
-                args = (step, self.ticket, self.window_active, self.ticket_col)
+                args = (step, self.ticket, self.window_active, self.ticket_col, self.t1_x)
+                args += (self.t1_obj,)
                 shift = (MAP_SHIFT, LOW_SHIFT, HIGH_SHIFT)[step]
                 if shift:
                     self.f_events.append([shift, *args])
@@ -568,8 +597,6 @@ class PPU:
 
     def _step_pixel(self) -> None:
         self.m3 += 1
-        if self.m3 <= SKIP_LATCH_DOT:
-            self.skip = self.scx & 7  # the fine scroll is read here, then frozen for the line
         if self.obj_dots:
             self._object_dot()
             return
@@ -581,6 +608,8 @@ class PPU:
                 self._start_object_fetch(self.obj_entry)
             return
         lcdc = self.lcdc
+        if self.skip and self.bg and self.dropped == self.scx_hist[-1 - SKIP_LAG] & 7:
+            self.skip = 0  # the next pixel is the first one shown
         if self.bg and not self.skip:
             x = self.x
             lag = SHADOW_WX_LAG if self.is_shadow else WX_LAG
@@ -633,7 +662,7 @@ class PPU:
         if self.bg:
             colour = self.bg.pop(0)  # (ticket, bit): resolved when the pixel is coloured
             if self.skip:
-                self.skip -= 1
+                self.dropped = (self.dropped + 1) & 7
             else:
                 obj = self.obj_fifo.pop(0) if self.obj_fifo else (0, 0, 255)
                 d = self.dot

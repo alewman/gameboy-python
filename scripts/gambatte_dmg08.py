@@ -140,9 +140,14 @@ def run(args: tuple[Path, bool, bool, bool]) -> list[tuple[str, str, bool, bool 
     ours = judge(frame, tests, cgb)
     theirs = sameboy(rom) if with_sameboy and not cgb else [None] * len(tests)
     return [
-        (rom.name, k, ok, sb)
+        (suite_name(rom), k, ok, sb)
         for (k, _), ok, sb in zip(tests, ours, theirs, strict=True)
     ]
+
+
+def suite_name(rom: Path) -> str:
+    """A ROM's path inside the suite: file names repeat across directories (scx_during_m3/*)."""
+    return rom.relative_to(SUITE).as_posix() if rom.is_relative_to(SUITE) else rom.name
 
 
 def sameboy(rom: Path) -> list[bool]:
@@ -195,7 +200,7 @@ def main() -> int:
         args.json.write_text(json.dumps([[*r[:2], r[2], r[3]] for r in results]))
     passed = [r for r in results if r[2]]
     print(f"{len(passed)} of {len(results)} agree with the DMG-08 ({len(roms)} ROMs)", flush=True)
-    where = {p.name: p for p in roms}
+    where = {suite_name(p): p for p in roms}
     by_dir: dict[str, list[int]] = {}
     for name, _kind, ok, _sb in results:
         tally = by_dir.setdefault(where[name].parent.name, [0, 0])
