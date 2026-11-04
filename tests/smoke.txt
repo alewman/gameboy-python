@@ -108,6 +108,8 @@ dmg scx_during_m3/scx_0367c0/scx_during_m3_6.gbc
 dmg scx_during_m3/scx_0761c0/scx_during_m3_6.gbc
 dmg scx_during_m3/scx_m3_extend_1_dmg08_cgb04c_out3.gbc
 dmg scx_during_m3/scx_m3_extend_2_dmg08_cgb04c_out0.gbc
+dmg scx_during_m3/scx_0360c0/scx_during_m3_2.gbc
+dmg scx_during_m3/scx_during_m3_spx0.gbc
 dmg scy/scx3/scy_during_m3_1.gbc
 dmg scy/scy_during_m3_spx0B_2.gbc
 dmg serial/div_write_start_wait_read_if_1_dmg08_cgb04c_outE0.gbc
@@ -150,6 +152,7 @@ cgb bgtilemap/bgtilemap_spx0A_3.gbc
 cgb bgtilemap/bgtilemap_spx0B_1.gbc
 cgb bgtilemap/bgtilemap_spx0B_2.gbc
 cgb bgtilemap/bgtilemap_spx0B_4.gbc
+cgb bgtilemap/bgtilemap_spx08_ds_3.gbc
 cgb cgbpal_m3/cgbpal_m3end_scx5_ds_1_cgb04c_out7.gbc
 cgb cgbpal_m3/cgbpal_m3end_scx5_ds_3_cgb04c_out0.gbc
 cgb cgbpal_m3/cgbpal_m3end_2_cgb04c_out0.gbc
@@ -272,8 +275,12 @@ cgb scx_during_m3/scx_0367c0/scx_during_m3_ds_8.gbc
 cgb scx_during_m3/scx_m3_extend_ds_1_cgb04c_out3.gbc
 cgb scx_during_m3/scx_m3_extend_2_dmg08_cgb04c_out0.gbc
 cgb scx_during_m3/scx_m3_extend_ds_2_cgb04c_out0.gbc
+cgb scx_during_m3/scx_0360c0/scx_during_m3_ds_2.gbc
+cgb scx_during_m3/scx_0367c0/scx_during_m3_ds_5.gbc
+cgb scx_during_m3/scx_0761c0/scx_during_m3_ds_7.gbc
 cgb scy/scx3/scy_during_m3_1.gbc
 cgb scy/scy_during_m3_spx0B_4.gbc
+cgb scy/scy_during_m3_spx08_ds_3.gbc
 cgb serial/div_write_start_wait_read_if_1_dmg08_cgb04c_outE0.gbc
 cgb serial/start_wait_trigger_int8_read_if_ds_2_cgb04c_outE0.gbc
 cgb sound/ch1_init_reset_sweep_counter_timing_nr52_1_dmg08_cgb04c_out1.gbc
@@ -337,3 +344,7 @@ cgb window/late_wx_scx5_ds_1_cgb04c_out0.gbc
 cgb window/late_wx_wx0f_1_dmg08_cgb04c_out0.gbc
 cgb window/arg/late_enable_afterVblank_3_dmg08_cgb04c_out3.gbc
 cgb window/reenable_ds_cgb04c_out3.gbc
+cgb window/late_enable_afterVblank_ds_1_cgb04c_out3.gbc
+cgb window/late_enable_afterVblank_ds_2_cgb04c_out0.gbc
+cgb window/late_enable_ly0_ds_1_cgb04c_out3.gbc
+cgb window/late_enable_ly0_ds_2_cgb04c_out0.gbc

@@ -64,6 +64,12 @@ SCX_COL0_DOT = 0  # column 0: SCX >> 3 at its step's first dot (scx_during_m3 va
 # FITTED (Gambatte scx_during_m3, Mealybug m3_scx_low_3_bits): dots late the fine-scroll drop
 # sees SCX
 SKIP_LAG = 7
+# FITTED (Gambatte scx_during_m3_ds_*, against SameBoy CGB E's fetch log): in double speed the
+# drawing PPU sees SCX writes this many dots late (they reach ours 4 dots before SameBoy's)
+DS_SCX_LAG = 4
+# FITTED (Gambatte scx_during_m3_ds_* row 0): in double speed line 0's OAM interrupt also comes
+# early, by one M-cycle (SameBoy's line-0 writes land one M-cycle after line 1's, ours two)
+EARLY_LINE0_DS = 2
 OBP_DELAY = 4
 BG_MAP_LAG = 4  # FITTED (Gambatte bgtilemap): dots LCDC.3 (map select) arrives late at the fetcher
 BG_DATA_LAG = 4  # ... and LCDC.4 (tile data select); both make Gambatte bgtilemap/bgtiledata rows below the sprites exact
@@ -317,7 +323,7 @@ class PPU:
             | (self._lcdc_ago(BG_DATA_LAG) & 0x10)
         )
         shadow.cgb_mode, shadow.opri = self.cgb_mode, self.opri
-        shadow.scx = self.scx
+        shadow.scx = self.scx_hist[-DS_SCX_LAG] if self.double_speed else self.scx
         shadow.scy = self.scy_hist[-SCY_LAG] if SCY_LAG else self.scy
         shadow.wx, shadow.wy = self.wx, self.wy
         shadow.bgp, shadow.obp0, shadow.obp1 = self.bgp, self.obp0, self.obp1
@@ -480,7 +486,10 @@ class PPU:
                 if not col:
                     tile_x = (self.scx_hist[SCX_COL0_DOT - ago] >> 3) & 31
                 else:
-                    scx = self.scx_hist[(SCX_COL_DOT_OBJ if self.penalised else SCX_COL_DOT) - ago]
+                    d = SCX_COL_DOT_OBJ if self.penalised else SCX_COL_DOT
+                    if obj:  # begun during an object fetch: SameBoy reads after it, SCX at the read
+                        d = ago - 1
+                    scx = self.scx_hist[d - ago]
                     tile_x = ((scx + pos + 8 - (self.cgb and not obj)) >> 3) & 31
                 index = base + (row >> 3) * 32 + tile_x
             ticket[0] = self.vram[index]
@@ -515,6 +524,10 @@ class PPU:
             self.f_dot += 1
             if self.f_dot == 1 and step == 0:
                 self.t1_x = self.x  # the map column's position is taken on the step's first dot
+                if self.skip and self.dropped > (self.scx & 7):
+                    # the drop has passed SCX's low bits and will wrap: SameBoy's position went
+                    # back by 8 (Gambatte scx_during_m3 scx_0360c0)
+                    self.t1_x = self.dropped - 8
                 self.t1_obj = self.obj_entry is not None  # ... during an object's fetch
             if self.f_dot == (MAP_READ_DOT, LOW_READ_DOT, HIGH_READ_DOT)[step]:
                 if step == 0:
@@ -801,6 +814,12 @@ class PPU:
                 self.irq_halt_delay = OAM_IRQ_EARLY
                 self.irq_early_by = OAM_IRQ_EARLY
                 self.raise_irq(1)
+        line0_dot = DOTS_PER_LINE - EARLY_LINE0_DS
+        line0_early = self.double_speed and self.ly == LAST_LINE and self.dot == line0_dot
+        if line0_early and select & 0x20 and not self.stat_line:
+            self.early_fired = True
+            self.irq_halt_delay = self.irq_early_by = EARLY_LINE0_DS
+            self.raise_irq(1)
         if rising:
             if self.early_lyc153 and self.ly == LAST_LINE and not oam:
                 self.early_lyc153 = False  # already raised, early

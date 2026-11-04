@@ -501,6 +501,24 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   `__slots__` lifts the limit: dmg-acid2 runs 3.1 -> 9.3 frames per CPU-second and cgb-acid2
   0.88 -> 7.3. The smoke gate went from 8 minutes to under 4. `tests/test_pypy_layout.py` fails
   if any object of the board reaches 80 attributes without slots.
+* **SCX in mode 3, the rest (2026-11-04)**: four changes, checked against instrumented SameBoy
+  DMG and CGB E fetch logs. (1) When the fine-scroll drop has passed `SCX & 7` and will wrap, the
+  map column's position is the drop count minus 8 (SameBoy's position goes back by 8; Gambatte
+  `scx_0360c0`). (2) A map step begun during an object fetch reads SCX at the read itself, since
+  SameBoy reads after the fetch. (3) In double speed the drawing PPU sees SCX `DS_SCX_LAG` (4) dots
+  late: SCX writes reach ours 4 dots before SameBoy's. (4) In double speed line 0's OAM interrupt
+  also comes early, by `EARLY_LINE0_DS` (2) dots (SameBoy's line-0 writes land one M-cycle after
+  line 1's, ours two); the same rule in single speed broke 16 ROMs and was dropped. Gambatte
+  `scx_during_m3`: DMG 37 -> 41 of 44, CGB 58 -> 84 of 97. Pass lists DMG 1,462 -> 1,466 (nothing
+  lost) and CGB 2,565 -> 2,591 (31 gained, 5 lost). Of the losses SameBoy CGB E fails 3
+  (`lyc153int_m2irq_ifw_ds_1_out2`, `scy_during_m3_ds_5`,
+  `late_enable_afterVblank_ds_lcdoffset1_2`); the other 2 (`late_enable_afterVblank_ds_2`,
+  `late_enable_ly0_ds_2`) trade with their `_1` halves, which now pass, so those window line-0
+  pairs straddle one double-speed M-cycle (open; a line-0 window lag did not settle them).
+  Telling the shadow PPU it runs in double speed was tried and is wrong: it took the timing PPU's
+  first-object discount (2) and lost `bgtilemap_spx08_ds_2/3`. Mealybug, dmg-acid2, cgb-acid2,
+  pytest, GBMicrotest 481 and AGE 8 are unchanged. Open: DMG `scx_0761c0` v4 (SameBoy passes; v2
+  and v3 SameBoy fails too), and on CGB the `spx2_ds` variants and `scx_0761c0` ds 3-6.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
