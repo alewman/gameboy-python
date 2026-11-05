@@ -519,6 +519,28 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   first-object discount (2) and lost `bgtilemap_spx08_ds_2/3`. Mealybug, dmg-acid2, cgb-acid2,
   pytest, GBMicrotest 481 and AGE 8 are unchanged. Open: DMG `scx_0761c0` v4 (SameBoy passes; v2
   and v3 SameBoy fails too), and on CGB the `spx2_ds` variants and `scx_0761c0` ds 3-6.
+* **OAM DMA write conflicts on DMG (2026-11-04)**: a CPU write on the bus the DMA is reading never
+  reaches memory; the byte lands in OAM at the DMA's current index, as written when the source is
+  the cartridge (ROM or SRAM) and ANDed with the DMA's byte when it is WRAM. We stored the write
+  and ANDed every source. The `busypush` ROMs push $55AA during the transfer and print the two OAM
+  bytes and the stack's memory, which shows both rules. Gambatte DMG `oamdma` 293 -> 377 of 393
+  (all 156 `busypush` pass), pass list 1,466 -> 1,550, nothing lost.
+* **CGB DMA after the opcode fetch**: SameBoy (`GB_cpu_run`) runs a pending HDMA/GDMA block after
+  the next instruction's opcode fetch, not before it, and never on a dispatch's discarded fetch;
+  the board now does the same, with SameBoy's start-up (2 units, 4 in double speed). Gambatte CGB
+  `dma` +4 (`gdma_cycles_2xshort_ds_1` x2, `hdma_pc_7ffe`, a `halt_late_unhalt` HDMA) and
+  `irq_precedence` -4 (`*hdma_vs_*`; SameBoy CGB E fails those four too). Mooneye `boot_div`
+  holds. Tried and dropped: one more unit at the end of a GDMA passes the nine
+  `gdma_cycles_*_2`/`gdma_weird_2` from the real boot ROM but does nothing from the skip-boot state
+  the pass lists use, so it fits the phase the boot leaves, not the transfer (open).
+* **WY and LYC writes on CGB**: SameBoy compares a written WY at the next 4-dot boundary, on CGB a
+  phase later than on DMG, and lands a CGB single-speed LYC write a T-cycle later than DMG's
+  (`cgb_conflict_map`). On CGB the board compares WY `WY_WAIT_CGB` (5) dots after the write (DMG
+  keeps the immediate compare) and lands LYC `LYC_WAIT_CGB` (1) dot late. Gambatte `window`
+  207 -> 217 of 273 (the `late_wy_*_2` halves whose DMG and CGB answers differ; 4 gives 216, 6
+  loses the `_1` halves) and `lycEnable` 109 -> 111 (1-3 agree; 4 gains 7 and loses the three
+  `lcdoffset1` ones). With the DMA order, the CGB pass list goes 2,591 -> 2,603 (16 gained, the 4
+  `irq_precedence` ones lost); pytest, Mooneye CGB from the real boot ROM (58/58) and AGE 8 hold.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays

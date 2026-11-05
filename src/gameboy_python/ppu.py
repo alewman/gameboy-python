@@ -67,6 +67,14 @@ SKIP_LAG = 7
 # FITTED (Gambatte scx_during_m3_ds_*, against SameBoy CGB E's fetch log): in double speed the
 # drawing PPU sees SCX writes this many dots late (they reach ours 4 dots before SameBoy's)
 DS_SCX_LAG = 4
+# FITTED (Gambatte window/arg/late_wy_*_2, CGB 207 -> 217 of 273 in window): on CGB a written WY is
+# compared this many dots later (SameBoy runs the compare at the next 4-dot boundary, on CGB one
+# phase later than on DMG); 4-5 gain, 6 loses the _1 halves, DMG keeps the immediate compare
+WY_WAIT_CGB = 5
+# SameBoy (sm83_cpu.c cgb_conflict_map, LYC = GB_CONFLICT_WRITE_CPU against DMG's READ_OLD): on CGB
+# at single speed a LYC write lands this many dots later (Gambatte lycEnable +2; 1-3 agree, 4 trades
+# the lcdoffset1 halves)
+LYC_WAIT_CGB = 1
 # FITTED (Gambatte scx_during_m3_ds_* row 0): in double speed line 0's OAM interrupt also comes
 # early, by one M-cycle (SameBoy's line-0 writes land one M-cycle after line 1's, ours two)
 EARLY_LINE0_DS = 2
@@ -101,14 +109,15 @@ class PPU:
         "dot", "double_speed", "drawing", "dropped", "dummy", "early_fired", "early_lyc153",
         "f_dot", "f_events", "f_step", "fetch_col", "frame", "framebuffer", "frames", "free_skip",
         "glitching", "hblank_early", "irq_early_by", "irq_halt_delay", "is_shadow", "lcdc",
-        "lcdc_hist", "line0", "line_objs", "ly", "ly153_dots", "lyc", "lyc_flag", "m3", "mode",
+        "lcdc_hist", "line0", "line_objs", "ly", "ly153_dots", "lyc", "lyc_flag", "lyc_next",
+        "lyc_wait", "m3", "mode",
         "mode0_dot", "mode0_dots", "mode3_start", "next_obj", "oam", "obj_dots", "obj_entry",
         "obj_fifo", "obj_hi", "obj_high_at", "obj_lo", "obj_low_at", "obj_pal", "obj_tiles_waited",
         "obj_wait_left", "obp0", "obp1", "ocps", "opri", "pal_hold", "penalised", "pipe",
         "raise_irq", "read_mode", "scx", "scx_hist", "scy", "scy_hist", "shadow", "skip",
         "skip_scan", "stat_blocking", "stat_line", "stat_select", "stat_write_glitch", "sub",
         "t1_obj", "t1_x", "ticket", "ticket_col", "vram", "vram_bank", "win_started_wx",
-        "window_active", "window_line", "window_used", "wx", "wx_hist", "wy", "wy_hit", "x"
+        "window_active", "window_line", "window_used", "wx", "wx_hist", "wy", "wy_hit", "wy_wait", "x"
     )
 
     def __init__(
@@ -184,6 +193,8 @@ class PPU:
         self.window_line = 0  # the window's own line counter
         self.window_used = False  # window pixels drawn on this line
         self.wy_hit = False  # WY == LY seen this frame
+        self.wy_wait = 0  # dots until a written WY is compared (CGB)
+        self.lyc_wait = self.lyc_next = 0  # dots until a written LYC lands, and its value (CGB)
         self.pal_hold = 0  # dots the CGB palettes stay locked after read_mode leaves 3
         self.read_mode = 0  # the mode as the CPU sees it: ``mode`` from MODE_READ_LAG dots ago
         self._recent = [0] * MODE_READ_LAG
@@ -274,6 +285,14 @@ class PPU:
         self.dot += 1
         if self.dot >= DOTS_PER_LINE:
             self._next_line()
+        if self.wy_wait:
+            self.wy_wait -= 1
+            if not self.wy_wait:
+                self._compare_wy_now()
+        if self.lyc_wait:
+            self.lyc_wait -= 1
+            if not self.lyc_wait:
+                self._write_lyc_now(self.lyc_next)
         if self.ly < VBLANK_LINE:
             dot = self.dot
             if 0 <= dot < MODE2_END and not self.skip_scan and not dot & 1:
@@ -903,6 +922,12 @@ class PPU:
         """WY==LY is compared whenever either changes, not only at a line's start: a WY written to
         the current line number late in the line still starts the window on the next one
         (Gambatte window/arg/late_wy_*)."""
+        if self.cgb and WY_WAIT_CGB:
+            self.wy_wait = WY_WAIT_CGB
+            return
+        self._compare_wy_now()
+
+    def _compare_wy_now(self) -> None:
         if self.lcd_on and self.ly < VBLANK_LINE and self.ly == self.wy:
             self.wy_hit = True
 
@@ -1007,6 +1032,12 @@ class PPU:
                 self.bcps = spec
 
     def write_lyc(self, value: int) -> None:
+        if self.cgb and not self.double_speed and LYC_WAIT_CGB and self.lcd_on:
+            self.lyc_wait, self.lyc_next = LYC_WAIT_CGB, value
+            return
+        self._write_lyc_now(value)
+
+    def _write_lyc_now(self, value: int) -> None:
         self.lyc = value
         if self.lcd_on:
             self._update_stat_line()

@@ -97,6 +97,9 @@ dmg oam_access/10spritesprline_postread_1_dmg08_cgb04c_out3.gbc
 dmg oam_access/prewrite_3_dmg08_cgb04c_out0.gbc
 dmg oamdma/late_sp00x_2_dmg08_cgb04c_out3.gbc
 dmg oamdma/oamdma_srcFF00_readFE45_dmg08_out1_cgb04c_out0.gbc
+dmg oamdma/oamdma_src0000_busypushC001_dmg08_out55AA1234_cgb04c_out65AA1255.gbc
+dmg oamdma/oamdma_srcC000_busypushC001_dmg08_out45221234_cgb04c_out6576AA34.gbc
+dmg oamdma/oamdma_srcA000_busypushA001_dmg08_cgb04c_out5576AA34.gbc
 dmg scx_during_m3/scx1_scx0_during_m3_1.gbc
 dmg scx_during_m3/scx_0060c0/scx_during_m3_2.gbc
 dmg scx_during_m3/scx_0063c0/scx_during_m3_1.gbc
@@ -173,6 +176,7 @@ cgb dma/hdma_late_m3halt_m2unhalt_ly_scx2_1_cgb04c_out02.gbc
 cgb dma/hdma_m3halt_m0unhalt_ly_1_cgb04c_out02.gbc
 cgb dma/dma_dst_wrap_1_cgb04c_out1.gbc
 cgb dma/late_gdma_pc_7ffe_2_cgb04c_out00.gbc
+cgb dma/hdma_pc_7ffe_cgb04c_out02.gbc
 cgb enable_display/ly0_late_scx7_m3stat_scx0_1_dmg08_cgb04c_out87.gbc
 cgb enable_display/ly0_late_scx7_m3stat_scx0_2_dmg08_out87_cgb04c_out84.gbc
 cgb enable_display/ly0_late_scx7_m3stat_scx0_3_dmg08_cgb04c_out84.gbc
@@ -184,6 +188,7 @@ cgb halt/ifandie_ei_halt_m2int_m0stat_1_dmg08_cgb04c_out0.gbc
 cgb halt/noime_m2irq_m0stat_2_dmg08_cgb04c_out2.gbc
 cgb irq_precedence/hdma_vs_m0_scx2_cgb04c_out0183.gbc
 cgb irq_precedence/late_m0irq_vs_tima_scx3_halt_1_dmg08_cgb04c_out4.gbc
+cgb irq_precedence/late_hdma_vs_ei_scx2_2_cgb04c_out1234.gbc
 cgb lcd_offset/offset1_lyc99int_m0stat_count_scx2_ds_1_cgb04c_out90.gbc
 cgb lcd_offset/offset1_lyc8fint_m1irq_ds_1_cgb04c_outE0.gbc
 cgb lcd_offset/offset3_lyc99int_m3stat_count_1_cgb04c_out90.gbc
@@ -197,6 +202,7 @@ cgb lyc153int_m2irq/lyc153int_m2irq_2_dmg08_cgb04c_out2.gbc
 cgb lyc153int_m2irq/lyc153int_m2irq_late_retrigger_ds_2_cgb04c_out0.gbc
 cgb lycEnable/early_ff41_response_2_cgb04c_out7.gbc
 cgb lycEnable/lycwirq_trigger_ly94_stat50_dmg08_cgb04c_outE0.gbc
+cgb lycEnable/lyc_ff45_trigger_delay_2_dmg08_out0_cgb04c_out2.gbc
 cgb lycint_ly/lycint_ly_1_dmg08_cgb04c_out5.gbc
 cgb lycint_ly/lycint_ly_ds_2_cgb04c_out6.gbc
 cgb lycint_lycflag/lycint_lycflag_1_dmg08_cgb04c_out0.gbc
@@ -348,3 +354,5 @@ cgb window/late_enable_afterVblank_ds_1_cgb04c_out3.gbc
 cgb window/late_enable_afterVblank_ds_2_cgb04c_out0.gbc
 cgb window/late_enable_ly0_ds_1_cgb04c_out3.gbc
 cgb window/late_enable_ly0_ds_2_cgb04c_out0.gbc
+cgb window/arg/late_wy_FFto2_ly2_1_dmg08_cgb04c_out3.gbc
+cgb window/arg/late_wy_FFto2_ly2_2_dmg08_out3_cgb04c_out0.gbc
