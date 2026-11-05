@@ -561,6 +561,33 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   lost. In double speed the same rule loses `preread_ds_2`, so it stays at once there; the OAM
   read lock moved the same way loses 3 and is unchanged. Also tried: a CGB-only early OAM
   interrupt (2 or 0 instead of 4) loses over 40 in the STAT groups.
+* **A halted CGB wakes later (2026-11-05)**: SameBoy's `GB_cpu_run` samples IF before a halted
+  CGB's 4 T (a DMG's halfway), so `HALT_LATE_CGB` adds 2 dots to the HBlank and LY=LYC
+  interrupts' wake on CGB. Gambatte `halt` +8, among them the `*_m0stat_scx3/4_2` pairs the
+  early-HBlank probe could not settle, and `dma/hdma_start` +7. Applied to the line-start OAM
+  interrupt too it fails Mooneye `intr_2_*` from the skip-boot state, so that one, already
+  raised early, is left alone; timer wakes showed no evidence (`tima` passes either way). A
+  longer wake in double speed (6) passes the `halt` ds pairs with a 2-dot STAT lag below but
+  loses 12 double-speed `dma` ROMs, so it stays 2.
+* **Mode 2 in STAT at double speed**: a line's mode 2 shows in STAT from the line's first dot
+  instead of after `MODE_READ_LAG` (`M2_READ_LAG_DS` 0). `halt/m0i*_m0stat_scx2/3_ds_2` +4,
+  `ly0/lycint152_lyc0flag_ds_4` and `oam_access/prewrite_ds_lcdoffset1_2` pass;
+  `lycint_lycflag`/`lycint_m0stat` ds trade their `_1` for their other halves, since
+  `lycint_lycflag_ds_1` reads at the same dot as the halt pairs and wants mode 0. A lag of 2
+  scores one fewer over the ds groups, none (4) five fewer.
+* **HBlank HDMA at the fetch**: an HBlank block now falls due `HDMA_HBLANK_LAG` dots into mode 0
+  (4; 2 in double speed; SameBoy sets `hdma_on` 3 T after mode 0) and is checked when the
+  opcode fetch completes, not when the instruction starts. Gambatte `dma` +30 over b96c9b1 with the
+  halt change, nothing lost: every `hdma_start_*`, `hdma_cycles_*_2` and `gdma_cycles_*_2` (which
+  had passed only from the real boot ROM). Either half alone trades.
+* **CGB STAT writes and the line-start OAM interrupt**: the DMG's write glitch raises the OAM
+  interrupt for a write that clears bit 5 in the last dots of a line; a CGB has no glitch and
+  its source rises 2 dots before the line ends (SameBoy `mode_for_interrupt = 2` at
+  `LINE_LENGTH - 2`), so a CGB write before then cancels the interrupt we raise early for the
+  dispatch (on line 0, a write in its first dot). In double speed the source is 2 dots wide,
+  not 4, except on line 0. Gambatte `m2enable` +7, `m1` +1; `lyc1_late_m2enable_lycdisable_ds_3`
+  lost. SameBoy's CGB-E rule that the LY=LYC interrupt line holds while LY changes at a line's
+  start was tried as a hold of 1, 2 or 4 dots and loses more than it gains in `lycEnable`.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays

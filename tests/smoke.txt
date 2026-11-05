@@ -358,3 +358,10 @@ cgb window/late_enable_ly0_ds_1_cgb04c_out3.gbc
 cgb window/late_enable_ly0_ds_2_cgb04c_out0.gbc
 cgb window/arg/late_wy_FFto2_ly2_1_dmg08_cgb04c_out3.gbc
 cgb window/arg/late_wy_FFto2_ly2_2_dmg08_out3_cgb04c_out0.gbc
+cgb dma/hdma_start_scx5_2_cgb04c_out1.gbc
+cgb dma/gdma_cycles_long_2_cgb04c_out0.gbc
+cgb halt/m0int_m0stat_scx3_2_dmg08_out0_cgb04c_out2.gbc
+cgb halt/m0int_m0stat_scx2_ds_2_cgb04c_out2.gbc
+cgb m2enable/disable_1_dmg08_out2_cgb04c_out0.gbc
+cgb m2enable/disable_ly0_ds_1_cgb04c_out1.gbc
+cgb m2enable/late_enable_ds_2_cgb04c_out0.gbc

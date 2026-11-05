@@ -46,6 +46,7 @@ VBLANK_IF_LATE = 4  # FITTED (GBMicrotest stat_write_glitch_l143_*): IF shows VB
 MODE1_IRQ_DOT = 4  # FITTED (GBMicrotest vblank_int_if_*): the STAT VBlank source comes this late
 LYC_IRQ_EARLY = 4  # the LY=LYC interrupt comes this many dots before the flag shows
 OAM_IRQ_WIDTH = 4  # and lasts this many dots
+OAM_IRQ_WIDTH_DS = 2  # CGB double speed, line 0 excepted (Gambatte m2enable/late_enable_ds_*, m1)
 LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lcdon_timing-GS)
 LINE0_LEAD = 0  # FITTED (Mealybug line_0_fix): on line 0 the pixel pipeline runs this early
 BGP_GLITCH_DOT = 1  # FITTED: the dot, counted from the write's, whose palette is the OR
@@ -79,6 +80,18 @@ WIN_OBJ_STALL_DS = 4
 # at single speed a LYC write lands this many dots later (Gambatte lycEnable +2; 1-3 agree, 4 trades
 # the lcdoffset1 halves)
 LYC_WAIT_CGB = 1
+# CGB: a halted CPU sees the HBlank and LY=LYC interrupts this many dots later than a DMG does
+# (SameBoy GB_cpu_run samples IF before a halted CGB's 4 T, a DMG's halfway; Gambatte halt +8,
+# dma/hdma_start +7). Not the line-start OAM one, already raised early (Mooneye intr_2_*).
+HALT_LATE_CGB = 2
+# FITTED (Gambatte halt/m0i*_m0stat_scx2/3_ds_2 +4, ly0 lycint152_lyc0flag_ds_4, oam_access
+# prewrite_ds_lcdoffset1_2; lycint_lycflag/lycint_m0stat ds trade 2 for 2; 2 scores one fewer):
+# in double speed STAT shows a line's mode 2 this many dots into the line, not MODE_READ_LAG
+M2_READ_LAG_DS = 0
+OAM_RISE_CGB = 2  # SameBoy (mode_for_interrupt = 2 at LINE_LENGTH - 2; no DMG write glitch): a
+# CGB STAT write clearing bit 5 before this many dots from a line's end cancels the OAM interrupt
+# raised early for the dispatch (Gambatte m2enable/disable_*)
+OAM_RISE_LY0_CGB = 2  # ... and on line 0, one written before this dot of the line
 # FITTED (Gambatte scx_during_m3_ds_* row 0): in double speed line 0's OAM interrupt also comes
 # early, by one M-cycle (SameBoy's line-0 writes land one M-cycle after line 1's, ours two)
 EARLY_LINE0_DS = 2
@@ -410,6 +423,8 @@ class PPU:
         )
         if lagged == 3 and self.mode == 0 and self.mode0_dots > lag:
             lagged = 0  # the end of mode 3 shows up in STAT sooner than the start of it does
+        if self.double_speed and lagged == 0 and self.mode == 2 and self.dot >= M2_READ_LAG_DS:
+            lagged = 2  # in double speed a line's mode 2 shows in STAT without the lag
         if lagged == 1 and self.mode == 2:
             lagged = 0  # the first dots of line 0 read as mode 0, not VBlank's 1
         if self.pal_hold:
@@ -935,7 +950,8 @@ class PPU:
             if self.early_lyc153 and self.ly == LAST_LINE and not oam:
                 self.early_lyc153 = False  # already raised, early
             elif self.early_fired and oam:
-                self.early_fired = False  # already raised, early
+                # already raised, early (CGB line 0: a STAT write in this dot can still cancel it)
+                self.early_fired = self.cgb and self.ly == 0
             else:
                 # the early HBlank interrupt, like the OAM one, wakes a halted CPU a cycle later
                 self.irq_halt_delay = self._halt_delay(oam)
@@ -948,6 +964,8 @@ class PPU:
                     self.irq_early_by = MODE1_IRQ_DOT
                     self.irq_halt_delay = 0
                 self.raise_irq(1)
+                if oam and self.cgb and self.ly == 0:
+                    self.early_fired = True  # a STAT write in this dot can still cancel it
         if self.dot == 1:
             self.early_fired = False
             self.early_lyc153 = False
@@ -959,9 +977,10 @@ class PPU:
         hblank_ly_scx_timing), whether it was raised early or on time."""
         if oam:
             return 0
+        late = HALT_LATE_CGB if self.cgb else 0
         if self.hblank_early and self.mode != 0:
-            return 2
-        return 2 if self.mode == 0 and self.select_has_hblank() else 0
+            return 2 + late
+        return (2 if self.mode == 0 and self.select_has_hblank() else 0) + late
 
     def select_has_hblank(self) -> bool:
         return bool(self.stat_select & 0x08)
@@ -1026,7 +1045,8 @@ class PPU:
     def _oam_pulse(self) -> bool:
         """The line-start OAM source: a short pulse at dots 0-3 of each line, VBlank's first line
         included (Mooneye vblank_stat_intr-GS, GBMicrotest lcdon_to_oam_int_l1)."""
-        return self.dot < OAM_IRQ_WIDTH and self.ly <= VBLANK_LINE and not self.line0
+        width = OAM_IRQ_WIDTH_DS if self.double_speed and self.ly else OAM_IRQ_WIDTH
+        return self.dot < width and self.ly <= VBLANK_LINE and not self.line0
 
     # ----- registers ----------------------------------------------------------------------
 
@@ -1035,7 +1055,17 @@ class PPU:
             return 0x80 | self.stat_select | (4 if self.lyc_flag else 0)
         return 0x80 | self.stat_select | (4 if self.lyc_flag else 0) | self.read_mode
 
-    def write_stat(self, value: int) -> None:
+    def write_stat(self, value: int) -> bool:
+        """Write STAT; True when the write cancels the OAM interrupt raised early for the CPU's
+        dispatch (CGB: its source rises later and there is no write glitch to raise it anyway)."""
+        cancel = (
+            self.cgb
+            and self.early_fired
+            and not value & 0x20
+            and self.dot < (OAM_RISE_LY0_CGB if self.ly == 0 else DOTS_PER_LINE - OAM_RISE_CGB)
+        )
+        if cancel:
+            self.early_fired = False
         if self.lcd_on and self.stat_write_glitch:
             # DMG: for the write's cycle every source is enabled, so a source that is true raises
             # the interrupt if the line was low (Pan Docs STAT.md; GBMicrotest stat_write_glitch_*)
@@ -1048,6 +1078,7 @@ class PPU:
         self.stat_select = value & 0x78
         if self.lcd_on:
             self._update_stat_line()
+        return cancel and not self.stat_line
 
     def write_lcdc(self, value: int) -> None:
         was_on = self.lcd_on

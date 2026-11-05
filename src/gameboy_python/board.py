@@ -47,6 +47,10 @@ SERIAL_IF_HIDE = 4  # dots; fitted, see _serial_irq
 # GB_hdma_run's 2, 4 in double speed
 HDMA_START = 2
 HDMA_START_DS = 4
+# FITTED (Gambatte dma/hdma_start_*, hdma_cycles_*, gdma_cycles_* +30, nothing lost; SameBoy
+# sets hdma_on 3 T after mode 0): dots into HBlank before an HBlank block falls due
+HDMA_HBLANK_LAG = 4
+HDMA_HBLANK_LAG_DS = 2
 HDMA_END = 2  # ... and after its last, at single speed; FITTED
 VBLANK_CGB_DELAY = 4  # FITTED (Mooneye misc/ppu/vblank_stat_intr-C)
 TIMER_HALT_DELAY = 4  # FITTED (GBMicrotest int_timer_halt, int_timer_halt_div_b)
@@ -262,6 +266,9 @@ class GameBoy:
         self.dma.tick()
         if self.hdma_hblank:
             mode = self.ppu.mode
+            lag = HDMA_HBLANK_LAG_DS if self.double_speed else HDMA_HBLANK_LAG
+            if mode == 0 and self.ppu.mode0_dots < lag:
+                mode = 3
             if mode == 0 and self._last_mode != 0 and self.ppu.lcd_on:
                 self.hdma_due = True  # an HBlank transfer's next block
             self._last_mode = mode
@@ -321,7 +328,8 @@ class GameBoy:
         self.timer.finish()
         if self._hdma_at_fetch:
             self._hdma_at_fetch = False
-            self._hdma_run()
+            if self.hdma_due:
+                self._hdma_run()
         return value
 
     def _write(self, address: int, value: int) -> None:
@@ -611,7 +619,9 @@ class GameBoy:
         elif low == 0x40:
             self.ppu.write_lcdc(value)
         elif low == 0x41:
-            self.ppu.write_stat(value)
+            if self.ppu.write_stat(value):  # cancelled an OAM interrupt raised early (CGB)
+                self.cpu.if_ &= ~2
+                self._hide &= ~2
         elif low == 0x42:
             self.ppu.scy = value
         elif low == 0x43:
@@ -714,10 +724,10 @@ class GameBoy:
         """Execute one CPU boundary; returns the M-cycles it took (the units have already
         advanced inside the callbacks)."""
         cpu = self.cpu
-        if self.hdma_due:
+        if self.hdma_due or self.hdma_hblank:
             pending = cpu.interrupt_pending
             # SameBoy GB_cpu_run: the transfer runs after the next opcode fetch, not on a
-            # dispatch's discarded one
+            # dispatch's discarded one; an HBlank block that falls due during the fetch included
             self._hdma_at_fetch = (not cpu.halted or pending) and not (cpu.ime and pending)
         return self._cpu_step()
 
