@@ -71,6 +71,10 @@ DS_SCX_LAG = 4
 # compared this many dots later (SameBoy runs the compare at the next 4-dot boundary, on CGB one
 # phase later than on DMG); 4-5 gain, 6 loses the _1 halves, DMG keeps the immediate compare
 WY_WAIT_CGB = 5
+# FITTED (Gambatte sprites/space 9pos8_wx*_m3stat_ds_1, 1pos8_8pos9_wx08: 346 -> 355 of 380): in
+# double speed a window started after an object fetch stalls the pipeline this many dots (3 loses
+# them, 5 loses a _2 half; SameBoy's fetch log puts its mode 3 about 4 dots past ours)
+WIN_OBJ_STALL_DS = 4
 # SameBoy (sm83_cpu.c cgb_conflict_map, LYC = GB_CONFLICT_WRITE_CPU against DMG's READ_OLD): on CGB
 # at single speed a LYC write lands this many dots later (Gambatte lycEnable +2; 1-3 agree, 4 trades
 # the lcdoffset1 halves)
@@ -105,19 +109,100 @@ class PPU:
     # ``self.x`` is a dict lookup. Slots have no such limit: with them dmg-acid2 runs 3x as fast
     # and cgb-acid2 8x (tests/test_pypy_layout.py keeps it so).
     __slots__ = (
-        "_recent", "_sources", "bcps", "bg", "bg_pal", "bgp", "bgp_glitch", "cgb", "cgb_mode",
-        "dot", "double_speed", "drawing", "dropped", "dummy", "early_fired", "early_lyc153",
-        "f_dot", "f_events", "f_step", "fetch_col", "frame", "framebuffer", "frames", "free_skip",
-        "glitching", "hblank_early", "irq_early_by", "irq_halt_delay", "is_shadow", "lcdc",
-        "lcdc_hist", "line0", "line_objs", "ly", "ly153_dots", "lyc", "lyc_flag", "lyc_next",
-        "lyc_wait", "m3", "mode",
-        "mode0_dot", "mode0_dots", "mode3_start", "next_obj", "oam", "obj_dots", "obj_entry",
-        "obj_fifo", "obj_hi", "obj_high_at", "obj_lo", "obj_low_at", "obj_pal", "obj_tiles_waited",
-        "obj_wait_left", "obp0", "obp1", "ocps", "opri", "pal_hold", "penalised", "pipe",
-        "raise_irq", "read_mode", "scx", "scx_hist", "scy", "scy_hist", "shadow", "skip",
-        "skip_scan", "stat_blocking", "stat_line", "stat_select", "stat_write_glitch", "sub",
-        "t1_obj", "t1_x", "ticket", "ticket_col", "vram", "vram_bank", "win_started_wx",
-        "window_active", "window_line", "window_used", "wx", "wx_hist", "wy", "wy_hit", "wy_wait", "x"
+        "_recent",
+        "_sources",
+        "bcps",
+        "bg",
+        "bg_pal",
+        "bgp",
+        "bgp_glitch",
+        "cgb",
+        "cgb_mode",
+        "dot",
+        "double_speed",
+        "drawing",
+        "dropped",
+        "dummy",
+        "early_fired",
+        "early_lyc153",
+        "f_dot",
+        "f_events",
+        "f_step",
+        "fetch_col",
+        "frame",
+        "framebuffer",
+        "frames",
+        "free_skip",
+        "glitching",
+        "hblank_early",
+        "irq_early_by",
+        "irq_halt_delay",
+        "is_shadow",
+        "lcdc",
+        "lcdc_hist",
+        "line0",
+        "line_objs",
+        "ly",
+        "ly153_dots",
+        "lyc",
+        "lyc_flag",
+        "lyc_next",
+        "lyc_wait",
+        "m3",
+        "mode",
+        "mode0_dot",
+        "mode0_dots",
+        "mode3_start",
+        "next_obj",
+        "oam",
+        "obj_dots",
+        "obj_entry",
+        "obj_fifo",
+        "obj_hi",
+        "obj_high_at",
+        "obj_lo",
+        "obj_low_at",
+        "obj_pal",
+        "obj_tiles_waited",
+        "obj_wait_left",
+        "obp0",
+        "obp1",
+        "ocps",
+        "opri",
+        "pal_hold",
+        "penalised",
+        "pipe",
+        "raise_irq",
+        "read_mode",
+        "scx",
+        "scx_hist",
+        "scy",
+        "scy_hist",
+        "shadow",
+        "skip",
+        "skip_scan",
+        "stat_blocking",
+        "stat_line",
+        "stat_select",
+        "stat_write_glitch",
+        "sub",
+        "t1_obj",
+        "t1_x",
+        "ticket",
+        "ticket_col",
+        "vram",
+        "vram_bank",
+        "win_stall",
+        "win_started_wx",
+        "window_active",
+        "window_line",
+        "window_used",
+        "wx",
+        "wx_hist",
+        "wy",
+        "wy_hit",
+        "wy_wait",
+        "x"
     )
 
     def __init__(
@@ -458,6 +543,7 @@ class PPU:
         self.drawing = True
         self.x = 0
         self.m3 = 0
+        self.win_stall = 0
         # the fine scroll: pixels are dropped until their count matches SCX's low bits (SameBoy)
         self.skip = 1
         self.dropped = 0
@@ -647,6 +733,9 @@ class PPU:
 
     def _step_pixel(self) -> None:
         self.m3 += 1
+        if self.win_stall:
+            self.win_stall -= 1
+            return
         if self.obj_dots:
             self._object_dot()
             return
@@ -686,6 +775,8 @@ class PPU:
                 self.window_active = True
                 self.win_started_wx = wx
                 self.window_used = True
+                if self.double_speed and self.penalised:  # an object was fetched before it
+                    self.win_stall = WIN_OBJ_STALL_DS
                 self.bg = []
                 self.f_step = 0
                 self.f_dot = 0

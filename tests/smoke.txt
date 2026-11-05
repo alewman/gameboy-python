@@ -325,6 +325,7 @@ cgb sprites/space/3overlap7_scx3_m3stat_ds_1_cgb04c_out3.gbc
 cgb sprites/space/3overlap8_scx7_m3stat_ds_1_cgb04c_out3.gbc
 cgb sprites/10spritesPrLine_10xposA6_m0irq_1_dmg08_cgb04c_out0.gbc
 cgb sprites/space/9pos8_wx0E_m3stat_ds_2_cgb04c_out0.gbc
+cgb sprites/space/9pos8_wx08_m3stat_ds_1_cgb04c_out3.gbc
 cgb tima/tc00_1stopstart_ff_tma_1_dmg08_cgb04c_outFF.gbc
 cgb tima/tc01_tma_next_2_dmg08_cgb04c_outF1.gbc
 cgb undef_ops/undef_op_d3_dmg08_cgb04c_out01.gbc

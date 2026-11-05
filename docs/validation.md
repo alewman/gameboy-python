@@ -541,6 +541,20 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   loses the `_1` halves) and `lycEnable` 109 -> 111 (1-3 agree; 4 gains 7 and loses the three
   `lcdoffset1` ones). With the DMA order, the CGB pass list goes 2,591 -> 2,603 (16 gained, the 4
   `irq_precedence` ones lost); pytest, Mooneye CGB from the real boot ROM (58/58) and AGE 8 hold.
+* **A window after an object in double speed**: SameBoy's fetch log of `10spritesPrLine_wx1_m3stat_ds`
+  puts its mode 3 about 4 dots past ours. When the window starts after an object has been fetched
+  on the line, in double speed the pipeline now stalls `WIN_OBJ_STALL_DS` (4) dots (FITTED: 3 loses
+  the gains, 5 loses a `_2` half). Gambatte `sprites` 346 -> 355 of 380 (`9pos8_wx*_m3stat_ds_1`,
+  `1pos8_8pos9_wx08`), CGB pass list 2,603 -> 2,612, nothing lost. Open: the
+  `10spritesPrLine_wx1-7_m3stat_ds_1` ROMs, whose window starts at x = 0 before any object; a
+  stall on any line with objects gains them but loses `wx0`-`wx2` `_2`. SameBoy starts a window
+  with WX 1-6 at position WX - 7 (during the first tile's discarded pixels), which the board
+  folds into x = 0; that is the likely mechanism.
+* **Tried and dropped (CGB)**: SameBoy's two-step STAT write (one enable kept for a T-cycle),
+  modelled as a zero-length step, loses 9 in `lycEnable`/`miscmstatirq` and gains none. A
+  CGB-only early HBlank interrupt (0 instead of 2) gains 15 in `halt`/`m0enable` but loses 12 in
+  `m2int_m0irq`; splitting the STAT line's rise from the dispatch's early view moves the
+  trade, so the `*_m0stat_scx3/4_2` pairs (DMG and CGB answers differ) stay open.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
