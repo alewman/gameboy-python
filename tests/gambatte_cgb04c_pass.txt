@@ -201,6 +201,7 @@ dma/hdma_transition_halt_late_unhalt_ldaaimm_hdma_scx1_2_cgb04c_out02.gbc out
 dma/hdma_transition_halt_late_unhalt_scx1_2_cgb04c_outFF.gbc out
 dma/hdma_vs_m0int_pc_scx1_1_cgb04c_out1033.gbc out
 dma/hdma_vs_m0int_pc_scx1_2_cgb04c_out1033.gbc out
+dma/late_gdma_pc_7ffe_1_cgb04c_out02.gbc out
 dma/late_gdma_pc_7ffe_2_cgb04c_out00.gbc out
 enable_display/disable_display_regs_1_dmg08_cgb04c_out66e46666009266666666.gbc out
 enable_display/disable_display_regs_2_dmg08_cgb04c_out66e06666006666666666.gbc out
@@ -2356,10 +2357,12 @@ vram_m3/postread_scx5_2_dmg08_cgb04c_out0.gbc out
 vram_m3/postread_scx5_ds_1_cgb04c_out3.gbc out
 vram_m3/postread_scx5_ds_2_cgb04c_out0.gbc out
 vram_m3/preread_1_dmg08_cgb04c_out0.gbc out
+vram_m3/preread_2_dmg08_out3_cgb04c_out0.gbc out
 vram_m3/preread_3_dmg08_cgb04c_out3.gbc out
 vram_m3/preread_ds_1_cgb04c_out0.gbc out
 vram_m3/preread_ds_2_cgb04c_out3.gbc out
 vram_m3/preread_ds_lcdoffset1_2_cgb04c_out3.gbc out
+vram_m3/preread_lcdoffset1_1_cgb04c_out0.gbc out
 vram_m3/preread_lcdoffset1_2_cgb04c_out3.gbc out
 vram_m3/preread_lcdoffset2_2_cgb04c_out3.gbc out
 vram_m3/prewrite_ds_1_cgb04c_out1.gbc out

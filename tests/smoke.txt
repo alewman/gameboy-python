@@ -335,6 +335,7 @@ cgb vram_m3/preread_ds_lcdoffset1_1_cgb04c_out0.gbc
 cgb vram_m3/prewrite_ds_1_cgb04c_out1.gbc
 cgb vram_m3/10spritesprline_postread_1_dmg08_cgb04c_out3.gbc
 cgb vram_m3/vramw_m3start_2_dmg08_cgb04c_out0.gbc
+cgb vram_m3/preread_2_dmg08_out3_cgb04c_out0.gbc
 cgb vramw_m3end/vramw_m3end_ds_3_cgb04c_out0.gbc
 cgb vramw_m3end/vramw_m3end_ds_5_cgb04c_out1.gbc
 cgb vramw_m3end/vramw_m3end_1_dmg08_cgb04c_out7.gbc

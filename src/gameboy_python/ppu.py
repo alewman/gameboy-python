@@ -339,8 +339,9 @@ class PPU:
     @property
     def vram_locked(self) -> bool:
         return self.lcd_on and (
-            (self.mode == 3 and not self.line0) or self.read_mode == 3
-        )  # locks at once, frees late
+            (self.mode == 3 and not self.line0 and not (self.cgb and not self.double_speed))
+            or self.read_mode == 3
+        )  # locks at once (CGB single speed: with STAT, 4 dots late), frees late
 
     @property
     def oam_locked(self) -> bool:

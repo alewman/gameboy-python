@@ -555,6 +555,12 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   CGB-only early HBlank interrupt (0 instead of 2) gains 15 in `halt`/`m0enable` but loses 12 in
   `m2int_m0irq`; splitting the STAT line's rise from the dispatch's early view moves the
   trade, so the `*_m0stat_scx3/4_2` pairs (DMG and CGB answers differ) stay open.
+* **VRAM read lock on CGB at single speed**: the lock follows STAT's lagged mode (4 dots late) instead
+  of locking the dot mode 3 starts. Gambatte `vram_m3/preread_2` (DMG and CGB answers differ) and
+  `preread_lcdoffset1_1` pass, and `dma/late_gdma_pc_7ffe_1` with them: CGB 2,612 -> 2,615, nothing
+  lost. In double speed the same rule loses `preread_ds_2`, so it stays at once there; the OAM
+  read lock moved the same way loses 3 and is unchanged. Also tried: a CGB-only early OAM
+  interrupt (2 or 0 instead of 4) loses over 40 in the STAT groups.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
