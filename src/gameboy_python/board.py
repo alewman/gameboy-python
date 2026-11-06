@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from sm83_python import SM83, CPUState, StopAction, StopResult
 
+from gb_apu_python import APU, CGB, DMG
 from gameboy_python import ppu as ppu_module
-from gameboy_python.apu import APU
 from gameboy_python.cartridge import Cartridge
 from gameboy_python.dma import EXTERNAL, INTERNAL, VIDEO, OamDma, bus_of
 from gameboy_python.joypad import Joypad
@@ -123,7 +123,7 @@ class GameBoy:
             self._ppu_irq, machine.stat_write_glitch, stat_blocking=machine.stat_blocking, cgb=cgb
         )
         self.ppu.cgb_mode = cgb  # the boot ROM runs in CGB mode and picks compatibility by KEY0
-        self.apu = APU(cgb=cgb)
+        self.apu = APU(model=CGB if cgb else DMG)
         self.dma = OamDma(self._dma_source, self._dma_write)
         self._cpu_step = self.cpu.step
         if cgb:
@@ -635,7 +635,7 @@ class GameBoy:
     def _io_write(self, address: int, value: int) -> None:
         low = address & 0xFF
         if low >= 0x10 and low <= 0x3F:
-            self.apu.div_bit12 = bool(self.timer.counter & 0x1000)
+            self.apu.frame_clock_high = bool(self.timer.counter & 0x1000)
             self.apu.write(address, value)
         elif low == 0x00:
             self.joypad.write(value)

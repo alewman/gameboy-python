@@ -131,8 +131,8 @@ SingleStepTests `sm83` belongs to the CPU core, not here; sm83-python's
   fields that read PPU phase: IF.0 at instruction 39,939, an LY read at 513,158). MAME is a detector;
   both are PPU-phase leads for milestone 2.
 - **PyPy 3.11**: the whole cpu_instrs.gb, 224,319,804 T (56.1 M M-cycles), 3,191 frames, 8.7 s wall (including start-up).
-- Import boundaries: `cartridge/` and `apu/` import nothing else from the board
-  (`tests/test_import_boundaries.py`).
+- Import boundaries: `cartridge/` imports nothing else from the board, and the APU core
+  (gb-apu-python, extracted 2026-11-06) imports no board (`tests/test_import_boundaries.py`).
 
 ## Results: milestone 2, in progress (2026-10-07)
 
@@ -208,8 +208,8 @@ corrupts the row being read, with the write, read and read-plus-increment patter
 
 Four channels, DACs, NR50/NR51 mixing, NR52 power, a frame sequencer clocked by falling edges of the
 system counter's bit 12 (DIV-APU; a DIV write ticks it), every DMG quirk in Pan Docs "Obscure
-Behavior" that the judges reach (`gameboy_python/apu/__init__.py`, behind a boundary: it imports
-nothing from the board). `take_samples()` returns interleaved 16-bit stereo at 44.1 kHz;
+Behavior" that the judges reach (since 2026-11-06 the gb-apu-python core, pinned by revision and
+extracted with its history from `gameboy_python/apu/`; it imports nothing from the board). `take_samples()` returns interleaved 16-bit stereo at 44.1 kHz;
 `--wav` saves it. **The mix is a labelled fit, not the analogue DMG**: DAC digital 0 maps to +1 and
 15 to -1, an off DAC to 0, NR51 pans, NR50 scales by (volume + 1) / 8, the sum is divided by 4 and
 passed through the DMG high-pass (charge 0.999958 per T), which is off while every DAC is off.

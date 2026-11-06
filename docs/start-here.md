@@ -294,7 +294,7 @@ src/gameboy_python/
   clock.py           # the system counter: DIV, timer edges, DIV-APU, serial clock
   timer.py
   ppu/               # dot-accurate: fetcher, FIFOs, OAM scan, STAT line, LCD output
-  apu/               # pin-shaped boundary (registers in, DIV-APU tick in, samples out)
+  (apu)              # now the gb-apu-python core (registers in, DIV-APU tick in, samples out)
   dma.py             # OAM DMA (and CGB HDMA/GDMA in phase 2)
   serial.py, joypad.py
   cartridge/         # MBCs behind the connector protocol (cartridge.md)
@@ -302,5 +302,5 @@ src/gameboy_python/
   state.py, debug.py, trace.py, frontend.py
 ```
 
-`apu/` and `cartridge/` import nothing from the rest of the board; a test
-enforces it ([handoff-brief.md](handoff-brief.md)).
+`cartridge/` imports nothing from the rest of the board, and the APU core (gb-apu-python, pinned
+by revision since 2026-11-06) imports no board; a test enforces both ([handoff-brief.md](handoff-brief.md)).

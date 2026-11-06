@@ -25,6 +25,9 @@ classifiers = [
 # `pip install -e ../sm83-python` after installing this.
 dependencies = [
     "sm83-python @ git+https://github.com/alewman/sm83-python.git@d846ce734b628933d68bfedc0dbcbe198db4dfa7",
+    # The APU core, pinned the same way. It has no remote yet: the URL is this machine's checkout
+    # until it gets one.
+    "gb-apu-python @ git+file:///data/emu/gb-apu-python@9063d631e96806be57e031f57ded57ee5421bfb4",
 ]
 
 [project.optional-dependencies]

@@ -24,8 +24,9 @@ verified MAME recipe, and the brief for the session that builds it
 | Game Boy Pocket / Light | later, as machine data |
 | Super Game Boy, SGB2 | on a future SNES board, which embeds this one |
 
-The APU lives here, behind a pin-shaped boundary, until a second consumer (a
-GBA board) needs it; then it is extracted with its history, never copied.
+The APU is its own core, [gb-apu-python](../gb-apu-python), pinned by revision:
+it was extracted with its history on 2026-11-06, when a second consumer (the GBA
+board) needed it.
 MBCs live here behind a signal-level connector ([docs/cartridge.md](docs/cartridge.md));
 MBC1, MBC5, ROM-only, MBC2 and MBC3 run 98.9 % of the 3,064 licensed No-Intro
 dumps.
