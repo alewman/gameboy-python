@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from sm83_python import SM83, CPUState, StopAction, StopResult
 
+from gameboy_python import ppu as ppu_module
 from gameboy_python.apu import APU
 from gameboy_python.cartridge import Cartridge
 from gameboy_python.dma import EXTERNAL, INTERNAL, VIDEO, OamDma, bus_of
@@ -37,6 +38,12 @@ CGB_BOOT_SIZE = 0x900
 #: earlier (SameBoy ``speed_switch_halt_countdown``; Gambatte speedchange)
 SPEED_SWITCH_HALT = 0x20008  # units, switching from double to single speed
 SPEED_SWITCH_HALT_TO_DOUBLE = 0x20008  # ... and from single to double; FITTED
+#: dots the LCD runs on its own when the speed switches to double, and to single (negative: it
+#: stands still). FITTED on Gambatte speedchange/lcd_offset/lcdoffset1 (230 -> 264 of 357; -4/3,
+#: -2/2, 1/2, -3/3 all lower). SameBoy's TODO has 2 PPU ticks single->double; Gambatte moves the
+#: LCD a cycle ahead on double->single, which is -3 here with our one ds M-cycle longer halt.
+SWITCH_LCD_DS = 2
+SWITCH_LCD_SS = -3
 
 
 IF_WRITE_PHASE = 0  # FITTED: IF bits raised in a write's own M-cycle survive the write
@@ -83,6 +90,7 @@ class GameBoy:
         self.double_speed = False
         self.key1 = 0  # bit 0: a speed switch is armed
         self._switch_wait = 0  # units left of the speed switch's halt
+        self._lcd_freeze = 0  # dots the PPU skips (a speed switch's negative skew)
         self._div_reset_due = False  # a speed switch's STOP clears DIV in its operand read
         self._div_hold = 0  # M-cycles the counter then stands still for
         self._switch_halted = False
@@ -204,8 +212,16 @@ class GameBoy:
             self._late.append([VBLANK_CGB_DELAY, 0])
             return
         delay = self.ppu.irq_halt_delay if bit == 1 and self.cpu.halted else 0
-        if delay and self.ppu.sub + delay >= 4:
-            self._late.append([self.ppu.sub + delay, bit])
+        # the dot within the M-cycle as it would be without the PPU's lead (IRQ_LEAD)
+        sub = self.ppu.sub + (0 if self.double_speed else ppu_module.IRQ_LEAD)
+        if bit == 1 and self.ppu.irq_defer:
+            # raised in the dots after the access: the dispatch sees it a cycle later, as if the
+            # PPU had no lead (IRQ_LEAD)
+            self.ppu.irq_defer = False
+            self._late.append([sub, bit, self.ppu.irq_early_by, self.ppu.irq_halt_delay])
+            return
+        if delay and sub + delay >= 4:
+            self._late.append([sub + delay, bit])
             return
         self.cpu.request_interrupt(bit)
         if self.ppu.sub >= IF_WRITE_PHASE:
@@ -239,7 +255,18 @@ class GameBoy:
             held = []
             for item in self._late:
                 item[0] -= 4
-                if item[0] < 4:
+                if len(item) > 2:  # deferred past the lead: raised now, at dot item[0]
+                    sub, bit, early, halt_delay = item
+                    delay = halt_delay if self.cpu.halted else 0
+                    if sub + delay >= 4:
+                        held.append([sub + delay, bit])  # a halted CPU sees it later still
+                        continue
+                    self.cpu.request_interrupt(bit)
+                    self._late_bits |= 1 << bit
+                    if early:
+                        self._hide |= 1 << bit
+                        self._hide_left = early
+                elif item[0] < 4:
                     self.cpu.request_interrupt(item[1])
                 else:
                     held.append(item)
@@ -262,7 +289,12 @@ class GameBoy:
             self.apu.secondary_tick()  # and the rising edge half a period later
         self.apu.tick(dots)
         self.serial.tick(timer.previous, timer.counter)
-        self.ppu.tick(dots)
+        if self._lcd_freeze:
+            held = min(dots, self._lcd_freeze)
+            self._lcd_freeze -= held
+            self.ppu.tick(dots - held)
+        else:
+            self.ppu.tick(dots)
         self.dma.tick()
         if self.hdma_hblank:
             mode = self.ppu.mode
@@ -305,6 +337,13 @@ class GameBoy:
             self.double_speed = not self.double_speed
             self.ppu.double_speed = self.double_speed
             self.key1 = 0
+            # the PPU runs IRQ_LEAD dots ahead of the access in single speed, none in double
+            lead = ppu_module.IRQ_LEAD
+            skew = SWITCH_LCD_DS - lead if self.double_speed else SWITCH_LCD_SS + lead
+            if skew > 0:
+                self.ppu.run_dots(skew)
+            elif skew < 0:
+                self._lcd_freeze = -skew  # the LCD stands still this many dots
             if pending:
                 return StopResult(StopAction.NOP, consume_operand=False)
             self._switch_wait = SPEED_SWITCH_HALT if not self.double_speed else SPEED_SWITCH_HALT_TO_DOUBLE

@@ -46,6 +46,12 @@ WINDOW_HEAD_DS = 4  # ... in double speed (3 loses the m2int_wx*_m3stat_ds_2 hal
 WINDOW_EDGE_HEAD = 6  # ... when the window starts at the left edge (WX < 7)
 VBLANK_IF_LATE = 4  # FITTED (GBMicrotest stat_write_glitch_l143_*): IF shows VBlank this much later
 MODE1_IRQ_DOT = 4  # FITTED (GBMicrotest vblank_int_if_*): the STAT VBlank source comes this late
+# Single speed: the PPU runs this many dots of each M-cycle after the CPU's access, before the
+# interrupt dispatch looks, so an interrupt raised early in a 4-dot window can be dispatched a cycle
+# sooner. Aligned ROMs cannot tell; after a speed switch's odd LCD skew (board SWITCH_LCD_*) the
+# lcdoffset1 ROMs can (Gambatte cgb04c lcdoffset1 +13, speedchange +25). The HBlank and mode 2
+# interrupts keep their old dispatch cycle (irq_defer): their dots are pinned by the SCX ROMs.
+IRQ_LEAD = 1
 LYC_IRQ_EARLY = 4  # the LY=LYC interrupt comes this many dots before the flag shows
 OAM_IRQ_WIDTH = 4  # and lasts this many dots
 OAM_IRQ_WIDTH_DS = 2  # CGB double speed, line 0 excepted (Gambatte m2enable/late_enable_ds_*, m1)
@@ -154,6 +160,7 @@ class PPU:
         "free_skip",
         "glitching",
         "hblank_early",
+        "irq_defer",
         "irq_early_by",
         "irq_halt_delay",
         "is_shadow",
@@ -189,6 +196,7 @@ class PPU:
         "obp1",
         "ocps",
         "opri",
+        "owed",
         "pal_hold",
         "penalised",
         "pipe",
@@ -260,10 +268,12 @@ class PPU:
         self.glitching = False
         self.early_lyc153 = False
         self.early_fired = False
-        self.lyc_early = False  # double speed: the LY=LYC interrupt just came early; a write cancels it
+        self.lyc_early = False  # ds: the LY=LYC interrupt just came early; a write cancels it
         self.irq_early_by = 0  # dots before its real time the interrupt just raised came
+        self.irq_defer = False  # the interrupt just raised reaches the dispatch a cycle later
         self.irq_halt_delay = 0  # dots later a halted CPU sees the STAT interrupt just raised
         self.sub = 0  # the dot within the M-cycle being ticked (0-3)
+        self.owed = 0  # dots of this M-cycle left to run after the access (IRQ_LEAD)
         self.vram = bytearray(0x4000 if cgb else 0x2000)
         self.oam = bytearray(0xA0)
         self.lcdc = 0
@@ -373,12 +383,20 @@ class PPU:
     # ----- time ---------------------------------------------------------------------------
 
     def tick(self, dots: int = 4) -> None:
-        """Advance ``dots`` PPU dots (one M-cycle)."""
+        """Advance ``dots`` PPU dots (one M-cycle): all but the lead before the CPU's access, the
+        lead after it (``after_access``)."""
+        self.owed = 0 if self.double_speed else min(dots, IRQ_LEAD)
         if not self.lcdc & 0x80:
             return
-        for sub in range(dots):
+        for sub in range(dots - self.owed):
             self.sub = sub
             self._dot()
+
+    def run_dots(self, dots: int) -> None:
+        """Advance ``dots`` dots outside the M-cycle split (a speed switch's LCD skew)."""
+        if self.lcdc & 0x80:
+            for _ in range(dots):
+                self._dot()
 
     def _dot(self) -> None:
         self.lcdc_hist.append(self.lcdc)
@@ -949,6 +967,7 @@ class PPU:
                 self.early_fired = True
                 self.irq_halt_delay = OAM_IRQ_EARLY
                 self.irq_early_by = OAM_IRQ_EARLY
+                self.irq_defer = self._in_lead()
                 self.raise_irq(1)
         line0_dot = DOTS_PER_LINE - EARLY_LINE0_DS
         line0_early = self.double_speed and self.ly == LAST_LINE and self.dot == line0_dot
@@ -967,6 +986,7 @@ class PPU:
                 self.irq_halt_delay = self._halt_delay(oam)
                 hblank = select & 0x08 and (self.mode == 0 or self.hblank_early)
                 self.irq_early_by = HBLANK_IRQ_EARLY if hblank else 0
+                self.irq_defer = bool(hblank or oam) and self._in_lead()
                 if select & 0x40 and self._lyc_early() and not self.lyc_flag and not hblank:
                     self.irq_early_by = LYC_IRQ_EARLY  # the dispatch sees it before IF does
                     self.lyc_early = self.double_speed
@@ -1040,6 +1060,15 @@ class PPU:
             self.irq_halt_delay = 0
             self.irq_early_by = LYC_IRQ_EARLY
             self.raise_irq(1)
+        owed, self.owed = self.owed, 0
+        if owed and self.lcdc & 0x80:
+            for sub in range(4 - owed, 4):
+                self.sub = sub
+                self._dot()
+
+    def _in_lead(self) -> bool:
+        """This dot is one the PPU runs after the CPU's access (IRQ_LEAD)."""
+        return not self.double_speed and self.sub >= 4 - IRQ_LEAD
 
     def compare_wy(self) -> None:
         """WY==LY is compared whenever either changes, not only at a line's start: a WY written to
@@ -1140,7 +1169,7 @@ class PPU:
 
     def place(self, ly: int, dot: int, mode: int) -> None:
         """Put the beam at a line, dot and mode (the skip-boot hand-off state)."""
-        self.ly, self.dot = ly, dot
+        self.ly, self.dot = ly, dot + IRQ_LEAD  # the PPU is the lead ahead of the access
         self._settle(mode)
         self._follow()
         self._update_stat_line()

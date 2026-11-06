@@ -619,6 +619,22 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   speed (it moves the interrupt that starts the test too) and counting the IF-read hide in dots
   (it only swaps an `lcdoffset1` pair).
 * **Totals**: Gambatte CGB 2,670 -> 2,686, DMG 1,550 -> 1,557.
+* **The speed switch moves the LCD against the CPU (2026-11-06)**: Gambatte's `lcdoffset1`,
+  `lcd_offset` and `speedchange` ROMs switch speed with the LCD on, which leaves the CPU's M-cycles
+  at a new phase to the dots; the board kept the old one, so one ROM of each `lcdoffset1` pair
+  failed. Now the LCD runs `SWITCH_LCD_DS` 2 dots on its own at a switch to double speed and stands
+  still `SWITCH_LCD_SS` 3 dots at a switch back (SameBoy's TODO: 2 PPU ticks single->double;
+  Gambatte moves the LCD a cycle on double->single, which is -3 here with our halt one double-speed
+  M-cycle longer); over `speedchange|lcd_offset|lcdoffset` -4/3, -2/2, 1/2 and -3/3 all score lower.
+  A skew alone changed almost nothing, since every PPU interrupt was raised in the last dot of its
+  window and the dispatch re-synced to it; so in single speed the PPU now runs `IRQ_LEAD` 1 dot of
+  each M-cycle after the CPU's access, before the dispatch looks (reads and writes see the same dot
+  as before). The HBlank and mode 2 interrupts raised in that dot keep their old dispatch cycle and
+  IF timing (`irq_defer`, with a halted CPU's wake delay decided when they land): their dots are
+  pinned by the SCX ROMs. Gambatte CGB 2,686 -> 2,719 (+43 -10: `speedchange` +25 -1,
+  `lcdoffset1` +12 -3, `lcd_offset` +5 -6); DMG 1,557 unchanged. Open: the
+  `oam_access`/`vram_m3` `lcdoffset1_2` halves and `lcd_offset` `_2` halves want line-start
+  changes seen by reads 1-3 dots sooner, and double speed (a lead there loses 11 `ds_lcdoffset1`).
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
