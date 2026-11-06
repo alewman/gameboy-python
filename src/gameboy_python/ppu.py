@@ -184,6 +184,7 @@ class PPU:
         "f_step",
         "fetch_col",
         "frame",
+        "frame_start",
         "frames",
         "free_skip",
         "glitching",
@@ -195,6 +196,7 @@ class PPU:
         "lcdc_hist",
         "line0",
         "line_objs",
+        "line_out",
         "ly",
         "ly153_dots",
         "ly_lead",
@@ -339,6 +341,11 @@ class PPU:
         self.lyc_flag = False
         self.stat_line = False
         self.frames = 0  # VBlanks since power-on
+        # The LCD's output for a Super Game Boy's ICD2 (snes-python sgb.py): each visible line's
+        # 160 shades as the line ends, and the start of each frame (SameBoy's icd_hreset and
+        # icd_vreset callbacks are at the same two points). None on a plain Game Boy.
+        self.line_out: Callable[[bytes], None] | None = None
+        self.frame_start: Callable[[], None] | None = None
         # shades 0-3 (DMG); on CGB hardware RGB555 words, 16 bits per pixel little-endian in
         # ``frame``, the last completed picture
         self.frame = self._blank()
@@ -531,11 +538,17 @@ class PPU:
         if self.window_used:
             self.window_line = (self.window_line + 1) & 255
         self.window_used = False
+        if self.line_out is not None and self.ly < VBLANK_LINE:
+            start = self.ly * SCREEN_W
+            # the drawing machine, DRAW_LAG dots behind, finished this row long before dot 456
+            self.line_out(bytes(self.pixels.framebuffer[start : start + SCREEN_W]))
         self.ly = 0 if self.ly == LAST_LINE else self.ly + 1
         if self.ly == 0:
             self.window_line = 0
             self.wy_hit = False
             self.mode3_start = MODE2_END - LINE0_LEAD
+            if self.frame_start is not None:
+                self.frame_start()
         if self.ly == VBLANK_LINE:
             self.frames += 1
             self.frame = bytes(self.pixels.framebuffer)
