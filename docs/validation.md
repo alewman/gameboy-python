@@ -635,6 +635,14 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   `lcdoffset1` +12 -3, `lcd_offset` +5 -6); DMG 1,557 unchanged. Open: the
   `oam_access`/`vram_m3` `lcdoffset1_2` halves and `lcd_offset` `_2` halves want line-start
   changes seen by reads 1-3 dots sooner, and double speed (a lead there loses 11 `ds_lcdoffset1`).
+* **Line-start reads 1 dot sooner in single speed**: a line's mode 2 shows in STAT and locks OAM
+  `M2_READ_LAG_SS` 3 dots into the line (was 4), and on CGB VRAM locks `VRAM_LOCK_SS` 3 dots into
+  mode 3 (before STAT shows mode 3; the palette lock keeps STAT's timing, as moving STAT's mode 3
+  instead loses `cgbpal_m3/*_lcdoffset1_1`). Aligned ROMs read only every 4th dot, so they cannot
+  tell; with the speed switch's skew `oam_access/prewrite_lcdoffset1_2`,
+  `vram_m3/preread_lcdoffset1_2`, `vram_m3/prewrite_lcdoffset1_2` and
+  `speedchange2_ly44_m3_stat_4` pass: CGB 2,719 -> 2,723, nothing lost; DMG unchanged. 2 and 1
+  score the same or lose one; moving line 153's LY change (8 -> 5-7) changes nothing.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays

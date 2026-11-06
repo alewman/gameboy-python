@@ -100,6 +100,12 @@ HALT_LATE_CGB = 2
 # prewrite_ds_lcdoffset1_2; lycint_lycflag/lycint_m0stat ds trade 2 for 2; 2 scores one fewer):
 # in double speed STAT shows a line's mode 2 this many dots into the line, not MODE_READ_LAG
 M2_READ_LAG_DS = 0
+# Single speed: a line's mode 2 shows in STAT (and locks OAM) this many dots into the line, and on
+# CGB VRAM locks this many dots into mode 3. Aligned ROMs read only every 4th dot, so 1-4 look the
+# same to them; after a speed switch's skew the lcdoffset1 ROMs see the difference (oam_access
+# prewrite_lcdoffset1_2, vram_m3 preread/prewrite_lcdoffset1_2 pass at 3, 2 or 1; 1 loses one)
+M2_READ_LAG_SS = 3
+VRAM_LOCK_SS = 3
 OAM_RISE_CGB = 2  # SameBoy (mode_for_interrupt = 2 at LINE_LENGTH - 2; no DMG write glitch): a
 # CGB STAT write clearing bit 5 before this many dots from a line's end cancels the OAM interrupt
 # raised early for the dispatch (Gambatte m2enable/disable_*)
@@ -356,7 +362,17 @@ class PPU:
     @property
     def vram_write_locked(self) -> bool:
         """Writes lock 4 dots after reads do (Mooneye lcdon_write_timing-GS)."""
-        return self.lcd_on and self.read_mode == 3
+        return self.lcd_on and (self.read_mode == 3 or self._vram_lock_early())
+
+    def _vram_lock_early(self) -> bool:
+        """CGB single speed: VRAM locks VRAM_LOCK_SS dots into mode 3, before STAT shows it."""
+        return (
+            self.cgb
+            and not self.double_speed
+            and self.mode == 3
+            and not self.line0
+            and MODE2_END + VRAM_LOCK_SS <= self.dot < MODE2_END + MODE_READ_LAG
+        )
 
     @property
     def oam_write_locked(self) -> bool:
@@ -372,6 +388,7 @@ class PPU:
         return self.lcd_on and (
             (self.mode == 3 and not self.line0 and not (self.cgb and not self.double_speed))
             or self.read_mode == 3
+            or self._vram_lock_early()
         )  # locks at once (CGB single speed: with STAT, 4 dots late), frees late
 
     @property
@@ -451,6 +468,8 @@ class PPU:
             lagged = 0  # the end of mode 3 shows up in STAT sooner than the start of it does
         if self.double_speed and lagged == 0 and self.mode == 2 and self.dot >= M2_READ_LAG_DS:
             lagged = 2  # in double speed a line's mode 2 shows in STAT without the lag
+        if not self.double_speed and lagged == 0 and self.mode == 2 and self.dot >= M2_READ_LAG_SS:
+            lagged = 2
         if lagged == 1 and self.mode == 2:
             lagged = 0  # the first dots of line 0 read as mode 0, not VBlank's 1
         if self.pal_hold:
