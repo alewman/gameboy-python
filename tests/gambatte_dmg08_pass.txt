@@ -1401,6 +1401,7 @@ vramw_m3end/vramw_m3end_scx3_5_dmg08_cgb04c_out3.gbc out
 vramw_m3end/vramw_m3end_scx3_6_dmg08_cgb04c_out3.gbc out
 window/arg/late_enable_afterVblank_3_dmg08_cgb04c_out3.gbc out
 window/arg/late_enable_afterVblank_4_dmg08_out3_cgb04c_out0.gbc out
+window/arg/late_enable_afterVblank_5_dmg08_cgb04c_out0.gbc out
 window/arg/late_scx_late_wy_FFto4_ly4_wx00_1_dmg08_cgb04c_out3.gbc out
 window/arg/late_scx_late_wy_FFto4_ly4_wx00_2_dmg08_out3_cgb04c_out0.gbc out
 window/arg/late_scx_late_wy_FFto4_ly4_wx20_1_dmg08_cgb04c_out3.gbc out
@@ -1431,6 +1432,8 @@ window/arg/late_wy_FFto1_ly2_3_dmg08_cgb04c_out0.gbc out
 window/arg/late_wy_FFto2_ly2_1_dmg08_cgb04c_out3.gbc out
 window/arg/late_wy_FFto2_ly2_2_dmg08_out3_cgb04c_out0.gbc out
 window/arg/late_wy_FFto2_ly2_3_dmg08_cgb04c_out0.gbc out
+window/arg/late_wy_FFto2_ly2_scx2_1_dmg08_cgb04c_out3.gbc out
+window/arg/late_wy_FFto2_ly2_scx2_2_dmg08_out3_cgb04c_out0.gbc out
 window/arg/late_wy_FFto2_ly2_scx2_3_dmg08_cgb04c_out0.gbc out
 window/arg/late_wy_FFto2_ly2_scx3_1_dmg08_cgb04c_out3.gbc out
 window/arg/late_wy_FFto2_ly2_scx3_2_dmg08_out3_cgb04c_out0.gbc out
@@ -1462,7 +1465,8 @@ window/late_disable_late_scx03_wx11_1_dmg08_cgb04c_out0.gbc out
 window/late_disable_late_scx03_wx11_2_dmg08_out3_cgb04c_out0.gbc out
 window/late_disable_late_scx03_wx11_3_dmg08_cgb04c_out3.gbc out
 window/late_disable_late_scx03_wx12_2_dmg08_cgb04c_out3.gbc out
-window/late_disable_scx2_0_dmg08_cgb04c_out0.gbc out
+window/late_disable_scx2_1_dmg08_out3_cgb04c_out0.gbc out
+window/late_disable_scx2_2_dmg08_cgb04c_out3.gbc out
 window/late_disable_scx3_1_dmg08_out3_cgb04c_out0.gbc out
 window/late_disable_scx3_2_dmg08_cgb04c_out3.gbc out
 window/late_disable_scx5_0_dmg08_cgb04c_out0.gbc out
@@ -1475,8 +1479,10 @@ window/late_disable_wx0f_1_dmg08_out3_cgb04c_out0.gbc out
 window/late_disable_wx0f_2_dmg08_cgb04c_out3.gbc out
 window/late_enable_afterVblank_1_dmg08_cgb04c_out3.gbc out
 window/late_enable_afterVblank_2_dmg08_out3_cgb04c_out0.gbc out
+window/late_enable_afterVblank_3_dmg08_cgb04c_out0.gbc out
 window/late_reenable_1_dmg08_cgb04c_out3.gbc out
 window/late_reenable_2_dmg08_cgb04c_out0.gbc out
+window/late_reenable_scx2_1_dmg08_cgb04c_out3.gbc out
 window/late_reenable_scx2_3_dmg08_cgb04c_out0.gbc out
 window/late_reenable_scx3_1_dmg08_cgb04c_out3.gbc out
 window/late_reenable_scx3_3_dmg08_cgb04c_out0.gbc out
@@ -1494,6 +1500,7 @@ window/late_wx_ff_07_2_dmg08_cgb04c_out0.gbc out
 window/late_wx_ff_0f_1_dmg08_cgb04c_out3.gbc out
 window/late_wx_ff_0f_2_dmg08_cgb04c_out0.gbc out
 window/late_wx_scx2_1_dmg08_cgb04c_out0.gbc out
+window/late_wx_scx2_2_dmg08_cgb04c_out3.gbc out
 window/late_wx_scx3_1_dmg08_cgb04c_out0.gbc out
 window/late_wx_scx3_3_dmg08_cgb04c_out3.gbc out
 window/late_wx_scx5_1_dmg08_cgb04c_out0.gbc out
@@ -1512,6 +1519,7 @@ window/m2int_wx03_scx5_m3stat_1_dmg08_cgb04c_out3.gbc out
 window/m2int_wx03_scx5_m3stat_2_dmg08_cgb04c_out0.gbc out
 window/m2int_wx07_m3stat_1_dmg08_cgb04c_out3.gbc out
 window/m2int_wx07_m3stat_2_dmg08_cgb04c_out0.gbc out
+window/m2int_wx07_scx2_m3stat_1_dmg08_cgb04c_out3.gbc out
 window/m2int_wx07_scx2_m3stat_2_dmg08_cgb04c_out0.gbc out
 window/m2int_wx07_scx3_m3stat_1_dmg08_cgb04c_out3.gbc out
 window/m2int_wx07_scx3_m3stat_2_dmg08_cgb04c_out0.gbc out
@@ -1534,7 +1542,6 @@ window/m2int_wxA6_oambusyread_1_dmg08_cgb04c_out0.gbc out
 window/m2int_wxA6_oambusyread_3_dmg08_out5_cgb_xout1.gbc out
 window/m2int_wxA6_oambusyread_4_dmg08_cgb04c_out5.gbc out
 window/m2int_wxA6_scx2_m3stat_1_dmg08_cgb04c_out3.gbc out
-window/m2int_wxA6_scx2_m3stat_3_dmg08_out0_cgb04c_out3.gbc out
 window/m2int_wxA6_scx2_m3stat_4_dmg08_cgb04c_out0.gbc out
 window/m2int_wxA6_scx3_m3stat_1_dmg08_cgb04c_out3.gbc out
 window/m2int_wxA6_scx3_m3stat_4_dmg08_cgb04c_out0.gbc out

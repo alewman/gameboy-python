@@ -365,3 +365,9 @@ cgb halt/m0int_m0stat_scx2_ds_2_cgb04c_out2.gbc
 cgb m2enable/disable_1_dmg08_out2_cgb04c_out0.gbc
 cgb m2enable/disable_ly0_ds_1_cgb04c_out1.gbc
 cgb m2enable/late_enable_ds_2_cgb04c_out0.gbc
+cgb lycEnable/ff45_disable_ds_1_cgb04c_out1.gbc
+cgb lycEnable/late_ff45_enable_2_dmg08_out3_cgb04c_out1.gbc
+cgb window/late_enable_afterVblank_3_dmg08_cgb04c_out0.gbc
+cgb window/late_wx_scx2_2_dmg08_cgb04c_out3.gbc
+dmg window/late_wx_scx2_2_dmg08_cgb04c_out3.gbc
+dmg window/late_enable_afterVblank_3_dmg08_cgb04c_out0.gbc

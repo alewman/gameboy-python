@@ -627,7 +627,9 @@ class GameBoy:
         elif low == 0x43:
             self.ppu.scx = value
         elif low == 0x45:
-            self.ppu.write_lyc(value)
+            if self.ppu.write_lyc(value):  # cancelled an LY=LYC interrupt raised early
+                self.cpu.if_ &= ~2
+                self._hide &= ~2
         elif low == 0x46:
             self.dma.start(value)
         elif low == 0x47:

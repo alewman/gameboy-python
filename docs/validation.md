@@ -588,6 +588,37 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   not 4, except on line 0. Gambatte `m2enable` +7, `m1` +1; `lyc1_late_m2enable_lycdisable_ds_3`
   lost. SameBoy's CGB-E rule that the LY=LYC interrupt line holds while LY changes at a line's
   start was tried as a hold of 1, 2 or 4 dots and loses more than it gains in `lycEnable`.
+* **WY needs the window enabled (2026-11-05)**: WY==LY only counts while LCDC.5 is set (SameBoy
+  `wy_check`), at a line's start, at LCD on and on a WY write, and setting LCDC.5 runs the compare
+  again (`WIN_EN_WAIT` 4 dots later on CGB, 2 in double speed; at once on DMG, where 0 scored
+  best). Gambatte `window` CGB +6, DMG +2 (`late_enable_afterVblank_*`, `late_enable_ly0_ds_2`);
+  `late_enable_afterVblank_lcdoffset1_1` lost. The `lcdoffset1` ROMs move the LCD half an M-cycle
+  against the CPU with two speed switches, which the board does not model: the write lands at the
+  same dot as in the plain `_2` ROM that wants the other answer, so one of each pair stays out of
+  reach. Lining the compare up with the LCD's own 4-dot grid did not split them either. The
+  picture PPU now takes the timing PPU's `wy_hit` every dot (one comparator); with its own
+  line-start compare it never saw the LCDC.5 compare, and Mealybug `m2_win_en_toggle` went from
+  pixel-exact to 9,030 pixels with the head change below.
+* **Window head in single speed**: SameBoy's mode-0 entry (an instrumented `display.c`) has the
+  window cost 6 dots at WX 0, 3 and 7; ours cost 5 at WX 0 and 2 at WX >= 3, and the m3stat reads
+  want WX 0 a dot shorter and WX 3/7 at SCX 2 a dot longer. `WINDOW_HEAD` 4 -> 3 in single speed
+  (double speed keeps 4: 3 there loses the `m2int_wx*_m3stat_ds_2` halves) gains the SCX 2 window
+  ROMs: CGB +6 -2 (`late_disable_scx2_0/1` lost), DMG +7 -2 (`late_disable_scx2_0`,
+  `m2int_wxA6_scx2_m3stat_3`). GBMicrotest `win*` unchanged; Mealybug `m3_window_timing` 47 -> 40,
+  `m3_lcdc_win_map_change` 1,014 -> 374, `m3_lcdc_tile_sel_win_change` 1,584 -> 1,456.
+  `WINDOW_EDGE_HEAD` 7 or 8 (WX < 7) only trades.
+* **CGB LYC writes one M-cycle later**: at single speed several CGB ROMs print the DMG answer for a
+  write 4 dots earlier (`ff45_enable_weirdpoint_2`, `late_ff45_enable_2`, `lyc153_late_ff45_*`,
+  `lyc0_late_ff45_enable_2`), so `LYC_WAIT_CGB` is 4 (was 1). Over the whole CGB list +8 -4 (also
+  `m0enable/lycdisable_ff45_2`, `_scx3_2`, `m2enable/lyc1_m2irq_late_lyc255_2`), losing the three
+  `lycEnable` `lcdoffset1_1` halves and `m0enable/lycdisable_ff45_scx1_1`.
+* **Double speed: a write cancels the early LY=LYC interrupt**: the interrupt raised
+  `LYC_IRQ_EARLY` dots before the flag is withdrawn by a STAT write clearing bit 6 or a LYC write
+  away from LY in the same M-cycle. Gambatte `lycEnable` `ff41_disable_ds_1`, `ff45_disable_ds_1`,
+  `lyc_ff45_disable2_ds_1`, nothing lost. Tried and dropped: an early lead of 0-3 dots in double
+  speed (it moves the interrupt that starts the test too) and counting the IF-read hide in dots
+  (it only swaps an `lcdoffset1` pair).
+* **Totals**: Gambatte CGB 2,670 -> 2,686, DMG 1,550 -> 1,557.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays

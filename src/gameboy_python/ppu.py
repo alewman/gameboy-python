@@ -40,7 +40,9 @@ SHADOW_LAG = 2  # the pixel-drawing PPU runs this many dots behind the one that 
 SHADOW_WX_LAG = 4
 WX_LAG = 1  # FITTED (Gambatte cgb04c window 143 -> 148 of 193 at 0 or 1; was 4, the shadow's SHADOW_WX_LAG carries the Mealybug fit): the timing PPU's window comparator sees WX this many dots late
 WIN_LAG = 0  # ... and LCDC.5/.0 this many
-WINDOW_HEAD = 4  # FITTED (GBMicrotest win*): fetcher dots the window restart gets for free
+# FITTED (GBMicrotest win*; Gambatte window scx2 CGB +4, DMG +5 over 4)
+WINDOW_HEAD = 3  # fetcher dots the window restart gets for free
+WINDOW_HEAD_DS = 4  # ... in double speed (3 loses the m2int_wx*_m3stat_ds_2 halves)
 WINDOW_EDGE_HEAD = 6  # ... when the window starts at the left edge (WX < 7)
 VBLANK_IF_LATE = 4  # FITTED (GBMicrotest stat_write_glitch_l143_*): IF shows VBlank this much later
 MODE1_IRQ_DOT = 4  # FITTED (GBMicrotest vblank_int_if_*): the STAT VBlank source comes this late
@@ -72,14 +74,18 @@ DS_SCX_LAG = 4
 # compared this many dots later (SameBoy runs the compare at the next 4-dot boundary, on CGB one
 # phase later than on DMG); 4-5 gain, 6 loses the _1 halves, DMG keeps the immediate compare
 WY_WAIT_CGB = 5
+# WY==LY only counts while LCDC.5 is set (SameBoy wy_check), and setting LCDC.5 runs a new compare
+# this many dots later on CGB (4; 2 in double speed; DMG at once): Gambatte window CGB +6 -1, DMG +2
+WIN_EN_WAIT = 4
+WIN_EN_WAIT_DS = 2
 # FITTED (Gambatte sprites/space 9pos8_wx*_m3stat_ds_1, 1pos8_8pos9_wx08: 346 -> 355 of 380): in
 # double speed a window started after an object fetch stalls the pipeline this many dots (3 loses
 # them, 5 loses a _2 half; SameBoy's fetch log puts its mode 3 about 4 dots past ours)
 WIN_OBJ_STALL_DS = 4
 # SameBoy (sm83_cpu.c cgb_conflict_map, LYC = GB_CONFLICT_WRITE_CPU against DMG's READ_OLD): on CGB
-# at single speed a LYC write lands this many dots later (Gambatte lycEnable +2; 1-3 agree, 4 trades
-# the lcdoffset1 halves)
-LYC_WAIT_CGB = 1
+# at single speed a LYC write lands this many dots later (CGB answers a DMG write 4 dots earlier:
+# Gambatte lycEnable/m0enable/m2enable +8 -4, three of the four lcdoffset1 halves)
+LYC_WAIT_CGB = 4
 # CGB: a halted CPU sees the HBlank and LY=LYC interrupts this many dots later than a DMG does
 # (SameBoy GB_cpu_run samples IF before a halted CGB's 4 T, a DMG's halfway; Gambatte halt +8,
 # dma/hdma_start +7). Not the line-start OAM one, already raised early (Mooneye intr_2_*).
@@ -158,6 +164,7 @@ class PPU:
         "ly",
         "ly153_dots",
         "lyc",
+        "lyc_early",
         "lyc_flag",
         "lyc_next",
         "lyc_wait",
@@ -253,6 +260,7 @@ class PPU:
         self.glitching = False
         self.early_lyc153 = False
         self.early_fired = False
+        self.lyc_early = False  # double speed: the LY=LYC interrupt just came early; a write cancels it
         self.irq_early_by = 0  # dots before its real time the interrupt just raised came
         self.irq_halt_delay = 0  # dots later a halted CPU sees the STAT interrupt just raised
         self.sub = 0  # the dot within the M-cycle being ticked (0-3)
@@ -446,6 +454,7 @@ class PPU:
         shadow.scx = self.scx_hist[-DS_SCX_LAG] if self.double_speed else self.scx
         shadow.scy = self.scy_hist[-SCY_LAG] if SCY_LAG else self.scy
         shadow.wx, shadow.wy = self.wx, self.wy
+        shadow.wy_hit = self.wy_hit  # one WY comparator: the shadow does not keep its own
         shadow.bgp, shadow.obp0, shadow.obp1 = self.bgp, self.obp0, self.obp1
         g_dot, g_ly, g_value = self.bgp_glitch
         shadow.bgp_glitch = (g_dot - SHADOW_LAG, g_ly, g_value)
@@ -493,7 +502,7 @@ class PPU:
             self.mode = 2
             self.line_objs = []
             self.window_active = False
-            if self.ly == self.wy:
+            if self.ly == self.wy and self.lcdc & 0x20:
                 self.wy_hit = True
 
     # ----- the OAM corruption bug (DMG): Pan Docs OAM_Corruption_Bug.md ---------------------------
@@ -798,7 +807,8 @@ class PPU:
                 self.f_dot = 0
                 self.fetch_col = 0
                 self.free_skip = max(0, 7 - wx)  # hidden window pixels cost no dots
-                for _ in range(1 + (WINDOW_EDGE_HEAD if wx < 7 else WINDOW_HEAD)):
+                head = WINDOW_HEAD_DS if self.double_speed else WINDOW_HEAD
+                for _ in range(1 + (WINDOW_EDGE_HEAD if wx < 7 else head)):
                     self._fetcher_dot()
                 return
             objs = self.line_objs
@@ -959,6 +969,7 @@ class PPU:
                 self.irq_early_by = HBLANK_IRQ_EARLY if hblank else 0
                 if select & 0x40 and self._lyc_early() and not self.lyc_flag and not hblank:
                     self.irq_early_by = LYC_IRQ_EARLY  # the dispatch sees it before IF does
+                    self.lyc_early = self.double_speed
                 if select & 0x10 and self.mode == 1 and self.ly == VBLANK_LINE and self.dot < 4:
                     # the VBlank STAT source: the dispatch sees it on time, IF shows it later
                     self.irq_early_by = MODE1_IRQ_DOT
@@ -968,6 +979,7 @@ class PPU:
                     self.early_fired = True  # a STAT write in this dot can still cancel it
         if self.dot == 1:
             self.early_fired = False
+            self.lyc_early = False
             self.early_lyc153 = False
         self.stat_line = line
 
@@ -1039,7 +1051,7 @@ class PPU:
         self._compare_wy_now()
 
     def _compare_wy_now(self) -> None:
-        if self.lcd_on and self.ly < VBLANK_LINE and self.ly == self.wy:
+        if self.lcd_on and self.ly < VBLANK_LINE and self.ly == self.wy and self.lcdc & 0x20:
             self.wy_hit = True
 
     def _oam_pulse(self) -> bool:
@@ -1066,6 +1078,9 @@ class PPU:
         )
         if cancel:
             self.early_fired = False
+        if self.lyc_early and not value & 0x40:
+            self.lyc_early = False
+            cancel = True
         if self.lcd_on and self.stat_write_glitch:
             # DMG: for the write's cycle every source is enabled, so a source that is true raises
             # the interrupt if the line was low (Pan Docs STAT.md; GBMicrotest stat_write_glitch_*)
@@ -1106,12 +1121,17 @@ class PPU:
             self.mode = 0  # line 0 starts in mode 0 (Mooneye ppu/lcdon_timing-GS)
             self.skip_scan = True  # and has no OAM scan
             self._settle(0)
-            self.wy_hit = self.wy == 0
+            self.wy_hit = self.wy == 0 and bool(self.lcdc & 0x20)
             if self.shadow is not None:
                 self.shadow.wy = self.wy
                 self.shadow.write_lcdc(value)
                 self._follow()
             self._update_stat_line()
+        elif self.lcd_on and value & 0x20 and not self.is_shadow:  # LCDC.5 set: WY compared again
+            if self.cgb:
+                self.wy_wait = WIN_EN_WAIT_DS if self.double_speed else WIN_EN_WAIT
+            else:
+                self._compare_wy_now()
 
     def _settle(self, mode: int) -> None:
         """Make ``mode`` the current and the lagged mode (a jump, not a transition)."""
@@ -1154,11 +1174,17 @@ class PPU:
             else:
                 self.bcps = spec
 
-    def write_lyc(self, value: int) -> None:
+    def write_lyc(self, value: int) -> bool:
+        """Write LYC; True when the write cancels an LY=LYC interrupt raised early in this dot."""
+        if self.lyc_early and value != self.visible_ly:
+            self.lyc_early = False
+            self._write_lyc_now(value)
+            return not self.stat_line
         if self.cgb and not self.double_speed and LYC_WAIT_CGB and self.lcd_on:
             self.lyc_wait, self.lyc_next = LYC_WAIT_CGB, value
-            return
+            return False
         self._write_lyc_now(value)
+        return False
 
     def _write_lyc_now(self, value: int) -> None:
         self.lyc = value
