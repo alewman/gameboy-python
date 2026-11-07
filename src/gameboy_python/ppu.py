@@ -34,6 +34,10 @@ MODE0_READ_LAG_DS = 0  # FITTED: the same in double speed (Gambatte cgb04c *_ds 
 # gdma/hdma_cycles)
 PAL_HOLD_DS = 2  # FITTED (Gambatte cgbpal_m3end_ds): dots the CGB palettes stay locked after STAT
 # leaves mode 3 in double speed (SameBoy frees them after STAT and VRAM too)
+# after an LCD-on in double speed (until the next speed switch) LY shows the next line this many
+# dots before it starts: LCD_ON_DS moves the lines, not the LY reads (AGE ly-cgbE, Gambatte
+# enable_display frame0/1_ly_count_ds_2)
+LY_LEAD_DS = 2
 LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interrupt)
 WX_GLITCH = 0  # 1 = Pan Docs' WX-reached-again colour-0 pixel; it made wx_4/5 worse, so off
 SHADOW_LAG = 2  # the pixel-drawing PPU runs this many dots behind the one that times STAT
@@ -56,6 +60,11 @@ LYC_IRQ_EARLY = 4  # the LY=LYC interrupt comes this many dots before the flag s
 OAM_IRQ_WIDTH = 4  # and lasts this many dots
 OAM_IRQ_WIDTH_DS = 2  # CGB double speed, line 0 excepted (Gambatte m2enable/late_enable_ds_*, m1)
 LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lcdon_timing-GS)
+# Double speed: line 0 starts this many dots further on at LCD on. Gambatte enable_display frame0/
+# frame1 m0irq/m2irq/m2stat _ds_1, ly0_m0irq_*_ds_1, ly0_late_cgbp*_ds_1 and the speedchange2
+# lcdoff ROMs pass at -2 (CGB +20 -2 with LY_LEAD_DS; ly0_oambusy_read_ds_2 and ly0_late_vramr_ds_2,
+# a lock read against the LCD-on moment, are lost); odd values break scx_during_m3
+LCD_ON_DS = -2
 LINE0_LEAD = 0  # FITTED (Mealybug line_0_fix): on line 0 the pixel pipeline runs this early
 BGP_GLITCH_DOT = 1  # FITTED: the dot, counted from the write's, whose palette is the OR
 # FITTED (Mealybug): dots from a pop to each register sample
@@ -176,6 +185,7 @@ class PPU:
         "line_objs",
         "ly",
         "ly153_dots",
+        "ly_lead",
         "lyc",
         "lyc_early",
         "lyc_flag",
@@ -279,6 +289,7 @@ class PPU:
         self.irq_defer = False  # the interrupt just raised reaches the dispatch a cycle later
         self.irq_halt_delay = 0  # dots later a halted CPU sees the STAT interrupt just raised
         self.sub = 0  # the dot within the M-cycle being ticked (0-3)
+        self.ly_lead = False  # the LCD went on in double speed (LY_LEAD_DS)
         self.owed = 0  # dots of this M-cycle left to run after the access (IRQ_LEAD)
         self.vram = bytearray(0x4000 if cgb else 0x2000)
         self.oam = bytearray(0xA0)
@@ -949,7 +960,8 @@ class PPU:
     def visible_ly(self) -> int:
         """LY as software reads it: on line 153 it reads 153 for only the first few dots and then
         0 for the rest of the line (Pan Docs STAT.md; Gambatte hwtests/ly0, lyc153int_m2irq)."""
-        return 0 if self.ly == LAST_LINE and self.dot >= self.ly153_dots - (2 if self.double_speed else 0) else self.ly
+        early = (2 + (LY_LEAD_DS if self.ly_lead else 0)) if self.double_speed else 0
+        return 0 if self.ly == LAST_LINE and self.dot >= self.ly153_dots - early else self.ly
 
     def _update_stat_line(self) -> None:
         # (and for the first 4 dots of a new line it reads as false: Mooneye lcdon_timing-GS)
@@ -1163,7 +1175,8 @@ class PPU:
             self.frame = blank
         elif not was_on and self.lcd_on:  # LCD on: line 0 starts now, but late
             self.ly = 0
-            self.dot = LINE0_START_DOT
+            self.dot = LINE0_START_DOT + (LCD_ON_DS if self.double_speed else 0)
+            self.ly_lead = self.double_speed
             self.line0 = True
             self.mode3_start = MODE2_END
             self.mode = 0  # line 0 starts in mode 0 (Mooneye ppu/lcdon_timing-GS)
@@ -1244,4 +1257,6 @@ class PPU:
             return 0
         if LY_LEAD and not self.line0 and self.dot >= DOTS_PER_LINE - LY_LEAD and self.ly < 143:
             return self.ly + 1  # LY reads as the next line a little before it starts
+        if self.ly_lead and self.dot >= DOTS_PER_LINE - LY_LEAD_DS:
+            return 0 if self.ly == LAST_LINE else self.ly + 1
         return self.visible_ly

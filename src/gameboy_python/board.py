@@ -336,6 +336,7 @@ class GameBoy:
             self._div_hold = not self.cpu.ime
             self.double_speed = not self.double_speed
             self.ppu.double_speed = self.double_speed
+            self.ppu.ly_lead = False
             self.key1 = 0
             # the PPU runs IRQ_LEAD dots ahead of the access in single speed, none in double
             lead = ppu_module.IRQ_LEAD

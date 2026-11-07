@@ -643,6 +643,15 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   `vram_m3/preread_lcdoffset1_2`, `vram_m3/prewrite_lcdoffset1_2` and
   `speedchange2_ly44_m3_stat_4` pass: CGB 2,719 -> 2,723, nothing lost; DMG unchanged. 2 and 1
   score the same or lose one; moving line 153's LY change (8 -> 5-7) changes nothing.
+* **LCD on in double speed**: line 0 starts `LCD_ON_DS` 2 dots further back (an even step: 1 or
+  -1 breaks 43 `scx_during_m3` ROMs), which passes the `enable_display` frame0/frame1
+  m0irq/m2irq/m2stat `_ds_1` halves, `ly0_m0irq_*_ds_1`, `ly0_late_cgbp*_ds_1` and the
+  `speedchange2_*lcdoff*` ROMs, all of which SameBoy passes. The LY register keeps its place:
+  after such an LCD-on, until the next speed switch, LY shows the next line `LY_LEAD_DS` 2 dots
+  early (and line 153 reads 0 2 dots sooner); without that AGE `ly-cgbE` fails, its double-speed
+  half reading LY at each line edge 0-4 M-cycles after the LCD-on, and the `frame0/1_ly_count_ds_2`
+  halves with it. CGB 2,723 -> 2,741 (+20 -2: `ly0_oambusy_read_ds_2` and `ly0_late_vramr_ds_2`,
+  lock reads against the LCD-on moment).
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
