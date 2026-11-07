@@ -47,6 +47,10 @@ SHADOW_LAG = 2  # the pixel-drawing PPU runs this many dots behind the one that 
 SHADOW_WX_LAG = 4
 WX_LAG = 1  # FITTED (Gambatte cgb04c window 143 -> 148 of 193 at 0 or 1; was 4, the shadow's SHADOW_WX_LAG carries the Mealybug fit): the timing PPU's window comparator sees WX this many dots late
 WIN_LAG = 0  # ... and LCDC.5/.0 this many
+# CGB: LCDC.5 cleared just after the window starts puts the background back, as in Gambatte's
+# StartWindowDraw (DMG keeps the window). FITTED (Gambatte cgb04c window +16 -2, late_disable_*):
+WIN_UNDO_DOTS = 6  # the clear undoes the window for this many dots after it starts
+WIN_UNDO_REFUND = 3  # ... and gives back this many of the dots the window's start took
 # FITTED (GBMicrotest win*; Gambatte window scx2 CGB +4, DMG +5 over 4)
 WINDOW_HEAD = 3  # fetcher dots the window restart gets for free
 WINDOW_HEAD_DS = 4  # ... in double speed (3 loses the m2int_wx*_m3stat_ds_2 halves)
@@ -243,6 +247,8 @@ class PPU:
         "win_stall",
         "win_started_wx",
         "window_active",
+        "win_undo",
+        "win_refund",
         "window_line",
         "window_used",
         "wx",
@@ -328,6 +334,8 @@ class PPU:
         self.x = 0  # next pixel to emit
         self.next_obj = 0
         self.window_active = False
+        self.win_undo: tuple | None = None  # CGB: the background's state when the window started
+        self.win_refund = 0  # pixel steps owed back after an undone window start
         self.window_line = 0  # the window's own line counter
         self.window_used = False  # window pixels drawn on this line
         self.wy_hit = False  # WY == LY seen this frame
@@ -459,6 +467,9 @@ class PPU:
                 self._start_mode3()
             elif self.drawing:
                 self._step_pixel()
+                while self.win_refund and self.drawing:
+                    self.win_refund -= 1
+                    self._step_pixel()
             if dot == MODE2_END and self.drawing:
                 self.mode = 3
             if self.mode0_dot and dot >= self.mode0_dot:
@@ -627,6 +638,7 @@ class PPU:
         self.dropped = 0
         self.next_obj = 0
         self.window_active = False
+        self.win_undo = None
         self.free_skip = 0
         self.bg: list[tuple[list[int], int]] = []  # the background FIFO: (tile ticket, bit)
         self.obj_fifo: list[tuple[int, int, int]] = []  # (colour, flags, OAM index) for the next pixels
@@ -770,6 +782,16 @@ class PPU:
             self._merge_object(ox, flags, index)
             self.obj_entry = None
 
+    def _undo_window(self) -> None:
+        """CGB: the window was switched off just after it started; the background goes on."""
+        (self.bg, self.f_step, self.f_dot, self.fetch_col, self.ticket, self.ticket_col,
+         self.t1_x, self.t1_obj, self.dummy, self.free_skip, _end, x) = self.win_undo
+        del self.bg[: self.x - x]  # the window's pixels already out stand for the background's
+        self.win_undo = None
+        self.window_active = False
+        self.win_stall = 0
+        self.win_refund = WIN_UNDO_REFUND
+
     def _start_object_fetch(self, entry: tuple[int, int, int, int, int]) -> None:
         dots = OBJ_FETCH_DOTS
         if not self.penalised:  # FITTED: the first object on a line costs less
@@ -827,6 +849,11 @@ class PPU:
         lcdc = self.lcdc
         if self.skip and self.bg and self.dropped == self.scx_hist[-1 - SKIP_LAG] & 7:
             self.skip = 0  # the next pixel is the first one shown
+        if self.win_undo is not None:
+            if self.m3 > self.win_undo[10]:
+                self.win_undo = None
+            elif not self.lcdc & 0x20:
+                self._undo_window()
         if self.bg and not self.skip:
             x = self.x
             lag = SHADOW_WX_LAG if self.is_shadow else WX_LAG
@@ -853,6 +880,12 @@ class PPU:
                 self.window_active = True
                 self.win_started_wx = wx
                 self.window_used = True
+                if self.cgb:
+                    self.win_undo = (
+                        self.bg, self.f_step, self.f_dot, self.fetch_col, self.ticket,
+                        self.ticket_col, self.t1_x, self.t1_obj, self.dummy, self.free_skip,
+                        self.m3 + WIN_UNDO_DOTS, x,
+                    )
                 if self.double_speed and self.penalised:  # an object was fetched before it
                     self.win_stall = WIN_OBJ_STALL_DS
                 self.bg = []

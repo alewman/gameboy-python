@@ -657,6 +657,12 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   does the OAM one: Gambatte `m1irq_disable_1`, `m1irq_disable_ds_1` (CGB 2,741 -> 2,743, nothing
   lost). The CGB VBlank delay stays 4: 0 passes two `lycint_vblank*` ROMs but fails Mooneye
   `vblank_stat_intr-C`; `MODE1_IRQ_DOT` and `VBLANK_IF_LATE` move nothing in `m1`.
+* **CGB: the window can be undone just after it starts**: LCDC.5 cleared in the first 6 dots of a
+  window start puts the background's fetcher state back and gives back 3 of the dots the start took
+  (`WIN_UNDO_DOTS`, `WIN_UNDO_REFUND`, fitted), as Gambatte's `StartWindowDraw` falls back to
+  plotting on CGB; DMG keeps the window. Gambatte `window/late_disable_*` CGB halves: CGB 2,743 ->
+  2,757 (+16 -2: `late_disable_late_scx00_wx10_ds_2`, `late_disable_late_scx03_wx12_2`). The sweep
+  over refund 1-6 and 3-12 dots peaks at 3 and 6; a refund of 4 trades the two back for four others.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
