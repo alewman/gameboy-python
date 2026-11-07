@@ -652,6 +652,11 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   half reading LY at each line edge 0-4 M-cycles after the LCD-on, and the `frame0/1_ly_count_ds_2`
   halves with it. CGB 2,723 -> 2,741 (+20 -2: `ly0_oambusy_read_ds_2` and `ly0_late_vramr_ds_2`,
   lock reads against the LCD-on moment).
+* **CGB: a STAT write can cancel the mode 1 interrupt**: a write clearing bit 4 in the M-cycle the
+  mode 1 source rises (line 144's first dot) cancels that STAT interrupt, as one clearing bit 5
+  does the OAM one: Gambatte `m1irq_disable_1`, `m1irq_disable_ds_1` (CGB 2,741 -> 2,743, nothing
+  lost). The CGB VBlank delay stays 4: 0 passes two `lycint_vblank*` ROMs but fails Mooneye
+  `vblank_stat_intr-C`; `MODE1_IRQ_DOT` and `VBLANK_IF_LATE` move nothing in `m1`.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays

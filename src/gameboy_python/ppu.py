@@ -38,6 +38,9 @@ PAL_HOLD_DS = 2  # FITTED (Gambatte cgbpal_m3end_ds): dots the CGB palettes stay
 # dots before it starts: LCD_ON_DS moves the lines, not the LY reads (AGE ly-cgbE, Gambatte
 # enable_display frame0/1_ly_count_ds_2)
 LY_LEAD_DS = 2
+# CGB: a STAT write clearing bit 4 in the M-cycle the mode 1 source rises cancels that interrupt
+# (Gambatte m1irq_disable_1, _ds_1; the write lands in the dot the source rises), like the OAM one
+M1_CANCEL_CGB = 1
 LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interrupt)
 WX_GLITCH = 0  # 1 = Pan Docs' WX-reached-again colour-0 pixel; it made wx_4/5 worse, so off
 SHADOW_LAG = 2  # the pixel-drawing PPU runs this many dots behind the one that times STAT
@@ -191,6 +194,7 @@ class PPU:
         "lyc_flag",
         "lyc_next",
         "lyc_wait",
+        "m1_early",
         "m3",
         "mode",
         "mode0_dot",
@@ -284,6 +288,7 @@ class PPU:
         self.glitching = False
         self.early_lyc153 = False
         self.early_fired = False
+        self.m1_early = False  # CGB: the mode 1 STAT interrupt was just raised; a write cancels it
         self.lyc_early = False  # ds: the LY=LYC interrupt just came early; a write cancels it
         self.irq_early_by = 0  # dots before its real time the interrupt just raised came
         self.irq_defer = False  # the interrupt just raised reaches the dispatch a cycle later
@@ -1025,12 +1030,14 @@ class PPU:
                     # the VBlank STAT source: the dispatch sees it on time, IF shows it later
                     self.irq_early_by = MODE1_IRQ_DOT
                     self.irq_halt_delay = 0
+                    self.m1_early = bool(M1_CANCEL_CGB and self.cgb)
                 self.raise_irq(1)
                 if oam and self.cgb and self.ly == 0:
                     self.early_fired = True  # a STAT write in this dot can still cancel it
         if self.dot == 1:
             self.early_fired = False
             self.lyc_early = False
+            self.m1_early = False
             self.early_lyc153 = False
         self.stat_line = line
 
@@ -1140,6 +1147,9 @@ class PPU:
             self.early_fired = False
         if self.lyc_early and not value & 0x40:
             self.lyc_early = False
+            cancel = True
+        if self.m1_early and not value & 0x10:
+            self.m1_early = False
             cancel = True
         if self.lcd_on and self.stat_write_glitch:
             # DMG: for the write's cycle every source is enabled, so a source that is true raises

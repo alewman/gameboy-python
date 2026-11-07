@@ -851,7 +851,9 @@ m1/lycint_vblankirq_2_dmg08_cgb04c_out1.gbc out
 m1/lycint_vblankirq_late_retrigger_1_dmg08_cgb04c_out1.gbc out
 m1/lycint_vblankirq_late_retrigger_ds_1_cgb04c_out1.gbc out
 m1/lycint_vblankirq_late_retrigger_ds_2_cgb04c_out0.gbc out
+m1/m1irq_disable_1_dmg08_out3_cgb04c_out1.gbc out
 m1/m1irq_disable_2_dmg08_cgb04c_out3.gbc out
+m1/m1irq_disable_ds_1_cgb04c_out1.gbc out
 m1/m1irq_disable_ds_2_cgb04c_out3.gbc out
 m1/m1irq_enable_1_dmg08_cgb04c_out3.gbc out
 m1/m1irq_enable_2_dmg08_cgb04c_out3.gbc out
