@@ -663,6 +663,17 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   plotting on CGB; DMG keeps the window. Gambatte `window/late_disable_*` CGB halves: CGB 2,743 ->
   2,757 (+16 -2: `late_disable_late_scx00_wx10_ds_2`, `late_disable_late_scx03_wx12_2`). The sweep
   over refund 1-6 and 3-12 dots peaks at 3 and 6; a refund of 4 trades the two back for four others.
+* **Line 144: LY=LYC hands over to mode 1 with a dip**: the LY=LYC flag falls at line 144's
+  start, and the mode 1 source rises 1 dot later (`M1_SRC_DOT`, fitted) unless the mode 0 source
+  is enabled (HBlank holds the line into VBlank), so LYC=143 then mode 1 is a new STAT edge.
+  Gambatte `m1/lycint143_m1irq*`, `lycint_m1intirq*`, `m1irq_m2enable_lyc*`: DMG 1,557 -> 1,565
+  (+9 -1), CGB +12 -4 (2 and more dots lose). Holding the mode 0 source instead loses the
+  `late_m0enable` ROMs. Mealybug 5/24 and GBMicrotest 481 unchanged.
+* **CGB single speed: line 0 compares WY 5 dots in** (`WY0_WAIT_CGB`, fitted), so a WY write in
+  the line's first M-cycle still counts: `window/late_wy_1`, `arg/late_wy_1`,
+  `late_wy_lcdoffset1_1` (+3, 2-4 give +2). Double speed: neither a line-0 delay nor a WY write
+  delay moves anything, and a shorter double-speed window head trades the `late_wy_ds` halves
+  for the `m2int_wx*_m3stat_ds_2` ones. CGB 2,757 -> 2,769 for the two together.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays

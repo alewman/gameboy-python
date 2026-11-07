@@ -382,3 +382,5 @@ cgb enable_display/frame0_m2irq_count_ds_1_cgb04c_out98.gbc
 cgb enable_display/frame0_ly_count_ds_2_cgb04c_out9A.gbc
 cgb m1/m1irq_disable_1_dmg08_out3_cgb04c_out1.gbc
 cgb window/late_disable_1_dmg08_out3_cgb04c_out0.gbc
+dmg m1/lycint143_m1irq_2_dmg08_cgb04c_out3.gbc
+cgb window/late_wy_1_dmg08_cgb04c_out0.gbc

@@ -41,6 +41,9 @@ LY_LEAD_DS = 2
 # CGB: a STAT write clearing bit 4 in the M-cycle the mode 1 source rises cancels that interrupt
 # (Gambatte m1irq_disable_1, _ds_1; the write lands in the dot the source rises), like the OAM one
 M1_CANCEL_CGB = 1
+# Line 144: the mode 1 STAT source rises this many dots after the LY=LYC flag falls (unless mode 0
+# is selected and holds the line), so LYC=143 then mode 1 is a new edge. FITTED (Gambatte m1 lycint143_*)
+M1_SRC_DOT = 1
 LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interrupt)
 WX_GLITCH = 0  # 1 = Pan Docs' WX-reached-again colour-0 pixel; it made wx_4/5 worse, so off
 SHADOW_LAG = 2  # the pixel-drawing PPU runs this many dots behind the one that times STAT
@@ -96,6 +99,10 @@ DS_SCX_LAG = 4
 # compared this many dots later (SameBoy runs the compare at the next 4-dot boundary, on CGB one
 # phase later than on DMG); 4-5 gain, 6 loses the _1 halves, DMG keeps the immediate compare
 WY_WAIT_CGB = 5
+# CGB single speed: line 0's WY==LY compare comes this many dots into the line, so a WY write in
+# the line's first M-cycle still counts (Gambatte window late_wy_1, late_wy_lcdoffset1_1: +3; in
+# double speed no value moves anything)
+WY0_WAIT_CGB = 5
 # WY==LY only counts while LCDC.5 is set (SameBoy wy_check), and setting LCDC.5 runs a new compare
 # this many dots later on CGB (4; 2 in double speed; DMG at once): Gambatte window CGB +6 -1, DMG +2
 WIN_EN_WAIT = 4
@@ -566,7 +573,9 @@ class PPU:
             self.mode = 2
             self.line_objs = []
             self.window_active = False
-            if self.ly == self.wy and self.lcdc & 0x20:
+            if self.ly == 0 and self.cgb and not self.double_speed and WY0_WAIT_CGB:
+                self.wy_wait = WY0_WAIT_CGB
+            elif self.ly == self.wy and self.lcdc & 0x20:
                 self.wy_hit = True
 
     # ----- the OAM corruption bug (DMG): Pan Docs OAM_Corruption_Bug.md ---------------------------
@@ -1017,7 +1026,11 @@ class PPU:
                 )
                 and not (self.line0 and self.dot < self.mode3_start)
             ),
-            bool(select & 0x10 and self.mode == 1),
+            bool(
+                select & 0x10
+                and self.mode == 1
+                and not (self.ly == VBLANK_LINE and self.dot < M1_SRC_DOT and not select & 0x08)
+            ),
             oam,
         )
         line = any(sources)
