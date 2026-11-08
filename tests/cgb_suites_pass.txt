@@ -1,4 +1,5 @@
 age-test-roms/halt/ei-halt-dmgC-cgbBCE.gb
+age-test-roms/halt/halt-m0-interrupt-dmgC-cgbBCE.gb
 age-test-roms/halt/halt-prefetch-dmgC-cgbBCE.gb
 age-test-roms/ly/ly-cgbE.gb
 age-test-roms/ly/ly-ncmE.gb

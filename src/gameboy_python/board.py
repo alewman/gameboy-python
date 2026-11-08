@@ -64,6 +64,11 @@ HDMA_HBLANK_LAG_DS = 2
 HDMA_END = 2  # ... and after its last, at single speed; FITTED
 VBLANK_CGB_DELAY = 4  # FITTED (Mooneye misc/ppu/vblank_stat_intr-C)
 TIMER_HALT_DELAY = 4  # FITTED (GBMicrotest int_timer_halt, int_timer_halt_div_b)
+# HALT decides on IF at the end of its fetch for a STAT interrupt raised in that fetch, and
+# samples IF at the start of its second cycle, so one raised there waits for the next cycle
+# (SameBoy halt() and GB_cpu_run's just_halted; Gambatte halt/late_m0i*_scx2/3, both models)
+HALT_SEES_STAT = 1
+HALT_CYCLE_HALTED = 1
 
 
 OAM_IDLE_KIND = "write"  # the OAM-bug pattern an IDU step without an access causes
@@ -121,6 +126,8 @@ class GameBoy:
         self._late_bits = 0  # IF bits raised in the last dots of the current M-cycle
         self._hide = 0  # IF bits raised early for the CPU's dispatch, not yet readable
         self._hide_left = 0
+        self._stat_now = False  # a STAT interrupt reached the CPU in this M-cycle
+        self._halt_cycle = False  # this M-cycle is HALT's own second one
         self._late: list[list[int]] = []  # OAM interrupts held back while the CPU is halted
         self.ppu = PPU(
             self._ppu_irq, machine.stat_write_glitch, stat_blocking=machine.stat_blocking, cgb=cgb
@@ -226,7 +233,12 @@ class GameBoy:
         if delay and sub + delay >= 4:
             self._late.append([sub + delay, bit])
             return
+        if bit == 1 and self._halt_cycle:
+            self._late.append([4, bit])  # HALT's second cycle sampled IF at its start
+            return
         self.cpu.request_interrupt(bit)
+        if bit == 1:
+            self._stat_now = True
         if self.ppu.sub >= IF_WRITE_PHASE:
             self._late_bits |= 1 << bit
         if bit in (0, 1) and self.ppu.irq_early_by:
@@ -261,10 +273,14 @@ class GameBoy:
                 if len(item) > 2:  # deferred past the lead: raised now, at dot item[0]
                     sub, bit, early, halt_delay = item
                     delay = halt_delay if self.cpu.halted else 0
+                    if self._halt_cycle:
+                        delay = 4 - sub  # HALT's second cycle sampled IF at its start
                     if sub + delay >= 4:
                         held.append([sub + delay, bit])  # a halted CPU sees it later still
                         continue
                     self.cpu.request_interrupt(bit)
+                    if bit == 1:
+                        self._stat_now = True
                     self._late_bits |= 1 << bit
                     if early:
                         self._hide |= 1 << bit
@@ -366,9 +382,16 @@ class GameBoy:
             self.ppu.corrupt_oam(kind)
 
     def _read(self, address: int) -> int:
+        cpu = self.cpu
+        self._halt_cycle = bool(HALT_CYCLE_HALTED and not cpu.idu and address == cpu.pc
+                                and self.peek((address - 1) & 0xFFFF) == 0x76)
+        self._stat_now = False
         self._tick()
+        self._halt_cycle = False
         self._bug(address, "readinc" if self.cpu.idu else "read")
         value = self._load(address)
+        if HALT_SEES_STAT and self._stat_now and value == 0x76 and cpu.idu == 1 and address == cpu.pc:
+            cpu.pending_at_fetch = cpu.pending_at_fetch or cpu.interrupt_pending
         self.ppu.after_access()
         self.timer.finish()
         if self._hdma_at_fetch:
