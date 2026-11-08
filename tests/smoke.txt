@@ -384,3 +384,4 @@ cgb m1/m1irq_disable_1_dmg08_out3_cgb04c_out1.gbc
 cgb window/late_disable_1_dmg08_out3_cgb04c_out0.gbc
 dmg m1/lycint143_m1irq_2_dmg08_cgb04c_out3.gbc
 cgb window/late_wy_1_dmg08_cgb04c_out0.gbc
+cgb lycEnable/ff41_disable_3_dmg08_cgb04c_out2.gbc

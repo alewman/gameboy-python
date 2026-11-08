@@ -44,6 +44,10 @@ M1_CANCEL_CGB = 1
 # Line 144: the mode 1 STAT source rises this many dots after the LY=LYC flag falls (unless mode 0
 # is selected and holds the line), so LYC=143 then mode 1 is a new edge. FITTED (Gambatte m1 lycint143_*)
 M1_SRC_DOT = 1
+# CGB, lines 0-142: the HBlank STAT source ends this many dots before the line does unless the
+# mode 2 source is selected (it takes over at once), so an LY=LYC rise at the next line's start is
+# a new edge. FITTED (Gambatte lycEnable ff41_disable_2/_3, miscmstatirq lycwirq_trigger_m0_late_*)
+M0_SRC_END = 1
 LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interrupt)
 WX_GLITCH = 0  # 1 = Pan Docs' WX-reached-again colour-0 pixel; it made wx_4/5 worse, so off
 SHADOW_LAG = 2  # the pixel-drawing PPU runs this many dots behind the one that times STAT
@@ -1022,7 +1026,15 @@ class PPU:
                 and (
                     (self.read_mode == 0)
                     if self.glitching
-                    else (self.mode == 0 or self.hblank_early)
+                    else (
+                        (self.mode == 0 or self.hblank_early)
+                        and not (
+                            self.cgb
+                            and not select & 0x20
+                            and self.dot >= DOTS_PER_LINE - M0_SRC_END
+                            and self.ly < VBLANK_LINE - 1
+                        )
+                    )
                 )
                 and not (self.line0 and self.dot < self.mode3_start)
             ),

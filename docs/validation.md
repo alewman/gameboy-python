@@ -674,6 +674,12 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   `late_wy_lcdoffset1_1` (+3, 2-4 give +2). Double speed: neither a line-0 delay nor a WY write
   delay moves anything, and a shorter double-speed window head trades the `late_wy_ds` halves
   for the `m2int_wx*_m3stat_ds_2` ones. CGB 2,757 -> 2,769 for the two together.
+* **CGB: HBlank's STAT source ends a dot before the line** (lines 0-142, `M0_SRC_END`, fitted)
+  unless the mode 2 source is selected, so with LY=LYC rising at the next line's start
+  (`LYC_IRQ_EARLY`) the line dips and raises a new interrupt: `lycEnable/ff41_disable_2/_3`,
+  `miscmstatirq/lycwirq_trigger_m0_late_ly44_lyc45_*`, two `lcdirq_precedence` ROMs. CGB 2,769 ->
+  2,776 (+9 -2: `m0enable/late_enable(_ds)_lcdoffset1_1`). Without the mode 2 exclusion the
+  `m2_late_m0disable` and `lcdstat28/68` ROMs lose. On DMG it only trades `ff41_disable_2` for `_3`.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
