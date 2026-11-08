@@ -389,3 +389,5 @@ dmg serial/start_late_div_write_wait_read_if_3b_dmg08_cgb04c_outE8.gbc
 dmg serial/nopx2_start_wait_read_if_1_dmg08_cgb04c_outE0.gbc
 cgb serial/start_wait_sc80_read_if_1_dmg08_cgb04c_outE0.gbc
 cgb serial/start_wait_clear_if_read_if_ds_1_cgb04c_outE8.gbc
+dmg window/on_screen/wxA6_wy01.gbc
+dmg window/m2int_wxA6_scx2_m3stat_2_dmg08_out0_cgb04c_out3.gbc

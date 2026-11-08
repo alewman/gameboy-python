@@ -49,6 +49,7 @@ M1_SRC_DOT = 1
 # a new edge. FITTED (Gambatte lycEnable ff41_disable_2/_3, miscmstatirq lycwirq_trigger_m0_late_*)
 M0_SRC_END = 1
 LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interrupt)
+WX166_CARRY = 1  # DMG: WX=166 starts the window at the next line's start (SameBoy display.c)
 WX_GLITCH = 0  # 1 = Pan Docs' WX-reached-again colour-0 pixel; it made wx_4/5 worse, so off
 SHADOW_LAG = 2  # the pixel-drawing PPU runs this many dots behind the one that times STAT
 SHADOW_WX_LAG = 4
@@ -255,6 +256,8 @@ class PPU:
         "ticket_col",
         "vram",
         "vram_bank",
+        "win_carry",
+        "win_mid",
         "win_stall",
         "win_started_wx",
         "window_active",
@@ -349,6 +352,8 @@ class PPU:
         self.win_refund = 0  # pixel steps owed back after an undone window start
         self.window_line = 0  # the window's own line counter
         self.window_used = False  # window pixels drawn on this line
+        self.win_mid = False  # the window started mid-line (STAT shows mode 0 later)
+        self.win_carry = False  # DMG: the line starts inside the window (WX=166 at the last end)
         self.wy_hit = False  # WY == LY seen this frame
         self.wy_wait = 0  # dots until a written WY is compared (CGB)
         self.lyc_wait = self.lyc_next = 0  # dots until a written LYC lands, and its value (CGB)
@@ -499,7 +504,7 @@ class PPU:
         self.mode0_dots = self.mode0_dots + 1 if self.mode == 0 else 0
         lag = (
             (MODE0_READ_LAG_DS if self.double_speed else MODE0_READ_LAG)
-            if not (self.penalised or self.window_used)
+            if not (self.penalised or self.win_mid)
             else MODE_READ_LAG
         )
         if lagged == 3 and self.mode == 0 and self.mode0_dots > lag:
@@ -650,7 +655,10 @@ class PPU:
         self.skip = 1
         self.dropped = 0
         self.next_obj = 0
-        self.window_active = False
+        self.window_active = self.win_carry
+        self.win_mid = False
+        if self.win_carry:
+            self.window_used = True
         self.win_undo = None
         self.free_skip = 0
         self.bg: list[tuple[list[int], int]] = []  # the background FIFO: (tile ticket, bit)
@@ -731,6 +739,10 @@ class PPU:
         if step < 3:
             self.f_dot += 1
             if self.f_dot == 1 and step == 0:
+                if self.window_active and not self.cgb and not self.lcdc & 0x20:
+                    # DMG: a tile fetch that sees the window disabled goes back to the
+                    # background (SameBoy advance_fetcher_state_machine)
+                    self.window_active = False
                 self.t1_x = self.x  # the map column's position is taken on the step's first dot
                 if self.skip and self.dropped > (self.scx & 7):
                     # the drop has passed SCX's low bits and will wrap: SameBoy's position went
@@ -759,7 +771,7 @@ class PPU:
         if not self.bg:
             if self.dummy:
                 self.dummy = False
-                self.fetch_col = 0
+                self.fetch_col = 1 if self.win_carry else 0  # a carried window goes on at tile 1
             else:
                 bits = range(8) if self.ticket[4] & 0x20 else range(7, -1, -1)  # horizontal flip
                 self.bg = [(self.ticket, b) for b in bits]
@@ -890,26 +902,32 @@ class PPU:
                 and self.wy_hit
                 and (x + 7 == wx or (x == 0 and wx < 7))
             ):
-                self.window_active = True
-                self.win_started_wx = wx
-                self.window_used = True
-                if self.cgb:
-                    self.win_undo = (
-                        self.bg, self.f_step, self.f_dot, self.fetch_col, self.ticket,
-                        self.ticket_col, self.t1_x, self.t1_obj, self.dummy, self.free_skip,
-                        self.m3 + WIN_UNDO_DOTS, x,
-                    )
-                if self.double_speed and self.penalised:  # an object was fetched before it
-                    self.win_stall = WIN_OBJ_STALL_DS
-                self.bg = []
-                self.f_step = 0
-                self.f_dot = 0
-                self.fetch_col = 0
-                self.free_skip = max(0, 7 - wx)  # hidden window pixels cost no dots
-                head = WINDOW_HEAD_DS if self.double_speed else WINDOW_HEAD
-                for _ in range(1 + (WINDOW_EDGE_HEAD if wx < 7 else head)):
-                    self._fetcher_dot()
-                return
+                if wx == 166 and not self.cgb and WX166_CARRY:
+                    # DMG: WX=166 does not start the window here, but it counts as a window line
+                    # and the window starts the next line instead (SameBoy)
+                    self.window_used = True
+                else:
+                    self.window_active = True
+                    self.win_mid = True
+                    self.win_started_wx = wx
+                    self.window_used = True
+                    if self.cgb:
+                        self.win_undo = (
+                            self.bg, self.f_step, self.f_dot, self.fetch_col, self.ticket,
+                            self.ticket_col, self.t1_x, self.t1_obj, self.dummy, self.free_skip,
+                            self.m3 + WIN_UNDO_DOTS, x,
+                        )
+                    if self.double_speed and self.penalised:  # an object was fetched before it
+                        self.win_stall = WIN_OBJ_STALL_DS
+                    self.bg = []
+                    self.f_step = 0
+                    self.f_dot = 0
+                    self.fetch_col = 0
+                    self.free_skip = max(0, 7 - wx)  # hidden window pixels cost no dots
+                    head = WINDOW_HEAD_DS if self.double_speed else WINDOW_HEAD
+                    for _ in range(1 + (WINDOW_EDGE_HEAD if wx < 7 else head)):
+                        self._fetcher_dot()
+                    return
             objs = self.line_objs
             if self.next_obj < len(objs) and objs[self.next_obj][0] - 8 <= x:
                 if not lcdc & 2:
@@ -956,6 +974,9 @@ class PPU:
                 ):
                     self.hblank_early = True  # the HBlank interrupt precedes mode 0 by a few dots
                 if self.x >= SCREEN_W:
+                    self.win_carry = bool(
+                        WX166_CARRY and not self.cgb and self.wy_hit and lcdc & 0x20
+                    ) and self.wx == 166
                     if self.mode3_start < MODE2_END:  # line 0: the pipeline ran early, STAT did not
                         self.mode0_dot = self.dot + MODE2_END - self.mode3_start
                     else:
@@ -1231,7 +1252,7 @@ class PPU:
             self.dot = 0
             self.mode = 0  # the LY=LYC flag and the STAT line stay as they were (stat_lyc_onoff)
             self.window_line = 0
-            self.window_used = self.window_active = self.wy_hit = False
+            self.window_used = self.window_active = self.wy_hit = self.win_carry = False
             self.line_objs = []
             self.pipe = []
             self._settle(0)

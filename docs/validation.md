@@ -689,6 +689,14 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   the event). Gambatte `serial` DMG 28 -> 35 of 36, CGB 35 -> 45 of 46; DMG 1,565 -> 1,572,
   CGB 2,776 -> 2,786, nothing lost. Left: `start_wait_trigger_int8_read_if_2` (DMG dispatch sees
   the bit 3 cycles early, CGB 4) and the fast-clock `start83_late_div_write_wait_read_if_1b`.
+* **DMG WX=166 carries the window into the next line** (SameBoy `display.c`): reaching WX=166
+  mid-line does not start the window but counts as a window line; when mode 3 ends with WY hit,
+  LCDC.5 set and WX=166, the next line starts inside the window at tile column 1, across VBlank
+  too (`WX166_CARRY`). A DMG tile fetch that sees LCDC.5 off ends the window. The STAT mode-0
+  read lag now keys on a window started mid-line (`win_mid`), not on any window line. Gambatte
+  DMG 1,572 -> 1,590 (the `m2int_wxA6_*` and `on_screen/wxA6_*` families), CGB unchanged,
+  nothing lost. Mealybug stays 5 of 24 but `m3_lcdc_win_en_change_multiple_wx` drops from
+  4,049 to 276 differing pixels and `m3_lcdc_win_en_change_multiple` from 8,316 to 6,354.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
