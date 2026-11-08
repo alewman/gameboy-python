@@ -50,6 +50,9 @@ IF_WRITE_PHASE = 0  # FITTED: IF bits raised in a write's own M-cycle survive th
 
 
 SERIAL_IF_HIDE = 4  # dots; fitted, see _serial_irq
+SERIAL_DIV_EDGE = 1  # a DIV write's fall clocks the serial toggle (Gambatte serial/*_div_write_*)
+# an SC write while the interrupt hides cancels it (Gambatte serial/*_sc80_*, *_stop_*)
+SERIAL_SC_CANCEL = 1
 # units (4 per M-cycle) a transfer takes after the opcode fetch before its first byte: SameBoy
 # GB_hdma_run's 2, 4 in double speed
 HDMA_START = 2
@@ -315,6 +318,8 @@ class GameBoy:
         """Writing DIV clears the counter: a high bit 12 falls, which ticks DIV-APU."""
         if self.timer.counter & (0x2000 if self.double_speed else 0x1000):
             self.apu.frame_tick()
+        if SERIAL_DIV_EDGE:
+            self.serial.div_reset(self.timer.counter)
         self.timer.write_div()
 
     def _stop(self, pending: bool):
@@ -644,6 +649,11 @@ class GameBoy:
             self.serial.write_sb(value)
         elif low == 0x02:
             self.serial.cgb_mode = self.ppu.cgb_mode
+            if SERIAL_SC_CANCEL and self._hide & 8:
+                # the transfer has not ended yet: the write stops it before its interrupt
+                self.cpu.if_ &= ~8
+                self._hide &= ~8
+                self.serial.cancel_finish()
             self.serial.write_sc(value)
         elif low == 0x04:
             self._write_div()
@@ -655,7 +665,9 @@ class GameBoy:
             self.timer.write_tac(value)
         elif low == 0x0F:
             # an interrupt raised late in this very cycle is not cleared by the write
-            self.cpu.if_ = (value & 0x1F) | self._late_bits
+            # nor is a serial interrupt still hidden: it has not happened yet (Gambatte flags it
+            # at the end of the hiding)
+            self.cpu.if_ = (value & 0x1F) | self._late_bits | (self.cpu.if_ & self._hide & 8)
         elif low == 0x40:
             self.ppu.write_lcdc(value)
         elif low == 0x41:

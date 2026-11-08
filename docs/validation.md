@@ -680,6 +680,15 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   `miscmstatirq/lycwirq_trigger_m0_late_ly44_lyc45_*`, two `lcdirq_precedence` ROMs. CGB 2,769 ->
   2,776 (+9 -2: `m0enable/late_enable(_ds)_lcdoffset1_1`). Without the mode 2 exclusion the
   `m2_late_m0disable` and `lcdstat28/68` ROMs lose. On DMG it only trades `ff41_disable_2` for `_3`.
+* **Serial clock as SameBoy's toggle**: bit 7's falls flip a toggle and the toggle's fall shifts
+  (SameBoy `GB_serial_master_edge`), instead of shifting on bit 8's falls. Any SC write drops a
+  high toggle; a DIV write while bit 7 is high is a fall; both writes act before a fall in their
+  own M-cycle (`SC_BEFORE_EDGE`, `SERIAL_DIV_PHASE`, fitted on `nopx*_start*` and
+  `*_late_div_write_*`). The interrupt's 4 hidden dots (`SERIAL_IF_HIDE`) now count as not yet
+  happened: an SC write in them cancels it, an IF write does not clear it (Gambatte flags it at
+  the event). Gambatte `serial` DMG 28 -> 35 of 36, CGB 35 -> 45 of 46; DMG 1,565 -> 1,572,
+  CGB 2,776 -> 2,786, nothing lost. Left: `start_wait_trigger_int8_read_if_2` (DMG dispatch sees
+  the bit 3 cycles early, CGB 4) and the fast-clock `start83_late_div_write_wait_read_if_1b`.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
