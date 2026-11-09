@@ -69,6 +69,10 @@ TIMER_HALT_DELAY = 4  # FITTED (GBMicrotest int_timer_halt, int_timer_halt_div_b
 # (SameBoy halt() and GB_cpu_run's just_halted; Gambatte halt/late_m0i*_scx2/3, both models)
 HALT_SEES_STAT = 1
 HALT_CYCLE_HALTED = 1
+# a dispatch's low-byte push samples IF in its cycle's first dot, so an HBlank interrupt raised
+# after that is not chosen and a pending one raised again stays set (Gambatte irq_precedence
+# late_m0irq_vs_tima_*_2 and late_m0irq_retrigger_scx1_1; SameBoy reads IF at the push)
+DISPATCH_SAMPLE_DOT = 1
 
 
 OAM_IDLE_KIND = "write"  # the OAM-bug pattern an IDU step without an access causes
@@ -235,13 +239,19 @@ class GameBoy:
         if bit == 1 and self._halt_cycle:
             self._late.append([4, bit])  # HALT's second cycle sampled IF at its start
             return
-        self.cpu.request_interrupt(bit, halt_sees=bit == 1 and HALT_SEES_STAT)
+        late = self._dispatch_late(bit, self.ppu.irq_early_by)
+        self.cpu.request_interrupt(bit, halt_sees=bit == 1 and HALT_SEES_STAT, late=late)
         if self.ppu.sub >= IF_WRITE_PHASE:
             self._late_bits |= 1 << bit
         if bit in (0, 1) and self.ppu.irq_early_by:
             # the dispatch decision sees this interrupt a cycle early; reads of IF do not
             self._hide |= 1 << bit
             self._hide_left = self.ppu.irq_early_by
+
+    def _dispatch_late(self, bit: int, early: int) -> bool:
+        """An HBlank interrupt raised after the dot where a dispatch's low-byte push samples IF."""
+        hblank = bit == 1 and early == ppu_module.HBLANK_IRQ_EARLY
+        return hblank and self.ppu.sub >= DISPATCH_SAMPLE_DOT
 
     def _tick(self) -> None:
         """One M-cycle of the whole board."""
@@ -275,7 +285,9 @@ class GameBoy:
                     if sub + delay >= 4:
                         held.append([sub + delay, bit])  # a halted CPU sees it later still
                         continue
-                    self.cpu.request_interrupt(bit, halt_sees=bit == 1 and HALT_SEES_STAT)
+                    late = self._dispatch_late(bit, early)
+                    halt_sees = bit == 1 and HALT_SEES_STAT
+                    self.cpu.request_interrupt(bit, halt_sees=halt_sees, late=late)
                     self._late_bits |= 1 << bit
                     if early:
                         self._hide |= 1 << bit
