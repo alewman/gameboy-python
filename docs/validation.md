@@ -710,7 +710,7 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   low-byte push, before that cycle's T-cycles run): the push samples IF in its cycle's first dot,
   so an HBlank STAT interrupt the PPU raises later in that cycle is not chosen and stays pending,
   and one raised again while its bit is being dispatched stays set (`DISPATCH_SAMPLE_DOT`). The
-  board marks it with the core's `request_interrupt(bit, late=True)` (sm83-python branch `dispatch-late-irq`, 5bc4eeb). Other
+  board marks it with the core's `request_interrupt(bit, late=True)` (sm83-python PR #2, merged as 95f2b8b). Other
   STAT sources are not marked: the LY=LYC and line-start ones carry their own fitted dispatch
   offsets, and the `late_retrigger_2` tests for them want the old merge. Gambatte
   `irq_precedence/late_m0irq_vs_tima_*_2` and `late_m0irq_retrigger_scx1_1` (CGB also
