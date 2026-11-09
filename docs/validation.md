@@ -702,8 +702,8 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   does not halt and the interrupt is dispatched at once (`HALT_SEES_STAT`); one raised during
   HALT's second cycle reaches the CPU a cycle later, since that cycle samples IF at its start
   (`HALT_CYCLE_HALTED`). The sm83 core's die rule (an interrupt raised during HALT's fetch is
-  not seen) was settled on timer interrupts and stays for them; the board makes the exception for
-  STAT. Gambatte `halt/late_m0i*_scx2/3`: DMG 1,590 -> 1,599, CGB 2,786 -> 2,794, nothing lost;
+  not seen) was settled on timer interrupts and stays for them; the board marks STAT ones with
+  the core's `request_interrupt(bit, halt_sees=True)` (sm83-python PR #1, pinned at 7b8d6e3). Gambatte `halt/late_m0i*_scx2/3`: DMG 1,590 -> 1,599, CGB 2,786 -> 2,794, nothing lost;
   AGE `halt-m0-interrupt-dmgC-cgbBCE` now passes (AGE 9 of 28).
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to

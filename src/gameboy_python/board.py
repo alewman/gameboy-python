@@ -126,7 +126,6 @@ class GameBoy:
         self._late_bits = 0  # IF bits raised in the last dots of the current M-cycle
         self._hide = 0  # IF bits raised early for the CPU's dispatch, not yet readable
         self._hide_left = 0
-        self._stat_now = False  # a STAT interrupt reached the CPU in this M-cycle
         self._halt_cycle = False  # this M-cycle is HALT's own second one
         self._late: list[list[int]] = []  # OAM interrupts held back while the CPU is halted
         self.ppu = PPU(
@@ -236,9 +235,7 @@ class GameBoy:
         if bit == 1 and self._halt_cycle:
             self._late.append([4, bit])  # HALT's second cycle sampled IF at its start
             return
-        self.cpu.request_interrupt(bit)
-        if bit == 1:
-            self._stat_now = True
+        self.cpu.request_interrupt(bit, halt_sees=bit == 1 and HALT_SEES_STAT)
         if self.ppu.sub >= IF_WRITE_PHASE:
             self._late_bits |= 1 << bit
         if bit in (0, 1) and self.ppu.irq_early_by:
@@ -278,9 +275,7 @@ class GameBoy:
                     if sub + delay >= 4:
                         held.append([sub + delay, bit])  # a halted CPU sees it later still
                         continue
-                    self.cpu.request_interrupt(bit)
-                    if bit == 1:
-                        self._stat_now = True
+                    self.cpu.request_interrupt(bit, halt_sees=bit == 1 and HALT_SEES_STAT)
                     self._late_bits |= 1 << bit
                     if early:
                         self._hide |= 1 << bit
@@ -385,13 +380,10 @@ class GameBoy:
         cpu = self.cpu
         self._halt_cycle = bool(HALT_CYCLE_HALTED and not cpu.idu and address == cpu.pc
                                 and self.peek((address - 1) & 0xFFFF) == 0x76)
-        self._stat_now = False
         self._tick()
         self._halt_cycle = False
         self._bug(address, "readinc" if self.cpu.idu else "read")
         value = self._load(address)
-        if HALT_SEES_STAT and self._stat_now and value == 0x76 and cpu.idu == 1 and address == cpu.pc:
-            cpu.pending_at_fetch = cpu.pending_at_fetch or cpu.interrupt_pending
         self.ppu.after_access()
         self.timer.finish()
         if self._hdma_at_fetch:
