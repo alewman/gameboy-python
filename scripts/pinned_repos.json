@@ -135,13 +135,13 @@
   "note": "msinger's research documents"
  },
  {
-  "path": "reference/src/GBEmulatorShootout",
-  "url": "https://github.com/daid/GBEmulatorShootout",
-  "rev": "d8fe9674d4603526ae2ecf0c22a1525758fe7503",
-  "date": "2026-03-16T12:33:05+01:00",
+  "path": "reference/src/GBEmulatorShootout-gbdev",
+  "url": "https://github.com/gbdev/GBEmulatorShootout",
+  "rev": "38b926bdbc26993d1b4c43e97979ecc66287bf02",
+  "date": "2026-07-13T20:59:48+02:00",
   "sparse": [],
-  "license": "no licence file",
-  "note": "daid's emulator x test-suite matrix and runners"
+  "license": "MIT",
+  "note": "the gbdev emulator leaderboard (moved from daid): test list + expected pictures for scripts/shootout.py"
  },
  {
   "path": "reference/src/GBMicrotest",

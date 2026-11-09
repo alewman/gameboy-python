@@ -94,7 +94,7 @@ need `--seconds 0.5` after quickboot (the boot itself takes under 0.2 s).
 | **MAME 0.285** `gameboy` | trace oracle for the CPU (`scripts/mame_trace.py`, [mame-oracle.md](mame-oracle.md)) | Mooneye acceptance **58/66** applicable: fails `ei_sequence`, `interrupts/ie_push`, `oam_dma/reg_read`, `ppu/lcdon_timing-GS`, `ppu/lcdon_write_timing-GS`, `ppu/stat_lyc_onoff`; no result in 3 s for `oam_dma/sources-GS`, `ppu/intr_2_mode0_timing_sprites`. blargg `mem_timing-2` passes, `dmg_sound` fails $0A, `oam_bug` fails $02 (no OAM bug). A detector only. |
 | Gambatte, mGBA, AGE (`c-sp/age`), GateBoy/LogicBoy | second detectors | not run here |
 | Mealybug expected pictures, SameBoy-made blargg pictures | see above | — |
-| daid's **GBEmulatorShootout** (`d8fe9674`) | a ready-made pass/fail matrix of emulators over these suites, with its own runners | not run here; useful to see which tests *no* emulator passes |
+| gbdev's **GBEmulatorShootout** (`38b926bd`, moved from daid) | the leaderboard at gbdev.io/GBEmulatorShootout: a test list with expected pictures | `scripts/shootout.py` scores the board as the leaderboard does: 230 of 258 (2026-11-08; SGB tests skipped); top there: docboy 258/261, Emulicious 254/261, SameBoy 253/264 |
 
 SingleStepTests `sm83` belongs to the CPU core, not here; sm83-python's
 `docs/validation.md` covers it.
