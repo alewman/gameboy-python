@@ -240,6 +240,7 @@ class GameBoy:
             self._late.append([4, bit])  # HALT's second cycle sampled IF at its start
             return
         late = self._dispatch_late(bit, self.ppu.irq_early_by)
+        self._m0_cancellable(bit, self.ppu.irq_early_by, deferred=False)
         self.cpu.request_interrupt(bit, halt_sees=bit == 1 and HALT_SEES_STAT, late=late)
         if self.ppu.sub >= IF_WRITE_PHASE:
             self._late_bits |= 1 << bit
@@ -253,11 +254,23 @@ class GameBoy:
         hblank = bit == 1 and early == ppu_module.HBLANK_IRQ_EARLY
         return hblank and self.ppu.sub >= DISPATCH_SAMPLE_DOT
 
+    def _m0_cancellable(self, bit: int, early: int, deferred: bool) -> None:
+        """An HBlank interrupt reaching IF before its source rises: a STAT write clearing bit 3
+        later in this M-cycle cancels it (``ppu.M0_CANCEL_DMG``, ``ppu.M0_CANCEL_CGB``)."""
+        if bit != 1 or early != ppu_module.HBLANK_IRQ_EARLY:
+            return
+        if self.cgb:
+            sub = self.ppu.sub >= ppu_module.M0_CANCEL_CGB and not deferred
+            self.ppu.m0_early = bool(ppu_module.M0_CANCEL_CGB) and sub
+        else:
+            self.ppu.m0_early = bool(ppu_module.M0_CANCEL_DMG)
+
     def _tick(self) -> None:
         """One M-cycle of the whole board."""
         dots = 2 if self.double_speed else 4  # the PPU and APU run at the single-speed rate
         self.t += dots
         self._late_bits = 0
+        self.ppu.m0_early = False  # only a write in the M-cycle of the raise cancels it
         if self._switch_wait:
             self._switch_wait -= 4
             if self.cpu.halted:
@@ -286,6 +299,7 @@ class GameBoy:
                         held.append([sub + delay, bit])  # a halted CPU sees it later still
                         continue
                     late = self._dispatch_late(bit, early)
+                    self._m0_cancellable(bit, early, deferred=True)
                     halt_sees = bit == 1 and HALT_SEES_STAT
                     self.cpu.request_interrupt(bit, halt_sees=halt_sees, late=late)
                     self._late_bits |= 1 << bit
@@ -698,7 +712,7 @@ class GameBoy:
         elif low == 0x40:
             self.ppu.write_lcdc(value)
         elif low == 0x41:
-            if self.ppu.write_stat(value):  # cancelled an OAM interrupt raised early (CGB)
+            if self.ppu.write_stat(value):  # cancelled an interrupt raised early
                 self.cpu.if_ &= ~2
                 self._hide &= ~2
         elif low == 0x42:

@@ -738,8 +738,11 @@ lywrite/lywrite77_ly97_stat_dmg08_cgb04c_outC5.gbc out
 m0enable/disable_1_dmg08_cgb04c_out0.gbc out
 m0enable/disable_2_dmg08_out0_cgb04c_out2.gbc out
 m0enable/disable_3_dmg08_cgb04c_out2.gbc out
+m0enable/disable_ds_1_cgb04c_out1.gbc out
 m0enable/disable_ds_2_cgb04c_out3.gbc out
+m0enable/disable_scx1_1_dmg08_cgb04c_out0.gbc out
 m0enable/disable_scx1_2_dmg08_cgb04c_out2.gbc out
+m0enable/disable_scx2_1_dmg08_cgb04c_out0.gbc out
 m0enable/disable_scx2_2_dmg08_cgb04c_out2.gbc out
 m0enable/disable_scx3_1_dmg08_cgb04c_out0.gbc out
 m0enable/disable_scx3_2_dmg08_out0_cgb04c_out2.gbc out
@@ -747,6 +750,7 @@ m0enable/disable_scx3_3_dmg08_cgb04c_out2.gbc out
 m0enable/disable_scx4_1_dmg08_cgb04c_out0.gbc out
 m0enable/disable_scx4_2_dmg08_out0_cgb04c_out2.gbc out
 m0enable/disable_scx4_3_dmg08_cgb04c_out2.gbc out
+m0enable/disable_scx5_1_dmg08_cgb04c_out0.gbc out
 m0enable/disable_scx5_2_dmg08_cgb04c_out2.gbc out
 m0enable/disable_scx5_ds_1_cgb04c_out1.gbc out
 m0enable/disable_scx5_ds_2_cgb04c_out3.gbc out

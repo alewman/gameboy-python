@@ -41,6 +41,11 @@ LY_LEAD_DS = 2
 # CGB: a STAT write clearing bit 4 in the M-cycle the mode 1 source rises cancels that interrupt
 # (Gambatte m1irq_disable_1, _ds_1; the write lands in the dot the source rises), like the OAM one
 M1_CANCEL_CGB = 1
+# The HBlank interrupt reaches IF HBLANK_IRQ_EARLY dots before its source rises; a STAT write
+# clearing bit 3 in that M-cycle lands first and cancels it (Gambatte m0enable/disable_*): on DMG
+# in every phase, on CGB only for one raised in the cycle from this dot on (scx 1, 2, 5)
+M0_CANCEL_DMG = 1
+M0_CANCEL_CGB = 1
 # Line 144: the mode 1 STAT source rises this many dots after the LY=LYC flag falls (unless mode 0
 # is selected and holds the line), so LYC=143 then mode 1 is a new edge. FITTED (Gambatte m1 lycint143_*)
 M1_SRC_DOT = 1
@@ -210,6 +215,7 @@ class PPU:
         "lyc_flag",
         "lyc_next",
         "lyc_wait",
+        "m0_early",
         "m1_early",
         "m3",
         "mode",
@@ -308,6 +314,7 @@ class PPU:
         self.glitching = False
         self.early_lyc153 = False
         self.early_fired = False
+        self.m0_early = False  # the HBlank interrupt reached IF early in this M-cycle (board)
         self.m1_early = False  # CGB: the mode 1 STAT interrupt was just raised; a write cancels it
         self.lyc_early = False  # ds: the LY=LYC interrupt just came early; a write cancels it
         self.irq_early_by = 0  # dots before its real time the interrupt just raised came
@@ -1226,6 +1233,9 @@ class PPU:
             self.early_fired = False
         if self.lyc_early and not value & 0x40:
             self.lyc_early = False
+            cancel = True
+        if self.m0_early and not value & 0x08:
+            self.m0_early = False
             cancel = True
         if self.m1_early and not value & 0x10:
             self.m1_early = False

@@ -715,6 +715,14 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   offsets, and the `late_retrigger_2` tests for them want the old merge. Gambatte
   `irq_precedence/late_m0irq_vs_tima_*_2` and `late_m0irq_retrigger_scx1_1` (CGB also
   `late_m0irq_retrigger_ds_1`): DMG 1,599 -> 1,604, CGB 2,794 -> 2,800, nothing lost.
+* **A STAT write cancelling the early HBlank interrupt**: the board raises the HBlank interrupt
+  `HBLANK_IRQ_EARLY` dots before its source rises (for the dispatch's timing), so a STAT write
+  clearing bit 3 in the M-cycle the interrupt reaches IF lands before the source and cancels it,
+  as the OAM, LY=LYC and mode 1 ones already were (`M0_CANCEL_DMG`, `M0_CANCEL_CGB`). On DMG
+  this holds in every phase; on CGB only for one raised in that cycle from its second dot on
+  (SCX 1, 2, 5), not at its first dot nor deferred past the PPU's lead (SCX 0, 3, 4, 7), which the
+  CGB columns of the same ROMs need. Gambatte `m0enable/disable_*`: DMG 1,604 -> 1,611, CGB
+  2,800 -> 2,804, nothing lost.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
