@@ -745,6 +745,15 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   pulse rises before the write (`m1/lyc143_late_m2enable_lycdisable_2` wants no interrupt).
   Gambatte `m2enable/late_*m1disable_ly0_*`, `lyc0_late_m2enable_lycdisable_*`: DMG 1,628 ->
   1,631, CGB 2,815 -> 2,817, nothing lost.
+* **DMG LYC writes landing first in their M-cycle**: an LYC write that ends the match cancels an
+  LY=LYC interrupt raised earlier in its M-cycle (`ppu.lyc_rose`, `LYC_CANCEL_DMG`), and lands
+  before an LY=LYC or mode 1 fall of the line earlier in its M-cycle, so a match it makes on the
+  new line is no edge (`LYC_FALL_DMG`; not before an HBlank fall, which
+  `miscmstatirq/lycwirq_trigger_m0_late_*` rules out). CGB LYC writes wait (`LYC_WAIT_CGB`)
+  instead. A hidden rise of the LY=LYC source (as `m0_hidden`) fixed
+  `lyc153_late_m1disable_2` but broke `lyc0_m1disable_3`, so it is out. Gambatte
+  `lycEnable/ff45_disable_2`, `ff45_enable_weirdpoint_3`, `lyc153_late_ff45_enable_3`,
+  `lyc_ff45_disable2_2`, `lycwirq_trigger_ly00_stat50_2`: DMG 1,631 -> 1,636, nothing lost.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays

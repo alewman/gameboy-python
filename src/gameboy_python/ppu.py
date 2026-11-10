@@ -53,6 +53,10 @@ M0_CANCEL_CGB = 1
 STAT_FALL_DMG = 1
 STAT_FALL_CGB = 2
 STAT_FALL_CGB_DS = 1
+# DMG: an LYC write lands before an LY=LYC or mode 1 fall of the line earlier in its M-cycle
+# (not an HBlank one: Gambatte miscmstatirq/lycwirq_trigger_m0_late_*)
+LYC_FALL_DMG = 1
+LYC_CANCEL_DMG = 1  # an LYC write ending the match cancels an LY=LYC raise earlier in its M-cycle
 OAM_HIDDEN_DMG = 1  # the hidden rise (m0_hidden) of the OAM pulse
 OAM_HIDDEN_DS = 1  # ... and on CGB in double speed
 # Line 144: the mode 1 STAT source rises this many dots after the LY=LYC flag falls (unless mode 0
@@ -228,6 +232,7 @@ class PPU:
         "m0_hidden",
         "oam_hidden",
         "oam_raw",
+        "lyc_rose",
         "stat_fell",
         "m1_early",
         "m3",
@@ -334,7 +339,8 @@ class PPU:
         # line 0's OAM pulse rose (selected or not) in this M-cycle under a line held high (board)
         self.oam_hidden = False
         self.oam_raw = False  # the OAM pulse, whether STAT selects it or not
-        self.stat_fell = False  # the STAT line fell in this M-cycle before the CPU's access (board)
+        self.lyc_rose = False  # DMG: the LY=LYC source raised the interrupt in this M-cycle (board)
+        self.stat_fell = 0  # the STAT line fell in this M-cycle before the CPU's access (board)
         self.m1_early = False  # CGB: the mode 1 STAT interrupt was just raised; a write cancels it
         self.lyc_early = False  # ds: the LY=LYC interrupt just came early; a write cancels it
         self.irq_early_by = 0  # dots before its real time the interrupt just raised came
@@ -1154,6 +1160,8 @@ class PPU:
                     self.irq_halt_delay = 0
                     self.m1_early = bool(M1_CANCEL_CGB and self.cgb)
                 self.raise_irq(1)
+                if sources[0] and not prior[0] and not self.cgb and not self._in_lead():
+                    self.lyc_rose = bool(LYC_CANCEL_DMG)
                 if oam and self.cgb and self.ly == 0:
                     self.early_fired = True  # a STAT write in this dot can still cancel it
         if self.dot == 1:
@@ -1163,11 +1171,13 @@ class PPU:
             self.early_lyc153 = False
         if self.stat_line and not line and not self._in_lead():
             if not self.cgb:
-                self.stat_fell = bool(STAT_FALL_DMG)
+                fell = bool(STAT_FALL_DMG)
             elif self.double_speed:
-                self.stat_fell = bool(STAT_FALL_CGB_DS) and self.sub >= STAT_FALL_CGB_DS
+                fell = bool(STAT_FALL_CGB_DS) and self.sub >= STAT_FALL_CGB_DS
             else:
-                self.stat_fell = bool(STAT_FALL_CGB) and self.sub >= STAT_FALL_CGB and not prior[0]
+                fell = bool(STAT_FALL_CGB) and self.sub >= STAT_FALL_CGB and not prior[0]
+            if fell:  # the sources that held the line: an LYC write beats only LY=LYC's or mode 1's
+                self.stat_fell = sum(1 << i for i, high in enumerate(prior) if high)
         self.stat_line = line
 
     def _halt_delay(self, oam: bool) -> int:
@@ -1398,6 +1408,10 @@ class PPU:
 
     def write_lyc(self, value: int) -> bool:
         """Write LYC; True when the write cancels an LY=LYC interrupt raised early in this dot."""
+        if self.lyc_rose and value != self.visible_ly:
+            self.lyc_rose = False  # DMG: the write lands before the match earlier in its M-cycle
+            self._write_lyc_now(value)
+            return not self.stat_line
         if self.lyc_early and value != self.visible_ly:
             self.lyc_early = False
             self._write_lyc_now(value)
@@ -1405,6 +1419,8 @@ class PPU:
         if self.cgb and not self.double_speed and LYC_WAIT_CGB and self.lcd_on:
             self.lyc_wait, self.lyc_next = LYC_WAIT_CGB, value
             return False
+        if self.stat_fell & 5 and self.stat_blocking and not self.cgb and LYC_FALL_DMG:
+            self.stat_line = True  # DMG: as a STAT write does, it lands before the fall
         self._write_lyc_now(value)
         return False
 
