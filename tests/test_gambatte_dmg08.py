@@ -1,6 +1,6 @@
 """Gambatte's ``dmg08`` hardware tests: the board must keep passing what it passes today.
 
-``tests/gambatte_dmg08_pass.txt`` (1,645 verdicts, written from ``scripts/gambatte_dmg08.py --json``)
+``tests/gambatte_dmg08_pass.txt`` (1,648 verdicts, written from ``scripts/gambatte_dmg08.py --json``)
 lists them; running all takes hours, so this holds every STRIDE-th one, from the post-boot state
 (the real-boot run gave the same total). Rerun the script after a change that touches timing.
 """

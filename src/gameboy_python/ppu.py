@@ -56,6 +56,8 @@ STAT_FALL_CGB_DS = 1
 # DMG: an LYC write lands before an LY=LYC or mode 1 fall of the line earlier in its M-cycle
 # (not an HBlank one: Gambatte miscmstatirq/lycwirq_trigger_m0_late_*)
 LYC_FALL_DMG = 1
+OAM_LY0_IF_DMG = 4  # IF shows line 0's OAM interrupt this many dots after its raise
+OAM_LY0_IF_CGB = 4
 LYC_CANCEL_DMG = 1  # an LYC write ending the match cancels an LY=LYC raise earlier in its M-cycle
 OAM_HIDDEN_DMG = 1  # the hidden rise (m0_hidden) of the OAM pulse
 OAM_HIDDEN_DS = 1  # ... and on CGB in double speed
@@ -1163,6 +1165,10 @@ class PPU:
                     self.irq_early_by = MODE1_IRQ_DOT
                     self.irq_halt_delay = 0
                     self.m1_early = bool(M1_CANCEL_CGB and self.cgb)
+                if oam and self.ly == 0 and not self.irq_early_by:
+                    # line 0's OAM interrupt, raised on time, shows in IF a cycle later (Gambatte
+                    # lyc153int_m2irq_1, ly0/lycint152_m2irq_1)
+                    self.irq_early_by = OAM_LY0_IF_CGB if self.cgb else OAM_LY0_IF_DMG
                 self.raise_irq(1)
                 if sources[0] and not prior[0] and not self.cgb and not self._in_lead():
                     self.lyc_rose = bool(LYC_CANCEL_DMG)

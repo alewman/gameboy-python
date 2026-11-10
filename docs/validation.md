@@ -761,6 +761,13 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   unchanged; on CGB 3 loses ~190 (most in double speed), so CGB keeps 4. Gambatte
   `miscmstatirq/lycwirq_trigger_m0_late_*`, `lcdirq_precedence/*lycirq_ly44_*`, `lycEnable/
   ff40_disable_1`, `ff41_disable_3`, `lyc153_late_*m1disable_2`: DMG 1,636 -> 1,645, nothing lost.
+* **Line 0's OAM interrupt in IF a cycle late**: the other lines' OAM interrupts are raised early
+  and IF shows them a cycle after the dispatch can; line 0's is raised on time, and IF hides it
+  for 4 dots all the same (`OAM_LY0_IF_DMG`, `OAM_LY0_IF_CGB`), so an IF read in the M-cycle of
+  its raise misses it. Gambatte `lyc153int_m2irq_1`, `ly0/lycint152_m2irq_1`,
+  `enable_display/frame1_m2irq_count_1`: DMG 1,645 -> 1,648, CGB 2,817 -> 2,820 (+4, lost
+  `lcd_offset/offset1_lyc99int_m2irq_count_2`, which every hide length loses; 4 wins most). Doubling
+  the PPU's lead instead (`IRQ_LEAD` 2) nets DMG -3, CGB -6 and fixes neither.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
