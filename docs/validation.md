@@ -754,6 +754,13 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   `lyc153_late_m1disable_2` but broke `lyc0_m1disable_3`, so it is out. Gambatte
   `lycEnable/ff45_disable_2`, `ff45_enable_weirdpoint_3`, `lyc153_late_ff45_enable_3`,
   `lyc_ff45_disable2_2`, `lycwirq_trigger_ly00_stat50_2`: DMG 1,631 -> 1,636, nothing lost.
+* **The DMG LY=LYC interrupt one dot later**: on DMG the LY=LYC interrupt comes 3 dots before the
+  flag, not 4 (`LYC_IRQ_EARLY_DMG`), so an HBlank source ending at the line's start leaves the line
+  low for a dot and the LY=LYC rise after it is an edge. An LYC write landing before the fall that
+  makes LYC the new line's LY carries the match over (no edge). GBMicrotest `int_lyc_*` is
+  unchanged; on CGB 3 loses ~190 (most in double speed), so CGB keeps 4. Gambatte
+  `miscmstatirq/lycwirq_trigger_m0_late_*`, `lcdirq_precedence/*lycirq_ly44_*`, `lycEnable/
+  ff40_disable_1`, `ff41_disable_3`, `lyc153_late_*m1disable_2`: DMG 1,636 -> 1,645, nothing lost.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays

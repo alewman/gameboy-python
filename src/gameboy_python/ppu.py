@@ -89,7 +89,11 @@ MODE1_IRQ_DOT = 4  # FITTED (GBMicrotest vblank_int_if_*): the STAT VBlank sourc
 # lcdoffset1 ROMs can (Gambatte cgb04c lcdoffset1 +13, speedchange +25). The HBlank and mode 2
 # interrupts keep their old dispatch cycle (irq_defer): their dots are pinned by the SCX ROMs.
 IRQ_LEAD = 1
-LYC_IRQ_EARLY = 4  # the LY=LYC interrupt comes this many dots before the flag shows
+LYC_IRQ_EARLY = 4  # the LY=LYC interrupt comes this many dots before the flag shows (CGB)
+# DMG: one dot less, so an HBlank source ending at the line's start leaves the line low for a dot
+# (Gambatte miscmstatirq/lycwirq_trigger_m0_late_*, lcdirq_precedence/*lycirq_ly44_*; GBMicrotest
+# int_lyc_* unchanged)
+LYC_IRQ_EARLY_DMG = 3
 OAM_IRQ_WIDTH = 4  # and lasts this many dots
 OAM_IRQ_WIDTH_DS = 2  # CGB double speed, line 0 excepted (Gambatte m2enable/late_enable_ds_*, m1)
 LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lcdon_timing-GS)
@@ -1152,7 +1156,7 @@ class PPU:
                 self.irq_early_by = HBLANK_IRQ_EARLY if hblank else 0
                 self.irq_defer = bool(hblank or oam) and self._in_lead()
                 if select & 0x40 and self._lyc_early() and not self.lyc_flag and not hblank:
-                    self.irq_early_by = LYC_IRQ_EARLY  # the dispatch sees it before IF does
+                    self.irq_early_by = self._lyc_lead()  # the dispatch sees it before IF does
                     self.lyc_early = self.double_speed
                 if select & 0x10 and self.mode == 1 and self.ly == VBLANK_LINE and self.dot < 4:
                     # the VBlank STAT source: the dispatch sees it on time, IF shows it later
@@ -1211,11 +1215,15 @@ class PPU:
             return False
         return self._compare_ly() == self.lyc
 
+    def _lyc_lead(self) -> int:
+        return LYC_IRQ_EARLY if self.cgb else LYC_IRQ_EARLY_DMG
+
     def _lyc_early(self) -> bool:
-        """The LY=LYC interrupt comes LYC_IRQ_EARLY dots before the flag (GBMicrotest int_lyc_*)."""
+        """The LY=LYC interrupt comes LYC_IRQ_EARLY(_DMG) dots before the flag (GBMicrotest
+        int_lyc_*)."""
         return (
             self.dot < 4
-            and self.dot >= 4 - LYC_IRQ_EARLY
+            and self.dot >= 4 - self._lyc_lead()
             and self.ly != 0
             and self.visible_ly == self.lyc
         )
@@ -1235,7 +1243,7 @@ class PPU:
         ):
             self.early_lyc153 = True
             self.irq_halt_delay = 0
-            self.irq_early_by = LYC_IRQ_EARLY
+            self.irq_early_by = self._lyc_lead()
             self.raise_irq(1)
         owed, self.owed = self.owed, 0
         if owed and self.lcdc & 0x80:
@@ -1419,9 +1427,12 @@ class PPU:
         if self.cgb and not self.double_speed and LYC_WAIT_CGB and self.lcd_on:
             self.lyc_wait, self.lyc_next = LYC_WAIT_CGB, value
             return False
-        if self.stat_fell & 5 and self.stat_blocking and not self.cgb and LYC_FALL_DMG:
+        fell = self.stat_fell & 5 and self.stat_blocking and not self.cgb and LYC_FALL_DMG
+        if fell:
             self.stat_line = True  # DMG: as a STAT write does, it lands before the fall
         self._write_lyc_now(value)
+        if fell and self.stat_select & 0x40 and self.lyc == self.visible_ly and self.dot < 4:
+            self.stat_line = True  # the match it makes carries over into the new line's
         return False
 
     def _write_lyc_now(self, value: int) -> None:
