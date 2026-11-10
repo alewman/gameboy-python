@@ -46,6 +46,13 @@ M1_CANCEL_CGB = 1
 # in every phase, on CGB only for one raised in the cycle from this dot on (scx 1, 2, 5)
 M0_CANCEL_DMG = 1
 M0_CANCEL_CGB = 1
+# A STAT write lands before the line's fall earlier in its M-cycle and sees the line still high
+# (Gambatte m1/lyc143_late_m*enable_lycdisable_2, m2enable/late_enable_after_lycint_*): on DMG in
+# every phase; on CGB in double speed from the cycle's second dot, in single speed from its third
+# and not for the LY=LYC source, which falls before the write there
+STAT_FALL_DMG = 1
+STAT_FALL_CGB = 2
+STAT_FALL_CGB_DS = 1
 # Line 144: the mode 1 STAT source rises this many dots after the LY=LYC flag falls (unless mode 0
 # is selected and holds the line), so LYC=143 then mode 1 is a new edge. FITTED (Gambatte m1 lycint143_*)
 M1_SRC_DOT = 1
@@ -217,6 +224,7 @@ class PPU:
         "lyc_wait",
         "m0_early",
         "m0_hidden",
+        "stat_fell",
         "m1_early",
         "m3",
         "mode",
@@ -319,6 +327,7 @@ class PPU:
         # the HBlank source rose in this M-cycle under a line held high (2: in a lead dot; 3: in the
         # last cycle's lead, which a STAT write still beats but an LYC write does not)
         self.m0_hidden = 0
+        self.stat_fell = False  # the STAT line fell in this M-cycle before the CPU's access (board)
         self.m1_early = False  # CGB: the mode 1 STAT interrupt was just raised; a write cancels it
         self.lyc_early = False  # ds: the LY=LYC interrupt just came early; a write cancels it
         self.irq_early_by = 0  # dots before its real time the interrupt just raised came
@@ -1090,6 +1099,7 @@ class PPU:
             phase = self.sub >= M0_CANCEL_CGB and not self._in_lead() if self.cgb else True
             if bool(M0_CANCEL_CGB if self.cgb else M0_CANCEL_DMG) and phase:
                 self.m0_hidden = 2 if self._in_lead() else 1  # a lead dot's: the next cycle's
+        prior = self._sources
         self._sources = sources
         early_dot = DOTS_PER_LINE - OAM_IRQ_EARLY
         if OAM_IRQ_EARLY and select & 0x20 and self.dot == early_dot and not self.stat_line:
@@ -1135,6 +1145,13 @@ class PPU:
             self.lyc_early = False
             self.m1_early = False
             self.early_lyc153 = False
+        if self.stat_line and not line and not self._in_lead():
+            if not self.cgb:
+                self.stat_fell = bool(STAT_FALL_DMG)
+            elif self.double_speed:
+                self.stat_fell = bool(STAT_FALL_CGB_DS) and self.sub >= STAT_FALL_CGB_DS
+            else:
+                self.stat_fell = bool(STAT_FALL_CGB) and self.sub >= STAT_FALL_CGB and not prior[0]
         self.stat_line = line
 
     def _halt_delay(self, oam: bool) -> int:
@@ -1251,6 +1268,8 @@ class PPU:
             self.m1_early = False
             cancel = True
         hidden = self.m0_hidden  # a rise the write itself shows (enabling bit 3) is no hidden one
+        if self.stat_fell and self.stat_blocking:
+            self.stat_line = True  # the write lands before the fall earlier in its M-cycle
         if self.lcd_on and self.stat_write_glitch:
             # DMG: for the write's cycle every source is enabled, so a source that is true raises
             # the interrupt if the line was low (Pan Docs STAT.md; GBMicrotest stat_write_glitch_*)

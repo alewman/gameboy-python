@@ -730,6 +730,15 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   STAT write but not its LYC write, which lands a step later. A rise the write itself shows
   (setting bit 3) does not count. Gambatte `m0enable/lycdisable_ff41_*` and `lycdisable_ff45_*`:
   DMG 1,611 -> 1,618, CGB 2,804 -> 2,808, nothing lost.
+* **A STAT write before the line's fall**: a STAT write lands before a fall of the STAT line
+  earlier in its M-cycle and sees the line still high, so a source it enables that is already true
+  makes no edge (`ppu.stat_fell`, `STAT_FALL_*`). On DMG in every phase; on CGB in double speed
+  for a fall from the cycle's second dot, in single speed from its third and not when the LY=LYC
+  source is what fell (it falls before the write there). Gambatte
+  `m1/lyc143_late_m*enable_lycdisable_2`, `m2enable/late_enable_after_lycint_*`,
+  `miscmstatirq/*statwirq_trigger_*`: DMG 1,618 -> 1,628, CGB 2,808 -> 2,815. Lost on DMG:
+  `m2enable/late_enable_m1disable_ly0_2`, where the write enables the OAM source in the cycle it
+  rises at line 0 (the write lands before that rise too: open).
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
