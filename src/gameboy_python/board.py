@@ -271,6 +271,7 @@ class GameBoy:
         self.t += dots
         self._late_bits = 0
         self.ppu.m0_early = False  # only a write in the M-cycle of the raise cancels it
+        self.ppu.m0_hidden = 3 if self.ppu.m0_hidden == 2 else 0
         if self._switch_wait:
             self._switch_wait -= 4
             if self.cpu.halted:

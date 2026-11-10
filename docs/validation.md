@@ -723,6 +723,13 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   (SCX 1, 2, 5), not at its first dot nor deferred past the PPU's lead (SCX 0, 3, 4, 7), which the
   CGB columns of the same ROMs need. Gambatte `m0enable/disable_*`: DMG 1,604 -> 1,611, CGB
   2,800 -> 2,804, nothing lost.
+* **A write uncovering the HBlank rise**: when the HBlank source rises while the LY=LYC source
+  holds the STAT line high, a STAT write clearing bit 6 or an LYC write in that M-cycle lands
+  first, so the line drops and the HBlank rise is an edge (`ppu.m0_hidden`, same phases as the
+  cancel above). A rise in a dot the PPU runs after the CPU's access counts for the next cycle's
+  STAT write but not its LYC write, which lands a step later. A rise the write itself shows
+  (setting bit 3) does not count. Gambatte `m0enable/lycdisable_ff41_*` and `lycdisable_ff45_*`:
+  DMG 1,611 -> 1,618, CGB 2,804 -> 2,808, nothing lost.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays

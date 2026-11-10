@@ -216,6 +216,7 @@ class PPU:
         "lyc_next",
         "lyc_wait",
         "m0_early",
+        "m0_hidden",
         "m1_early",
         "m3",
         "mode",
@@ -315,6 +316,9 @@ class PPU:
         self.early_lyc153 = False
         self.early_fired = False
         self.m0_early = False  # the HBlank interrupt reached IF early in this M-cycle (board)
+        # the HBlank source rose in this M-cycle under a line held high (2: in a lead dot; 3: in the
+        # last cycle's lead, which a STAT write still beats but an LYC write does not)
+        self.m0_hidden = 0
         self.m1_early = False  # CGB: the mode 1 STAT interrupt was just raised; a write cancels it
         self.lyc_early = False  # ds: the LY=LYC interrupt just came early; a write cancels it
         self.irq_early_by = 0  # dots before its real time the interrupt just raised came
@@ -1080,6 +1084,12 @@ class PPU:
             if self.stat_blocking
             else any(now and not before for now, before in zip(sources, self._sources, strict=True))
         )
+        if self.stat_blocking and sources[1] and not self._sources[1] and self.stat_line:
+            # a STAT or LYC write later in this M-cycle lands first: dropping the source that holds
+            # the line high leaves the HBlank rise an edge (Gambatte m0enable/lycdisable_*)
+            phase = self.sub >= M0_CANCEL_CGB and not self._in_lead() if self.cgb else True
+            if bool(M0_CANCEL_CGB if self.cgb else M0_CANCEL_DMG) and phase:
+                self.m0_hidden = 2 if self._in_lead() else 1  # a lead dot's: the next cycle's
         self._sources = sources
         early_dot = DOTS_PER_LINE - OAM_IRQ_EARLY
         if OAM_IRQ_EARLY and select & 0x20 and self.dot == early_dot and not self.stat_line:
@@ -1240,6 +1250,7 @@ class PPU:
         if self.m1_early and not value & 0x10:
             self.m1_early = False
             cancel = True
+        hidden = self.m0_hidden  # a rise the write itself shows (enabling bit 3) is no hidden one
         if self.lcd_on and self.stat_write_glitch:
             # DMG: for the write's cycle every source is enabled, so a source that is true raises
             # the interrupt if the line was low (Pan Docs STAT.md; GBMicrotest stat_write_glitch_*)
@@ -1252,7 +1263,17 @@ class PPU:
         self.stat_select = value & 0x78
         if self.lcd_on:
             self._update_stat_line()
+            self.m0_hidden = hidden
+            self._unhide_m0(hidden)
         return cancel and not self.stat_line
+
+    def _unhide_m0(self, hidden: int) -> None:
+        """A write in the M-cycle of a hidden HBlank rise dropped every other source first."""
+        if hidden and self._sources[1] and not any(self._sources[i] for i in (0, 2, 3)):
+            self.m0_hidden = 0
+            self.irq_early_by = self.irq_halt_delay = 0
+            self.irq_defer = False
+            self.raise_irq(1)
 
     def write_lcdc(self, value: int) -> None:
         was_on = self.lcd_on
@@ -1350,6 +1371,7 @@ class PPU:
         self.lyc = value
         if self.lcd_on:
             self._update_stat_line()
+            self._unhide_m0(self.m0_hidden in (1, 2))
 
     def read_ly(self) -> int:
         if not self.lcd_on:
