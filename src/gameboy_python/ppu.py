@@ -53,6 +53,8 @@ M0_CANCEL_CGB = 1
 STAT_FALL_DMG = 1
 STAT_FALL_CGB = 2
 STAT_FALL_CGB_DS = 1
+OAM_HIDDEN_DMG = 1  # the hidden rise (m0_hidden) of the OAM pulse
+OAM_HIDDEN_DS = 1  # ... and on CGB in double speed
 # Line 144: the mode 1 STAT source rises this many dots after the LY=LYC flag falls (unless mode 0
 # is selected and holds the line), so LYC=143 then mode 1 is a new edge. FITTED (Gambatte m1 lycint143_*)
 M1_SRC_DOT = 1
@@ -224,6 +226,8 @@ class PPU:
         "lyc_wait",
         "m0_early",
         "m0_hidden",
+        "oam_hidden",
+        "oam_raw",
         "stat_fell",
         "m1_early",
         "m3",
@@ -327,6 +331,9 @@ class PPU:
         # the HBlank source rose in this M-cycle under a line held high (2: in a lead dot; 3: in the
         # last cycle's lead, which a STAT write still beats but an LYC write does not)
         self.m0_hidden = 0
+        # line 0's OAM pulse rose (selected or not) in this M-cycle under a line held high (board)
+        self.oam_hidden = False
+        self.oam_raw = False  # the OAM pulse, whether STAT selects it or not
         self.stat_fell = False  # the STAT line fell in this M-cycle before the CPU's access (board)
         self.m1_early = False  # CGB: the mode 1 STAT interrupt was just raised; a write cancels it
         self.lyc_early = False  # ds: the LY=LYC interrupt just came early; a write cancels it
@@ -1099,6 +1106,15 @@ class PPU:
             phase = self.sub >= M0_CANCEL_CGB and not self._in_lead() if self.cgb else True
             if bool(M0_CANCEL_CGB if self.cgb else M0_CANCEL_DMG) and phase:
                 self.m0_hidden = 2 if self._in_lead() else 1  # a lead dot's: the next cycle's
+        raw = self._oam_pulse()
+        if self.stat_blocking and raw and not self.oam_raw and self.stat_line and self.ly == 0:
+            # so does line 0's OAM pulse for a write enabling it (Gambatte late_*m1disable_ly0_*,
+            # lyc0_late_m2enable_lycdisable_*): on DMG in every phase, on CGB in double speed
+            if not self.cgb:
+                self.oam_hidden = bool(OAM_HIDDEN_DMG) and not self._in_lead()
+            elif self.double_speed:
+                self.oam_hidden = bool(OAM_HIDDEN_DS) and self.sub >= STAT_FALL_CGB_DS
+        self.oam_raw = raw
         prior = self._sources
         self._sources = sources
         early_dot = DOTS_PER_LINE - OAM_IRQ_EARLY
@@ -1268,6 +1284,7 @@ class PPU:
             self.m1_early = False
             cancel = True
         hidden = self.m0_hidden  # a rise the write itself shows (enabling bit 3) is no hidden one
+        oam_hidden = self.oam_hidden
         if self.stat_fell and self.stat_blocking:
             self.stat_line = True  # the write lands before the fall earlier in its M-cycle
         if self.lcd_on and self.stat_write_glitch:
@@ -1284,6 +1301,11 @@ class PPU:
             self._update_stat_line()
             self.m0_hidden = hidden
             self._unhide_m0(hidden)
+            if oam_hidden and self._sources[3] and not any(self._sources[:3]):
+                self.oam_hidden = False
+                self.irq_early_by = self.irq_halt_delay = 0
+                self.irq_defer = False
+                self.raise_irq(1)
         return cancel and not self.stat_line
 
     def _unhide_m0(self, hidden: int) -> None:

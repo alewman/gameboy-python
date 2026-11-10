@@ -737,8 +737,14 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   source is what fell (it falls before the write there). Gambatte
   `m1/lyc143_late_m*enable_lycdisable_2`, `m2enable/late_enable_after_lycint_*`,
   `miscmstatirq/*statwirq_trigger_*`: DMG 1,618 -> 1,628, CGB 2,808 -> 2,815. Lost on DMG:
-  `m2enable/late_enable_m1disable_ly0_2`, where the write enables the OAM source in the cycle it
-  rises at line 0 (the write lands before that rise too: open).
+  `m2enable/late_enable_m1disable_ly0_2`, won back by the next item.
+* **A write enabling line 0's OAM pulse as it rises**: when line 0's OAM pulse rises (selected
+  or not) while the STAT line is held high, a STAT write in that M-cycle lands first, so enabling
+  the OAM source as the only one left makes the rise an edge (`ppu.oam_hidden`, `OAM_HIDDEN_*`).
+  On DMG in every phase, on CGB in double speed from the cycle's second dot. On other lines the
+  pulse rises before the write (`m1/lyc143_late_m2enable_lycdisable_2` wants no interrupt).
+  Gambatte `m2enable/late_*m1disable_ly0_*`, `lyc0_late_m2enable_lycdisable_*`: DMG 1,628 ->
+  1,631, CGB 2,815 -> 2,817, nothing lost.
 * **LCDC.3/LCDC.4 at the background fetcher**: the map select and tile-data select reach the
   fetcher 4 dots late (`BG_MAP_LAG`, `BG_DATA_LAG`, fitted). Gambatte `bgtilemap` goes from 0 to
   16 of 24 on CGB (DMG 4 of 16); the sweep over 2/4/6/8 peaks sharply at 4. `bgtiledata` stays
