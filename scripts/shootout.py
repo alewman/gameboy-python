@@ -133,8 +133,12 @@ def run(job: tuple[_Test, bool, dict[str, float]]) -> tuple[str, str, str]:
     cgb = test.model == "CGB"
     boot = None if skip_boot else find_boot_rom("CGB" if cgb else "DMG")[0]
     rom = (SHOOTOUT / "testroms" / test.rom).read_bytes()
+    box: list[GameBoy] = []
     try:
-        gb = GameBoy(load_cartridge(rom), MACHINES["cgb" if cgb else "dmg-b"], boot_rom=boot)
+        # a cartridge clock runs on emulated time here: the board is slower than the wall clock
+        cart = load_cartridge(rom, clock=lambda: (box[0].t if box else 0) / SECOND_T)
+        gb = GameBoy(cart, MACHINES["cgb" if cgb else "dmg-b"], boot_rom=boot)
+        box.append(gb)
     except Exception as exc:  # an unsupported cartridge type
         return test.name, test.model, f"FAIL (load: {exc})"
     end = int((startup[test.model] + test.runtime + EXTRA_S) * SECOND_T)

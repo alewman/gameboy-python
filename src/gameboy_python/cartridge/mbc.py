@@ -191,8 +191,11 @@ class MBC3(Cartridge):
     detectors only: docs/cartridge.md).
 
     RAMG ($0000, $0A enables RAM *and* the clock registers), ROMB ($2000, 7 bits, 0 reads as 1),
-    RAMB/RTC select ($4000: $00-$03 a RAM bank, $08-$0C a clock register), LATCH ($6000: a write
-    of 0 then 1 copies the running clock into the readable registers). The clock runs on
+    RAMB/RTC select ($4000, 4 bits: $0-$3 a RAM bank, $8-$C a clock register; on a clock board
+    $4-$7 and $D-$F select nothing and read $FF), LATCH ($6000: any write copies the running
+    clock into the readable registers; Pan Docs asks for 0 then 1, but CasualPokePlayer's
+    latch-rtc-test latches with one write and rtc-invalid-banks-test gives the select's width and
+    holes, both as the Emulator Shootout expects them and as SameBoy does). The clock runs on
     ``clock()`` (wall time by default; tests pass a fake) and stops while the halt bit is set.
     """
 
@@ -204,7 +207,9 @@ class MBC3(Cartridge):
         self.ram_enabled = False
         self.romb = 1
         self.select = 0
-        self.latch_armed = False
+        # the highest RAM bank the select reaches: on a clock board with up to four banks, 4-7
+        # select nothing (an MBC30's eight banks are all there; without a clock they mirror)
+        self.top_bank = 3 if header.has_timer and len(self.ram) <= 0x8000 else 7
         self.clock = clock or time.time
         # the five clock registers as the chip holds them (they can hold out-of-range values)
         self.live = [0, 0, 0, 0, 0]  # seconds, minutes, hours, day low, control (bits 0, 6, 7)
@@ -311,7 +316,7 @@ class MBC3(Cartridge):
         if 0xA000 <= address < 0xC000:
             if not self.ram_enabled:
                 return 0xFF
-            if self.select <= 0x07:
+            if self.select <= self.top_bank:
                 if self.ram:
                     return self.ram[((self.select << 13) | (address & 0x1FFF)) % len(self.ram)]
                 return 0xFF
@@ -326,16 +331,12 @@ class MBC3(Cartridge):
         elif address < 0x4000:
             self.romb = (value & 0x7F) or 1
         elif address < 0x6000:
-            self.select = value
+            self.select = value & 0x0F
         elif address < 0x8000:
-            if value == 0:
-                self.latch_armed = True
-            else:
-                if value == 1 and self.latch_armed and self.header.has_timer:
-                    self.latched = self._registers()
-                self.latch_armed = False
+            if self.header.has_timer:
+                self.latched = self._registers()
         elif 0xA000 <= address < 0xC000 and self.ram_enabled:
-            if self.select <= 0x07:
+            if self.select <= self.top_bank:
                 if self.ram:
                     self.ram[((self.select << 13) | (address & 0x1FFF)) % len(self.ram)] = value
             elif 0x08 <= self.select <= 0x0C and self.header.has_timer:

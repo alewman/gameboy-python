@@ -34,7 +34,7 @@ MODE0_READ_LAG_DS = 0  # FITTED: the same in double speed (Gambatte cgb04c *_ds 
 # gdma/hdma_cycles)
 PAL_HOLD_DS = 2  # FITTED (Gambatte cgbpal_m3end_ds): dots the CGB palettes stay locked after STAT
 # leaves mode 3 in double speed (SameBoy frees them after STAT and VRAM too)
-# after an LCD-on in double speed (until the next speed switch) LY shows the next line this many
+# in double speed (after an LCD-on in it, or a switch to it) LY shows the next line this many
 # dots before it starts: LCD_ON_DS moves the lines, not the LY reads (AGE ly-cgbE, Gambatte
 # enable_display frame0/1_ly_count_ds_2)
 LY_LEAD_DS = 2
@@ -353,7 +353,7 @@ class PPU:
         self.irq_defer = False  # the interrupt just raised reaches the dispatch a cycle later
         self.irq_halt_delay = 0  # dots later a halted CPU sees the STAT interrupt just raised
         self.sub = 0  # the dot within the M-cycle being ticked (0-3)
-        self.ly_lead = False  # the LCD went on in double speed (LY_LEAD_DS)
+        self.ly_lead = 0  # dots LY shows the next line early, in double speed (LY_LEAD_DS)
         self.owed = 0  # dots of this M-cycle left to run after the access (IRQ_LEAD)
         self.vram = bytearray(0x4000 if cgb else 0x2000)
         self.oam = bytearray(0xA0)
@@ -605,6 +605,12 @@ class PPU:
             self.window_line += 1
         self.window_used = False
         self.ly = 0 if self.ly == LAST_LINE else self.ly + 1
+        # a BGP write's one-dot glitch belongs to its own line of its own frame: forget it once the
+        # shadow, a few dots behind, has left that line too (it used to stay and repaint the same
+        # pixel in every later frame: one wrong pixel on a still screen, as in Bill & Ted's title)
+        glitch_ly = self.bgp_glitch[1]
+        if glitch_ly >= 0 and (self.ly - glitch_ly) % (LAST_LINE + 1) > 1:
+            self.bgp_glitch = (-1, -1, 0)
         if self.ly == 0:
             self.window_line = 0
             self.wy_hit = False
@@ -1071,7 +1077,7 @@ class PPU:
     def visible_ly(self) -> int:
         """LY as software reads it: on line 153 it reads 153 for only the first few dots and then
         0 for the rest of the line (Pan Docs STAT.md; Gambatte hwtests/ly0, lyc153int_m2irq)."""
-        early = (2 + (LY_LEAD_DS if self.ly_lead else 0)) if self.double_speed else 0
+        early = (2 + self.ly_lead) if self.double_speed else 0
         return 0 if self.ly == LAST_LINE and self.dot >= self.ly153_dots - early else self.ly
 
     def _update_stat_line(self) -> None:
@@ -1361,7 +1367,7 @@ class PPU:
         elif not was_on and self.lcd_on:  # LCD on: line 0 starts now, but late
             self.ly = 0
             self.dot = LINE0_START_DOT + (LCD_ON_DS if self.double_speed else 0)
-            self.ly_lead = self.double_speed
+            self.ly_lead = LY_LEAD_DS if self.double_speed else 0
             self.line0 = True
             self.mode3_start = MODE2_END
             self.mode = 0  # line 0 starts in mode 0 (Mooneye ppu/lcdon_timing-GS)
@@ -1393,8 +1399,10 @@ class PPU:
 
     def write_bgp(self, value: int) -> None:
         """DMG: for one dot around a BGP write the palette is the OR of the old and new values
-        (Mealybug m3_bgp_change: each band is one pixel wider at both edges)."""
-        self.bgp_glitch = (self.dot, self.ly, self.bgp | value)
+        (Mealybug m3_bgp_change: each band is one pixel wider at both edges). A CGB shows the new
+        value at the same dot with no such pixel (the same test's CPU CGB D picture)."""
+        if not self.cgb:
+            self.bgp_glitch = (self.dot, self.ly, self.bgp | value)
         self.bgp = value
 
     # ----- CGB palette RAM ($FF68-$FF6B) ----------------------------------------------------------
@@ -1452,6 +1460,6 @@ class PPU:
             return 0
         if LY_LEAD and not self.line0 and self.dot >= DOTS_PER_LINE - LY_LEAD and self.ly < 143:
             return self.ly + 1  # LY reads as the next line a little before it starts
-        if self.ly_lead and self.dot >= DOTS_PER_LINE - LY_LEAD_DS:
+        if self.ly_lead and self.dot >= DOTS_PER_LINE - self.ly_lead:
             return 0 if self.ly == LAST_LINE else self.ly + 1
         return self.visible_ly

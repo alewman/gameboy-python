@@ -43,6 +43,11 @@ SPEED_SWITCH_HALT_TO_DOUBLE = 0x20008  # ... and from single to double; FITTED
 #: -2/2, 1/2, -3/3 all lower). SameBoy's TODO has 2 PPU ticks single->double; Gambatte moves the
 #: LCD a cycle ahead on double->single, which is -3 here with our one ds M-cycle longer halt.
 SWITCH_LCD_DS = 2
+#: dots LY shows the next line early after a switch to double speed. daid's
+#: speed_switch_timing_ly.gbc wants 2 (as after an LCD-on in double speed: ppu.LY_LEAD_DS), but 2
+#: loses Gambatte ly0/lycint152_ly153_ds_1/_4 and lycint_ly/lycint_ly_ds_1 (CGB-04c hardware
+#: verdicts) for one gain, and 1 satisfies neither: the hardware verdicts stand.
+SWITCH_LY_LEAD = 0
 SWITCH_LCD_SS = -3
 
 
@@ -116,6 +121,8 @@ class GameBoy:
         self.hdma_due = False  # a block is to run before the next instruction
         self._hdma_at_fetch = False  # ... at the end of this step's opcode fetch
         self._idle_units = 0
+        self._stopped = 0  # STOP mode: 1 from the STOP hook, 2 once a stopped cycle has run
+        self._stop_held: list[tuple[str, bytearray]] = []  # memories kept from the PPU in STOP
         self._last_mode = 0
         self._hdma_mode = 0
 
@@ -269,6 +276,8 @@ class GameBoy:
         """One M-cycle of the whole board."""
         dots = 2 if self.double_speed else 4  # the PPU and APU run at the single-speed rate
         self.t += dots
+        if self._stopped > 1:
+            self._leave_stop()
         self._late_bits = 0
         self.ppu.m0_early = False  # only a write in the M-cycle of the raise cancels it
         self.ppu.m0_hidden = 3 if self.ppu.m0_hidden == 2 else 0
@@ -350,6 +359,9 @@ class GameBoy:
             self._last_mode = mode
 
     def _idle(self, address: int) -> None:
+        if self._stopped and self.cpu.stopped:
+            self._stop_cycle()
+            return
         self._tick()
         self._bug(address, OAM_IDLE_KIND if self.cpu.idu else None)
         self.ppu.after_access()
@@ -364,12 +376,19 @@ class GameBoy:
         self.timer.write_div()
 
     def _stop(self, pending: bool):
-        """STOP on a DMG: it stops the oscillator and clears DIV; an interrupt that is already
-        pending makes it a one-byte no-op (SonoSooS "NOP and STOP"; SameBoy stop()). The joypad
-        interrupt wakes it. On a CGB in CGB mode with KEY1 bit 0 set (and no button held) it
-        switches speed instead: the CPU halts for SPEED_SWITCH_HALT units unless an interrupt
-        wakes it first (SameBoy stop())."""
-        if self.cgb and self.ppu.cgb_mode and self.key1 & 1 and self.joypad.read() & 0x0F == 0x0F:
+        """STOP (Pan Docs "Using the STOP instruction", SonoSooS "NOP and STOP"; SameBoy stop()).
+
+        With a selected button held there is no stop: a pending interrupt makes it a one-byte
+        no-op, else it is a two-byte HALT. On a CGB in CGB mode with KEY1 bit 0 set it switches
+        speed instead: the CPU halts for SPEED_SWITCH_HALT units unless an interrupt wakes it
+        first. Otherwise it clears DIV and enters STOP mode (one byte long when an interrupt is
+        pending), which only the joypad ends: ``_stop_cycle``."""
+        held = self.joypad.read() & 0x0F != 0x0F
+        if held:
+            if pending:
+                return StopResult(StopAction.NOP, consume_operand=False)
+            return StopResult(StopAction.HALT)
+        if self.cgb and self.ppu.cgb_mode and self.key1 & 1:
             # the switch clears DIV like any STOP (Gambatte stop(), SameBoy), at the end of STOP's
             # operand read: a counter bit that is still high there makes its falling edge
             # (Gambatte speedchange*_tima _1/_2 pairs move STOP by one M-cycle). With IME off the
@@ -382,7 +401,7 @@ class GameBoy:
             self._div_hold = not self.cpu.ime
             self.double_speed = not self.double_speed
             self.ppu.double_speed = self.double_speed
-            self.ppu.ly_lead = False
+            self.ppu.ly_lead = SWITCH_LY_LEAD if self.double_speed else 0
             self.key1 = 0
             # the PPU runs IRQ_LEAD dots ahead of the access in single speed, none in double
             lead = ppu_module.IRQ_LEAD
@@ -395,10 +414,53 @@ class GameBoy:
                 return StopResult(StopAction.NOP, consume_operand=False)
             self._switch_wait = SPEED_SWITCH_HALT if not self.double_speed else SPEED_SWITCH_HALT_TO_DOUBLE
             return StopResult(StopAction.HALT)
-        if pending:
-            return StopResult(StopAction.NOP, consume_operand=False)
         self._write_div()
-        return StopResult(StopAction.STOP)
+        self._stopped = 1
+        ppu = self.ppu
+        if self.cgb:
+            # the PPU runs on, but a memory the CPU could reach when it stopped stays with the
+            # CPU: the PPU reads $FF from the VRAM and black from the palettes (SameBoy
+            # enter_stop_mode; daid's stop_instr.gb is black all over). A STOP in mode 3 leaves
+            # the PPU both (stop_instr_gbc_mode3.gb: the picture stays).
+            kept = [("vram", 0xFF)] if not ppu.vram_locked else []
+            if not ppu.palettes_blocked:
+                kept += [("bg_pal", 0), ("obj_pal", 0)]
+            for name, fill in kept:
+                memory = getattr(ppu, name)
+                self._stop_held.append((name, memory))
+                blank = bytearray([fill]) * len(memory)
+                setattr(ppu, name, blank)
+                if ppu.shadow:
+                    setattr(ppu.shadow, name, blank)
+        elif ppu.lcd_on:
+            ppu.frame = ppu._blank()  # the oscillator stops and the LCD goes blank (stop_instr.gb)
+        return StopResult(StopAction.STOP, consume_operand=not pending)
+
+    def _stop_cycle(self) -> None:
+        """One M-cycle of STOP mode. A DMG's oscillator is off: nothing runs. On a CGB the PPU
+        and the APU run on and the counter stands still (SameBoy GB_timers_run). No interrupt
+        ends it; a selected button line going low does (SameBoy GB_cpu_run). The sound is clocked
+        on a DMG too, so that a host still gets its samples: a labelled approximation."""
+        self._stopped = 2
+        dots = 2 if self.double_speed else 4
+        self.t += dots
+        self.apu.tick(dots)
+        if self.cgb:
+            self.ppu.tick(dots)
+            self.ppu.after_access()
+        cpu = self.cpu
+        cpu.stop_if = cpu.if_ & 0x1F  # an interrupt raised meanwhile waits; it does not wake
+        if self.joypad.read() & 0x0F != 0x0F:
+            cpu.stopped = False
+
+    def _leave_stop(self) -> None:
+        self._stopped = 0
+        ppu = self.ppu
+        for name, memory in self._stop_held:
+            setattr(ppu, name, memory)
+            if ppu.shadow:
+                setattr(ppu.shadow, name, memory)
+        self._stop_held.clear()
 
     # ----- the bus ------------------------------------------------------------------------
 

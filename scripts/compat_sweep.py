@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Boot the licensed No-Intro Game Boy dumps on the board and on SameBoy; compare the pictures.
 
-    python scripts/compat_sweep.py [--tier titles|all|failures] [--only FILE] [--jobs J] [--fresh]
+    python scripts/compat_sweep.py [--model dmg|cgb] [--tier titles|all|failures] [--only FILE]
+                                   [--jobs J] [--fresh]
 
 Reads the sets in place (zips, never extracted or copied): ``Nintendo - Game Boy`` and ``Nintendo -
 Game Boy Color`` under ``GAMEBOY_NOINTRO_DIR`` (default /data/emu/source/myrient.erista.me/files/
 No-Intro), licensed dumps only (no Unl, Proto, Beta, Demo, Sample, Aftermarket, Pirate, Program
-or BIOS), CGB-only titles skipped. Each runs from the real DMG boot ROM, and the board's picture
-is compared with SameBoy's (DMG-B, the same boot ROM) shade for shade at each of ``CHECKS``
+or BIOS). ``--model dmg`` (the default) skips the CGB-only titles and compares with SameBoy's
+DMG-B shade for shade; ``--model cgb`` runs the games that ask for a Game Boy Color on the CGB
+board and compares with SameBoy's CGB E colour for colour (RGB555, no colour correction). Each
+runs from the real boot ROM, and the pictures are compared at each of ``CHECKS``
 (frames 600, 960 and 1500: one run answers for all three). SameBoy is a detector, not a judge
 (docs/validation.md): every difference is for triage.
 
@@ -45,16 +48,17 @@ import re
 import subprocess
 import sys
 import zipfile
+from array import array
 from multiprocessing import Pool
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from gameboy_python import GameBoy, load_cartridge  # noqa: E402
+from gameboy_python import MACHINES, GameBoy, load_cartridge  # noqa: E402
 from gameboy_python.boot import find_boot_rom  # noqa: E402
 from gameboy_python.cartridge import parse_header  # noqa: E402
-from gameboy_python.image import png_bytes  # noqa: E402
+from gameboy_python.image import png_bytes, rgb_png_bytes  # noqa: E402
 
 NOINTRO = Path(
     os.environ.get("GAMEBOY_NOINTRO_DIR", "/data/emu/source/myrient.erista.me/files/No-Intro")
@@ -69,9 +73,20 @@ _spec.loader.exec_module(sb)
 
 
 CHECKS = (600, 960, 1500)
-LOG = ROOT / "reference" / "build" / "compat_sweep.jsonl"
-PICTURES = ROOT / "reference" / "build" / "compat"  # board | SameBoy | where they differ
-DIFFERS = ROOT / "tests" / "compat_differs.txt"
+BUILD = ROOT / "reference" / "build"
+#: per model: the board's machine, its boot ROM, SameBoy's model, and where the answers go (the
+#: log, the pictures of board | SameBoy | where they differ, and the list of dumps that differ)
+MODELS = {
+    "dmg": ("dmg-b", "DMG", "dmg-b", "compat_sweep.jsonl", "compat", "compat_differs.txt"),
+    "cgb": (
+        "cgb",
+        "CGB",
+        "cgb-e",
+        "compat_sweep_cgb.jsonl",
+        "compat-cgb",
+        "compat_differs_cgb.txt",
+    ),
+}
 REGIONS = ("(World", "(USA", "(Europe", "(Japan")
 
 
@@ -116,19 +131,22 @@ FRAME_T = 70224
 
 
 def sameboy_checks(
-    rom: bytes, checks: tuple[int, ...], boot: bytes, keep: int
+    rom: bytes, checks: tuple[int, ...], boot: bytes, keep: int, model: str = "dmg-b"
 ) -> list[list[bytes]]:
     """SameBoy's pictures from ``keep`` frames before each frame of ``checks`` to ``keep`` after
-    (the frame itself is at index ``keep - 1``), as shades 0 (lightest) to 3."""
+    (the frame itself is at index ``keep - 1``): shades 0 (lightest) to 3 for a DMG, RGB555
+    words (little-endian bytes, as ``ppu.frame``) with no colour correction for a CGB."""
     lib = _library()
-    gb = lib.GB_init(lib.GB_alloc(), sb.MODELS["dmg-b"][0])
+    cgb = model.startswith("cgb")
+    gb = lib.GB_init(lib.GB_alloc(), sb.MODELS[model][0])
 
     def encode(_gb, r, g, b):
-        value = (r << 16) | (g << 8) | b
-        return value
+        # the tester's DMG palette is the grey ramp 00/55/AA/FF: shade 0 is the lightest
+        return (r >> 3) | ((g >> 3) << 5) | ((b >> 3) << 10) if cgb else 3 - r // 85
 
     callback = sb.RGB_CB(encode)
     lib.GB_set_log_callback(gb, sb.QUIET)
+    lib.GB_set_color_correction_mode(ctypes.c_void_p(gb), 0)  # GB_COLOR_CORRECTION_DISABLED
     lib.GB_set_rgb_encode_callback(gb, callback)
     pixels = (ctypes.c_uint32 * (256 * 224))()
     lib.GB_set_pixels_output(gb, pixels)
@@ -143,10 +161,14 @@ def sameboy_checks(
         lib.GB_run_frame(gb)
         for i, c in enumerate(checks):
             if c - keep <= n < c + keep:
-                # the tester's DMG palette is the grey ramp 00/55/AA/FF: shade 0 is the lightest
-                shots[i].append(
-                    bytes(3 - ((v >> 16) & 255) // 85 for v in pixels[: width * height])
-                )
+                values = pixels[: width * height]
+                if cgb:
+                    words = array("H", values)
+                    if sys.byteorder == "big":
+                        words.byteswap()
+                    shots[i].append(words.tobytes())
+                else:
+                    shots[i].append(bytes(values))
     lib.GB_free(gb)
     lib.GB_dealloc(gb)
     return shots
@@ -163,21 +185,33 @@ _lib = None
 def _library():
     global _lib
     if _lib is None:
-        _lib = sb.load_library()
+        try:
+            _lib = sb.load_library()
+        except OSError:  # seen once in 400 loads: libmvec's symbols not there yet; again
+            _lib = sb.load_library()
     return _lib
 
 
-def triptych(mine: bytes, theirs: bytes) -> bytes:
+def triptych(mine: bytes, theirs: bytes, cgb: bool = False) -> bytes:
     """A 480x144 PNG: the board's picture, SameBoy's, and black where they differ."""
     rows = bytearray()
+    if cgb:
+        for y in range(0, 320 * 144, 320):
+            a, b = mine[y : y + 320], theirs[y : y + 320]
+            rows += a + b
+            for x in range(0, 320, 2):
+                rows += b"\x00\x00" if a[x : x + 2] != b[x : x + 2] else b"\xff\x7f"
+        return rgb_png_bytes(bytes(rows), 480, 144)
     for y in range(0, 160 * 144, 160):
         a, b = mine[y : y + 160], theirs[y : y + 160]
         rows += a + b + bytes(3 * (p != q) for p, q in zip(a, b, strict=True))
     return png_bytes(bytes(rows), 480, 144)
 
 
-def run(args: tuple[Path, tuple[int, ...]]) -> dict:
-    path, checks = args
+def run(args: tuple[Path, tuple[int, ...], str]) -> dict:
+    path, checks, model = args
+    machine, boot_name, sameboy_model, _log, pictures, _differs = MODELS[model]
+    cgb = model == "cgb"
     out: dict = {"rom": path.name}
     try:
         with zipfile.ZipFile(path) as z:
@@ -186,9 +220,11 @@ def run(args: tuple[Path, tuple[int, ...]]) -> dict:
         return {**out, "status": "error", "detail": f"zip: {e!r}"}
     header = parse_header(rom)
     out["board"] = header.board
-    if header.cgb_only:
+    if header.cgb_only and not cgb:
         return {**out, "status": "skipped", "detail": "CGB only"}
-    boot = find_boot_rom("DMG")[0]
+    if cgb and not header.cgb_enhanced:
+        return {**out, "status": "skipped", "detail": "not a CGB game"}
+    boot = find_boot_rom(boot_name)[0]
     try:
         cart = load_cartridge(rom)
     except NotImplementedError:
@@ -196,7 +232,7 @@ def run(args: tuple[Path, tuple[int, ...]]) -> dict:
     except Exception as e:
         return {**out, "status": "error", "detail": repr(e)[:120]}
     try:
-        gb = GameBoy(cart, boot_rom=boot)
+        gb = GameBoy(cart, MACHINES[machine], boot_rom=boot)
         # SameBoy counts 70,224-cycle frames from power-on, LCD off or not; the board's
         # run_frames counts VBlanks, so line the two up by time instead
         mine = []
@@ -207,7 +243,7 @@ def run(args: tuple[Path, tuple[int, ...]]) -> dict:
     except Exception as e:
         return {**out, "status": "error", "detail": repr(e)[:160]}
     try:
-        theirs = sameboy_checks(rom, checks, boot, KEEP)
+        theirs = sameboy_checks(rom, checks, boot, KEEP, sameboy_model)
     except Exception as e:
         return {**out, "status": "error", "detail": f"sameboy: {e!r}"[:400]}
     # each picture against SameBoy's KEEP either side of it: an animation a frame or two apart
@@ -215,7 +251,14 @@ def run(args: tuple[Path, tuple[int, ...]]) -> dict:
     # behind), a picture SameBoy never shows is
     exact, best, offset = [], [], []
     for picture, shots in zip(mine, theirs, strict=True):
-        diffs = [sum(1 for a, b in zip(picture, t, strict=False) if a != b) for t in shots]
+        if cgb:
+            mine_words = array("H", picture)
+            diffs = [
+                sum(1 for a, b in zip(mine_words, array("H", t), strict=False) if a != b)
+                for t in shots
+            ]
+        else:
+            diffs = [sum(1 for a, b in zip(picture, t, strict=False) if a != b) for t in shots]
         low = min(diffs)
         exact.append(diffs[KEEP - 1])
         best.append(low)
@@ -228,9 +271,10 @@ def run(args: tuple[Path, tuple[int, ...]]) -> dict:
     out["status"] = "same" if not any(exact) else "near" if not any(best) else "differs"
     if out["status"] == "differs":
         worst = best.index(max(best))
-        PICTURES.mkdir(parents=True, exist_ok=True)
-        (PICTURES / f"{path.stem}.png").write_bytes(
-            triptych(mine[worst], theirs[worst][KEEP - 1 + offset[worst]])
+        folder = BUILD / pictures
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"{path.stem}.png").write_bytes(
+            triptych(mine[worst], theirs[worst][KEEP - 1 + offset[worst]], cgb)
         )
     return out
 
@@ -255,15 +299,19 @@ def line_of(r: dict) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--tier", choices=("titles", "all", "failures"), default="titles")
+    parser.add_argument("--model", choices=sorted(MODELS), default="dmg", help="dmg, or cgb: the "
+                        "games that ask for a Game Boy Color, on the CGB against SameBoy's CGB E")  # fmt: skip
     parser.add_argument("--only", type=Path, help="a list of dump names to run instead of a tier")
     parser.add_argument("--stride", type=int, default=1)
     parser.add_argument("--frames", type=int, default=CHECKS[-1], help="stop at this checkpoint")
     parser.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 4))
     parser.add_argument("--fresh", action="store_true", help="forget this revision's answers")
     args = parser.parse_args()
-    label = find_boot_rom("DMG")[1]
+    _machine, boot_name, _sameboy, log_name, _pictures, differs_name = MODELS[args.model]
+    LOG, DIFFERS = BUILD / log_name, ROOT / "tests" / differs_name
+    label = find_boot_rom(boot_name)[1]
     if label != "real boot ROM":
-        sys.exit(f"needs the real DMG boot ROM ({label})")
+        sys.exit(f"needs the real {boot_name} boot ROM ({label})")
     checks = tuple(c for c in CHECKS if c <= args.frames) or (args.frames,)
     listed = args.only or (DIFFERS if args.tier == "failures" else None)
     files = named(read_list(listed)) if listed else candidates(args.tier, args.stride)
@@ -278,7 +326,7 @@ def main() -> int:
     print(f"{len(files)} dumps at {rev}, {len(files) - len(todo)} already answered", flush=True)
     LOG.parent.mkdir(parents=True, exist_ok=True)
     with Pool(args.jobs) as pool, LOG.open("a") as log:
-        work = pool.imap_unordered(run, [(p, checks) for p in todo], chunksize=1)
+        work = pool.imap_unordered(run, [(p, checks, args.model) for p in todo], chunksize=1)
         for n, r in enumerate(work, 1):
             r["rev"], r["checks"] = rev, checks
             log.write(json.dumps(r) + "\n")
@@ -299,7 +347,7 @@ def main() -> int:
         print(f"against {listed.name}: {len(fixed)} no longer differ, {len(bad)} still do")
     elif args.stride == 1:
         DIFFERS.write_text(
-            f"# scripts/compat_sweep.py --tier {args.tier} at {rev}: {counts}\n"
+            f"# scripts/compat_sweep.py --model {args.model} --tier {args.tier} at {rev}: {counts}\n"
             "# dump, pixels at best at the worst of frames "
             f"{', '.join(map(str, checks))}, board\n" + "".join(line_of(r) + "\n" for r in bad)
         )

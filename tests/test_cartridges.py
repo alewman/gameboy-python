@@ -87,6 +87,40 @@ def test_mbc3_clock_counts_latches_and_halts():
     assert read_clock(cart, 0x09, now) == 2
 
 
+def test_mbc3_select_is_four_bits_with_holes():
+    """CasualPokePlayer's rtc-invalid-banks-test, as the Emulator Shootout expects it."""
+    cart = mbc3(lambda: 0.0)
+    cart.write(0x0000, 0x0A, 0)
+    for bank in range(4):
+        cart.write(0x4000, bank, 0)
+        cart.write(0xA000, bank, 0)
+    for register in range(0x08, 0x0D):
+        cart.write(0x4000, register, 0)
+        cart.write(0xA000, register, 0)
+    cart.write(0x6000, 0, 0)
+    row = [0, 1, 2, 3, 0xFF, 0xFF, 0xFF, 0xFF, 8, 9, 10, 11, 0, 0xFF, 0xFF, 0xFF]  # $0C & $C1
+    for high in range(0, 0x100, 0x10):
+        got = []
+        for select in range(16):
+            cart.write(0x4000, high | select, 0)
+            got.append(cart.read(0xA000, 0))
+        assert got == row
+    cart.write(0x4000, 0x05, 0)
+    cart.write(0xA000, 0x77, 0)  # a hole takes no write
+    assert [cart.ram[b << 13] for b in range(4)] == [0, 1, 2, 3]
+
+
+def test_mbc3_latches_on_any_write():
+    """CasualPokePlayer's latch-rtc-test: one write to $6000-$7FFF latches, whatever its value."""
+    cart = mbc3(lambda: 0.0)
+    cart.write(0x0000, 0x0A, 0)
+    cart.write(0x4000, 0x09, 0)
+    cart.write(0xA000, 0x2A, 0)
+    assert cart.read(0xA000, 0) == 0  # not latched yet
+    cart.write(0x7FFF, 0x55, 0)
+    assert cart.read(0xA000, 0) == 0x2A
+
+
 def test_mbc3_day_counter_overflow_is_sticky():
     now = [0.0]
     cart = mbc3(lambda: now[0])

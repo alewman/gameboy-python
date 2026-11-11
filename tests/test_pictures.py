@@ -55,3 +55,21 @@ def test_mealybug_dmg_blob(name):
 def test_blargg_halt_bug_screen():
     want, _w, _h = read_shades(GBTR / "blargg" / "halt_bug-dmg-cgb.png")
     assert frame_of(GBTR / "blargg" / "halt_bug.gb", 600) == want
+
+
+def test_a_bgp_write_glitches_one_pixel_of_one_frame():
+    """The OR of the old and new palettes is shown for one dot (Mealybug m3_bgp_change); the
+    next frames show the picture the VRAM holds. It used to return at the same dot of every
+    later frame: one wrong pixel on a still screen."""
+    gb = GameBoy(load_cartridge((GBTR / "dmg-acid2" / "dmg-acid2.gb").read_bytes()))
+    gb.run_frames(30)
+    still = gb.ppu.frame
+    while not (gb.ppu.ly == 20 and gb.ppu.mode == 3 and gb.ppu.x >= 40):
+        gb.cpu.step()
+    old = gb.ppu.bgp
+    gb.ppu.write_bgp(old ^ 0xFF)  # a glitch pixel, then the other palette ...
+    gb.ppu.write_bgp(old)  # ... and back before the next pixel
+    assert gb.ppu.bgp_glitch[1:] == (20, 0xFF)
+    gb.run_frames(3)
+    assert gb.ppu.bgp_glitch == (-1, -1, 0)
+    assert gb.ppu.frame == still

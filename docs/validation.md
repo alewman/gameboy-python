@@ -794,6 +794,67 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
 * **Mealybug CGB D, 18 of 21 differ** by 10 to 8,300 pixels, mostly the mode-3 register-change
   tests; the DMG board's fits are used unchanged and CGB has its own latencies.
 * **cgb-acid-hell**: 2 pixels.
+* **The Shootout's single misses (2026-11-11)**, each fixed against its expected picture:
+  * *The cartridge clock in the runner.* `scripts/shootout.py` left the MBC3 clock on wall time
+    while the board ran at a fraction of real time, so rtc3test's ticks came several times too
+    fast: with the clock on emulated time `ax6/rtc3test-1/-2/-3` pass (sub-second writes read
+    1000.0, 50.0, ... 400.0 ms on the DMG). The "TIMEOUT on every row" recorded under milestone 5
+    was the same harness fault, not the clock.
+  * *MBC3's select and latch* (CasualPokePlayer's `rtc-invalid-banks-test` and `latch-rtc-test`):
+    the RAM/clock select is four bits wide (`$4000` writes of `$10`-`$FF` repeat the row), on a
+    clock board `$4`-`$7` and `$D`-`$F` select nothing and read `$FF`, and any write to
+    `$6000`-`$7FFF` latches the clock (Pan Docs' 0-then-1 is not required). Both pictures exact.
+  * *STOP mode* (daid's `stop_instr.gb` on DMG and CGB, `stop_instr_gbc_mode3.gb`): with no
+    button held and no speed switch armed STOP stops even when an interrupt is pending (it is
+    then one byte long), a held button makes it a HALT or a no-op, and only the joypad wakes it:
+    an interrupt raised meanwhile waits. A DMG's oscillator stops and its LCD goes blank. A CGB's
+    PPU runs on but loses the memories the CPU could reach at that moment: the VRAM reads `$FF`
+    and the palettes black, so the screen is black, unless the STOP came in mode 3, when the
+    picture stays. The DMG row had been passing by accident: the runner matched the white
+    LCD-off frame before the test began.
+  * *LY after a speed switch* (daid's `speed_switch_timing_ly.gbc`): still open. Of its 128 LY
+    reads one differs (read 46 shows line $86 where the test has $87; `_stat` and `_div` match).
+    Letting LY show the next line 2 dots early after a switch to double speed, as it does after
+    an LCD-on in double speed, fixes it and holds the smoke gate, but over the whole Gambatte CGB
+    list it loses `ly0/lycint152_ly153_ds_1`, `_ds_4` and `lycint_ly/lycint_ly_ds_1` (hardware
+    verdicts) for one gain; 1 dot satisfies neither side. `board.SWITCH_LY_LEAD` stays 0.
+  * *BGP on a CGB* (Mealybug `m3_bgp_change`, CPU CGB D): the one-dot OR of the old and new
+    palettes is the DMG's alone; a CGB shows the new value at the same dot. 496 pixels -> exact.
+  * Still open here: daid's `ppu_scanline_bgp.gb` on CGB (every BGP change lands 4 pixels early:
+    the alignment comes from the LY=LYC=0 interrupt out of HALT, the fitted `LYC_IRQ_EARLY` area),
+    `m3_bgp_change_sprites` on CGB (2,070 pixels: the pixel pipeline runs 3 dots ahead of the
+    reference at the line's start and 1 behind at its end, so a CGB's object fetches cost
+    differently from a DMG's), `strikethrough.gb`, cgb-acid-hell's 2 pixels (column 80, lines 68
+    and 69: the ROM rewrites LCDC every 8 dots and clears bit 4 at dot 173 of each line, so this
+    is the CGB's TILE_SEL glitch, a tile data read on the dot the bit falls returning the tile's
+    number: SameBoy `data_for_tile_sel_glitch`; a first try keyed on the lagged bit's fall at a
+    data read changed nothing, so the read does not fall on that dot here), and the other
+    Mealybug CGB pictures. `strikethrough.gb` needs the PPU to read OAM through a running DMA
+    (SameBoy `oam_read`: the scan and the object fetch see the pair of bytes at the DMA's
+    position); the board's PPU does not look at the DMA at all.
+* **A stale BGP glitch, found by the game sweep (2026-11-11)**: Bill & Ted's Excellent Game Boy
+  Adventure showed one wrong pixel (77, 125) on its still title screen, at all three checkpoints,
+  with VRAM, OAM and the registers equal to SameBoy's and no sprite on the line. The record of a
+  BGP write's one-dot OR glitch (dot, line, value) was never cleared, so a single mid-line palette
+  write during the game's fade-in repainted that dot of that line in every later frame. The
+  record is now dropped once the line is over (`tests/test_pictures.py`). The sweep's other
+  one-pixel differences (The Addams Family, All-Star Baseball 99, Bust-A-Move 2, Castle Quest)
+  have the same look. A still picture is the detector here: compare the frame with a plain
+  render of the board's own VRAM (the scratch tool that found it is five lines).
+* **The game sweep, rebuilt (2026-11-11)**: `scripts/compat_sweep.py` now answers frames 600, 960
+  and 1500 in one run, keeps each ROM's answer (a rerun resumes), runs one dump per title or last
+  time's failures, takes SameBoy's pictures 30 frames either side of the frame, and leaves a
+  side-by-side picture of each difference. PyPy's nursery is set to 1 MB for every runner
+  (`scripts/nursery.py`): its default follows the shared 36 MB cache, and eight boards side by
+  side ran 3.3 times slower each. SameBoy's frame count drifts from real time across LCD-off
+  spans (`GB_run_frame` returns at a VBlank), which is why about a quarter of the games come out
+  `near` with the board one to four frames "ahead": the harness, not the board.
+  `--model cgb` is new: the games that ask for a Game Boy Color, on the CGB board against
+  SameBoy's CGB E in RGB555 (first four tried: Pokemon Crystal and Oracle of Ages equal at both
+  frames, Tetris DX near). The first 404 DMG titles of the running sweep: 304 same, 78 near, 15
+  differ, 6 unsupported; of the 15, six were the stale BGP glitch above and the rest look like
+  animation or random-number phase (bubbles, stars, a different attract-mode animal), which a
+  picture cannot settle.
 * **Not done**: SameBoy columns for the CGB runs, the SGB and AGB rows, DMG0/CGB0 revisions of
   the CGB, the real-boot and skip-boot equivalence check for CGB (the DMG's was identical), and
   the CGB speed-switch's PPU "odd mode".
