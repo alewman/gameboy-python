@@ -824,14 +824,19 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
     the alignment comes from the LY=LYC=0 interrupt out of HALT, the fitted `LYC_IRQ_EARLY` area),
     `m3_bgp_change_sprites` on CGB (2,070 pixels: the pixel pipeline runs 3 dots ahead of the
     reference at the line's start and 1 behind at its end, so a CGB's object fetches cost
-    differently from a DMG's), `strikethrough.gb`, cgb-acid-hell's 2 pixels (column 80, lines 68
-    and 69: the ROM rewrites LCDC every 8 dots and clears bit 4 at dot 173 of each line, so this
-    is the CGB's TILE_SEL glitch, a tile data read on the dot the bit falls returning the tile's
-    number: SameBoy `data_for_tile_sel_glitch`; a first try keyed on the lagged bit's fall at a
-    data read changed nothing, so the read does not fall on that dot here), and the other
-    Mealybug CGB pictures. `strikethrough.gb` needs the PPU to read OAM through a running DMA
+    differently from a DMG's), `strikethrough.gb`, and the other Mealybug CGB pictures. `strikethrough.gb` needs the PPU to read OAM through a running DMA
     (SameBoy `oam_read`: the scan and the object fetch see the pair of bytes at the DMA's
     position); the board's PPU does not look at the DMA at all.
+* **The CGB's TILE_SEL glitch (2026-11-11)**: cgb-acid-hell rewrites LCDC every 8 dots; its two
+  wrong pixels (column 80, lines 68 and 69) were the tile data read that falls 2 dots after a
+  write clearing LCDC.4, which on a CGB returns the tile's number in place of its data for
+  numbers below $80 (Matt Currie's PPU documentation; SameBoy `data_for_tile_sel_glitch`).
+  `ppu.SEL_GLITCH_LAG` 2: cgb-acid-hell is exact (1 and 3 leave it at 2 pixels), Mealybug
+  `m3_lcdc_tile_sel_change` CGB D 1,204 -> 700, the other Mealybug CGB pictures and cgb-acid2
+  unchanged. Single speed only: in double speed the rule lost Gambatte
+  `bgtiledata/bgtiledata_spx09_ds_2` (SameBoy has a second rule there, not written). Gambatte CGB
+  2,820, unchanged. The Shootout stood at 235 of 258 before this (230 on 2026-11-08); what is
+  left is 19 Mealybug DMG pictures, the two daid CGB tests and `strikethrough.gb`.
 * **A stale BGP glitch, found by the game sweep (2026-11-11)**: Bill & Ted's Excellent Game Boy
   Adventure showed one wrong pixel (77, 125) on its still title screen, at all three checkpoints,
   with VRAM, OAM and the registers equal to SameBoy's and no sprite on the line. The record of a

@@ -166,6 +166,9 @@ OAM_RISE_LY0_CGB = 2  # ... and on line 0, one written before this dot of the li
 # early, by one M-cycle (SameBoy's line-0 writes land one M-cycle after line 1's, ours two)
 EARLY_LINE0_DS = 2
 OBP_DELAY = 4
+# FITTED (cgb-acid-hell: 1 and 3 leave its two pixels wrong): dots from a write clearing LCDC.4
+# to the tile data read that returns the tile number instead (the CGB's TILE_SEL glitch)
+SEL_GLITCH_LAG = 2
 BG_MAP_LAG = 4  # FITTED (Gambatte bgtilemap): dots LCDC.3 (map select) arrives late at the fetcher
 BG_DATA_LAG = 4  # ... and LCDC.4 (tile data select); both make Gambatte bgtilemap/bgtiledata rows below the sprites exact
 OBJ_SIZE_LAG = 0  # FITTED (Mealybug): dots LCDC.2 arrives late at an object fetch
@@ -229,6 +232,7 @@ class PPU:
         "ly",
         "ly153_dots",
         "ly_lead",
+        "sel_fell",
         "lyc",
         "lyc_early",
         "lyc_flag",
@@ -353,6 +357,7 @@ class PPU:
         self.irq_defer = False  # the interrupt just raised reaches the dispatch a cycle later
         self.irq_halt_delay = 0  # dots later a halted CPU sees the STAT interrupt just raised
         self.sub = 0  # the dot within the M-cycle being ticked (0-3)
+        self.sel_fell = False  # CGB: LCDC.4 fell where a tile data read of this dot sees it
         self.ly_lead = 0  # dots LY shows the next line early, in double speed (LY_LEAD_DS)
         self.owed = 0  # dots of this M-cycle left to run after the access (IRQ_LEAD)
         self.vram = bytearray(0x4000 if cgb else 0x2000)
@@ -569,6 +574,11 @@ class PPU:
             | (self._lcdc_ago(BG_MAP_LAG) & 0x08)
             | (self._lcdc_ago(BG_DATA_LAG) & 0x10)
         )
+        shadow.sel_fell = bool(
+            self.cgb
+            and not self.double_speed
+            and self._lcdc_ago(SEL_GLITCH_LAG + 1) & ~self._lcdc_ago(SEL_GLITCH_LAG) & 0x10
+        )
         shadow.cgb_mode, shadow.opri = self.cgb_mode, self.opri
         shadow.scx = self.scx_hist[-DS_SCX_LAG] if self.double_speed else self.scx
         shadow.scy = self.scy_hist[-SCY_LAG] if SCY_LAG else self.scy
@@ -760,6 +770,16 @@ class PPU:
         tile = ticket[0]
         signed = 0x1000 + ((tile ^ 0x80) - 0x80) * 16
         address = tile * 16 if lcdc & 0x10 else signed
+        # The CGB's TILE_SEL glitch (Matt Currie, "The comprehensive Game Boy PPU documentation",
+        # TILE_SEL; SameBoy data_for_tile_sel_glitch; cgb-acid-hell): a tile data read on the dot
+        # LCDC.4's fall arrives returns the tile's number in place of its data, for numbers below
+        # $80. Single speed only: double speed has another rule (SameBoy), not written here, and
+        # this one there loses Gambatte bgtiledata_spx09_ds_2.
+        if self.sel_fell and tile < 0x80:
+            ticket[step] = tile
+            if step == 2:
+                ticket[3] = 1
+            return
         row = self.window_line if window else (self.ly + self.scy) & 255
         attr = ticket[4]
         if attr & 0x40:
