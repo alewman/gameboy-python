@@ -4,6 +4,7 @@
     python -m gameboy_python rom.gb --boot real --frames 400     # boot from the real boot ROM
     python -m gameboy_python rom.gb --protocol mooneye           # run to LD B,B, report pass/fail
     python -m gameboy_python rom.gb --trace out.jsonl --steps 100000
+    python -m gameboy_python play rom.gb                         # a window: gameboy_python.frontend
 
 ``--boot`` is ``skip`` (the default), ``real`` (your No-Intro boot ROM, read in place),
 ``quick`` (dmg-sim's quickboot), or a path to a raw or zipped image. ``--png FILE`` saves the
@@ -50,6 +51,11 @@ def boot_image(choice: str) -> tuple[bytes | None, str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["play"]:
+        from gameboy_python.frontend import main as play
+
+        return play(argv[1:])
     parser = argparse.ArgumentParser(
         prog="python -m gameboy_python", description=__doc__.split("\n\n")[0]
     )

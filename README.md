@@ -50,6 +50,17 @@ harness uses the real ones by default, read in place from a configurable
 path (`--boot`, `GAMEBOY_BOOT_ROM`, `GAMEBOY_NOINTRO_DIR`; local default and
 hashes in [docs/start-here.md](docs/start-here.md) "Boot ROMs").
 
+## Play
+
+    pip install -e '.[frontend]'          # pygame-ce, on PyPy
+    python -m gameboy_python play "Tetris (World) (Rev 1).zip"
+
+A window with picture, sound, keyboard and gamepad (`src/gameboy_python/frontend.py`): a Game
+Boy Color for a cartridge that asks for one, else the DMG, booted from your boot ROM when one is
+found. Battery saves (and an MBC3's clock) are kept in `NAME.sav` beside the image. This is the
+reference board, correct before fast: it runs below real time, shows every frame and plays the
+sound at pitch with gaps.
+
 ## Scripts
 
 | Script | What |
@@ -57,6 +68,9 @@ hashes in [docs/start-here.md](docs/start-here.md) "Boot ROMs").
 | `scripts/fetch_references.py` | the pinned references, tools and test ROMs |
 | `scripts/sameboy_run.py` | a locally built SameBoy driven headless through ctypes, reading the Mooneye, blargg (serial and $A000) and GBMicrotest result protocols ([docs/validation.md](docs/validation.md)) |
 | `scripts/mame_trace.py` | MAME 0.285 per-instruction SM83 trace, I/O log and test result ([docs/mame-oracle.md](docs/mame-oracle.md)); needs your boot ROMs |
+| `scripts/compat_sweep.py` | the licensed No-Intro dumps against SameBoy, picture for picture at three frames: `--tier titles` (one dump per title), `all`, or `failures` (`tests/compat_differs.txt`, the loop between edits); results are kept per ROM and a rerun resumes |
+| `scripts/smoke.py` | the curated gate between edits: the classics that must stay exact and the Gambatte ROMs that have flipped |
+| `scripts/nursery.py` | gives PyPy a 1 MB nursery before a runner fans out over the cores (about five times the sweep throughput on a large shared cache) |
 | `scripts/count_mbcs.py` | cartridge-type coverage over the local No-Intro sets, read in place, with the MBC1-multicart and MMM01 heuristics ([docs/cartridge.md](docs/cartridge.md)) |
 
 ## Licence

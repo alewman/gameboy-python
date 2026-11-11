@@ -64,4 +64,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import nursery
+
+    nursery.small()
     sys.exit(main())
