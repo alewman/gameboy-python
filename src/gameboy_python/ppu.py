@@ -504,8 +504,12 @@ class PPU:
         )
         if lagged == 3 and self.mode == 0 and self.mode0_dots > lag:
             lagged = 0  # the end of mode 3 shows up in STAT sooner than the start of it does
-        if self.double_speed and lagged == 0 and self.mode == 2 and self.dot >= M2_READ_LAG_DS:
-            lagged = 2  # in double speed a line's mode 2 shows in STAT without the lag
+        if self.double_speed and lagged in (0, 1) and self.mode == 2 and self.dot >= M2_READ_LAG_DS:
+            # in double speed a line's mode 2 shows in STAT without the lag, line 0's too: no
+            # mode 0 dots after VBlank (Bust-A-Move Millennium's title polls STAT for mode 0 to
+            # start its palette stream; catching line 0's first dots started it a line early
+            # and tore the picture, which SameBoy never shows; Gambatte cgb04c unchanged)
+            lagged = 2
         if not self.double_speed and lagged == 0 and self.mode == 2 and self.dot >= M2_READ_LAG_SS:
             lagged = 2
         if lagged == 1 and self.mode == 2:

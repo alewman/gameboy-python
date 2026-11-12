@@ -73,6 +73,7 @@ _spec.loader.exec_module(sb)
 
 
 CHECKS = (600, 960, 1500)
+LCD_FLASH_FRAMES = 8  # how far past a checkpoint to look for the picture after an LCD-off blink
 BUILD = ROOT / "reference" / "build"
 #: per model: the board's machine, its boot ROM, SameBoy's model, and where the answers go (the
 #: log, the pictures of board | SameBoy | where they differ, and the list of dumps that differ)
@@ -236,10 +237,24 @@ def run(args: tuple[Path, tuple[int, ...], str]) -> dict:
         # SameBoy counts 70,224-cycle frames from power-on, LCD off or not; the board's
         # run_frames counts VBlanks, so line the two up by time instead
         mine = []
+        blank = gb.ppu._blank()
+        flashes = 0
         for c in checks:
             while gb.t < c * FRAME_T:
                 gb.step()
+            # A game that turns the LCD off for a moment (Rugrats - Totally Angelica, NHL 2000:
+            # every few frames, to swap maps) shows a white frame on the board, as Pan Docs says
+            # the LCD does; SameBoy holds the last picture instead. Neither is wrong about the
+            # game, so a white checkpoint is judged on the next picture that is not white.
+            extra = 0
+            while gb.ppu.frame == blank and extra < LCD_FLASH_FRAMES:
+                extra += 1
+                while gb.t < (c + extra) * FRAME_T:
+                    gb.step()
+            flashes += extra > 0
             mine.append(bytes(gb.ppu.frame))
+        if flashes:
+            out["lcd_flash"] = flashes
     except Exception as e:
         return {**out, "status": "error", "detail": repr(e)[:160]}
     try:
