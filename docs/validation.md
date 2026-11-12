@@ -935,6 +935,13 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   framebuffer, and the constants only they used (`ppu.py` 299 lines shorter). The timing PPU's
   results are unchanged (every picture test, both Gambatte lists, smoke and the test suite
   identical before and after).
+  The Color sweep's 45 differences rerun with CGB games on `pixels.py`: 44 still differ, one
+  fixed (Sangokushi: Game Boy Ban 2), and three that the shadow had matched to SameBoy at
+  `275616c` differ again by the pixel counts of `9d1e640`: Pokemon Puzzle Challenge and Pokemon
+  de Panepon (the scrolling clouds' top edge, a mid-line SCX effect) and Totsugeki! Papparatai.
+  An open lead, not a hardware verdict either way: SameBoy is a detector, the shadow's
+  double-speed SCX delay had been fitted partly to SameBoy's fetch log, and Gambatte's hardware
+  pictures favour the new machine (+43 CGB, none lost).
 * **Not done**: SameBoy columns for the CGB runs, the SGB and AGB rows, DMG0/CGB0 revisions of
   the CGB, the real-boot and skip-boot equivalence check for CGB (the DMG's was identical), and
   the CGB speed-switch's PPU "odd mode".
