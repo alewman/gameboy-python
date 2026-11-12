@@ -180,6 +180,7 @@ LOW_SHIFT = 4
 HIGH_SHIFT = 4
 MAP_READ_DOT = LOW_READ_DOT = HIGH_READ_DOT = 2  # which dot (1 or 2) of its step each fetch reads
 OBJ_FETCH_DOTS = 6
+SHADOW_FULL_OBJECT = 1  # the drawing PPU on a DMG pays for the first object in full (Mealybug m3_bgp_change_sprites)
 FIRST_OBJECT_DISCOUNT = 3  # FITTED to Mooneye ppu/intr_2_mode0_timing_sprites
 FIRST_OBJECT_DISCOUNT_DS = 2  # FITTED (Gambatte cgb04c sprites/space in double speed, 261 -> 341 of 380); AGE stat-mode-sprites (single speed) needs 3
 VBLANK_LINE = 144
@@ -615,7 +616,7 @@ class PPU:
         self.mode3_start = MODE2_END
         self.skip_scan = False
         if self.window_used:
-            self.window_line += 1
+            self.window_line = (self.window_line + 1) & 255
         self.window_used = False
         self.ly = 0 if self.ly == LAST_LINE else self.ly + 1
         # a BGP write's one-dot glitch belongs to its own line of its own frame: forget it once the
@@ -890,7 +891,8 @@ class PPU:
         dots = OBJ_FETCH_DOTS
         if not self.penalised:  # FITTED: the first object on a line costs less
             self.penalised = True
-            dots -= FIRST_OBJECT_DISCOUNT_DS if self.cgb_mode and self.double_speed else FIRST_OBJECT_DISCOUNT
+            if not self.is_shadow or not SHADOW_FULL_OBJECT:
+                dots -= FIRST_OBJECT_DISCOUNT_DS if self.cgb_mode and self.double_speed else FIRST_OBJECT_DISCOUNT
         self.obj_dots = dots
         self.obj_low_at = max(dots - 3, 0)
         self.obj_high_at = max(dots - 5, 0)
@@ -994,6 +996,10 @@ class PPU:
                     self.window_active = True
                     self.win_mid = True
                     self.win_start_x = x
+                    if self.window_used:
+                        # every start on a line moves the window a row on (SameBoy window_y;
+                        # Mealybug m3_lcdc_win_en_change_multiple)
+                        self.window_line = (self.window_line + 1) & 255
                     self.window_used = True
                     if self.cgb:
                         self.win_undo = (
