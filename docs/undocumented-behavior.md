@@ -61,7 +61,7 @@ results are "CGB, revision C or D".
 
 **C4. The SGB clock.** GBCTR (`clocks.typ`) gives the NTSC SNES clock as
 "21.447 MHz"; the NTSC SNES master clock is 21.477272 MHz (6 × 3.579545).
-A typo, almost certainly; it matters only to the future SNES board.
+A typo, almost certainly; it matters only to the SNES board that embeds this one.
 
 **C5. Mealybug "photographs".** The expected images are the author's
 emulator's screenshots; the photos are separate and blurry (`README.md`

@@ -21,11 +21,12 @@ from __future__ import annotations
 
 import collections
 import json
+import os
 import re
 import zipfile
 from pathlib import Path
 
-BASE = Path("/data/emu/source/myrient.erista.me/files/No-Intro")
+BASE = Path(os.environ.get("GAMEBOY_NOINTRO_DIR") or os.environ.get("NO_INTRO_DIR") or "No-Intro")
 SETS = [
     "Nintendo - Game Boy",
     "Nintendo - Game Boy Color",

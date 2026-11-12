@@ -74,7 +74,7 @@ MODELS = {
 # The user's own boot ROMs, read in place (never copied): No-Intro [BIOS] dumps,
 # identified 2026-10-05 by SHA-1 against MAME 0.285 gb.cpp and GBCTR's table.
 LOCAL_BOOT_DIR = Path(
-    os.environ.get("GAMEBOY_NOINTRO_DIR", "/data/emu/source/myrient.erista.me/files/No-Intro")
+    os.environ.get("GAMEBOY_NOINTRO_DIR") or os.environ.get("NO_INTRO_DIR") or "No-Intro"
 )
 LOCAL_BOOT = {
     # model: (zip relative to LOCAL_BOOT_DIR, SHA-256 of the image)

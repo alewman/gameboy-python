@@ -1,5 +1,9 @@
 # Handoff: build `gameboy-python`, the Game Boy board
 
+> Historical: the brief this board was built from (2026-10-05), kept as written. Every
+> milestone in it is done; the current state is in [../README.md](../README.md) and
+> [validation.md](validation.md).
+
 ## Context you are inheriting
 
 The family's shape is **chips are cores, boards compose cores**. Each core is

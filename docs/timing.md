@@ -38,7 +38,7 @@ the M-cycle and a write's data is driven in its second half. Mooneye's
 `*_timing` tests and blargg `mem_timing` measure the consequences in M-cycles;
 GBMicrotest measures them at single-T granularity (each test checks "one
 register or memory address at one specific cycle after boot":
-`GBMicrotest/README.md`). The procedure for the build session:
+`GBMicrotest/README.md`). The procedure the board was built by:
 
 1. Start with "advance 4 T, then perform the access" for reads and writes.
 2. Run GBMicrotest's `*_a/_b/_c/_d` families (the same test at successive

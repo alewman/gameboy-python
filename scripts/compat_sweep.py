@@ -5,8 +5,8 @@
                                    [--jobs J] [--fresh]
 
 Reads the sets in place (zips, never extracted or copied): ``Nintendo - Game Boy`` and ``Nintendo -
-Game Boy Color`` under ``GAMEBOY_NOINTRO_DIR`` (default /data/emu/source/myrient.erista.me/files/
-No-Intro), licensed dumps only (no Unl, Proto, Beta, Demo, Sample, Aftermarket, Pirate, Program
+Game Boy Color`` under ``GAMEBOY_NOINTRO_DIR`` or ``NO_INTRO_DIR``
+(default ./No-Intro), licensed dumps only (no Unl, Proto, Beta, Demo, Sample, Aftermarket, Pirate, Program
 or BIOS). ``--model dmg`` (the default) skips the CGB-only titles and compares with SameBoy's
 DMG-B shade for shade; ``--model cgb`` runs the games that ask for a Game Boy Color on the CGB
 board and compares with SameBoy's CGB E colour for colour (RGB555, no colour correction). Each
@@ -61,7 +61,7 @@ from gameboy_python.cartridge import parse_header  # noqa: E402
 from gameboy_python.image import png_bytes, rgb_png_bytes  # noqa: E402
 
 NOINTRO = Path(
-    os.environ.get("GAMEBOY_NOINTRO_DIR", "/data/emu/source/myrient.erista.me/files/No-Intro")
+    os.environ.get("GAMEBOY_NOINTRO_DIR") or os.environ.get("NO_INTRO_DIR") or "No-Intro"
 )
 KEEP = 30  # SameBoy frames kept each side of a checkpoint to absorb an animation phase offset
 SETS = ("Nintendo - Game Boy", "Nintendo - Game Boy Color")

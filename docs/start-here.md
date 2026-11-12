@@ -249,10 +249,8 @@ The boot ROMs are Nintendo's; never ship them, never copy them into this
 repository. **Decided (Aubrey, 2026-10-05): every harness boots with the
 real boot ROM; `quickboot.bin` only when no real ROM is available; SameBoy's
 open ROM is a last fallback, labelled.** The path is configurable (`--boot`,
-or `GAMEBOY_BOOT_ROM`; `GAMEBOY_NOINTRO_DIR` moves the default directory); a
-`.zip` is read in place. The documented local default is Aubrey's own
-No-Intro `[BIOS]` set under
-`/data/emu/source/myrient.erista.me/files/No-Intro/`, identified 2026-10-05:
+or `GAMEBOY_BOOT_ROM`; otherwise a No-Intro `[BIOS]` set under `GAMEBOY_NOINTRO_DIR` or
+`NO_INTRO_DIR`); a `.zip` is read in place. The images, identified 2026-10-05:
 
 | Model | File (under that directory) | SHA-1 | SHA-256 | Identified by |
 | --- | --- | --- | --- | --- |

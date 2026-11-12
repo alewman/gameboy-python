@@ -65,7 +65,7 @@ $014D (checked by the boot ROM); global checksum (never checked).
 ## Measured coverage (local No-Intro sets, 2026-10-05)
 
 `scripts/count_mbcs.py` reads the header of every dump in
-`/data/emu/source/myrient.erista.me/files/No-Intro/Nintendo - Game Boy*`
+`$NO_INTRO_DIR/Nintendo - Game Boy*`
 (read in place, never extracted or committed) and applies the two
 multicart heuristics GBCTR and Pan Docs give. **3,064 licensed dumps** (GB
 and GBC main sets; not Aftermarket, Private, Unl, Pirate, Proto, Beta,

@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 NOINTRO = Path(
-    os.environ.get("GAMEBOY_NOINTRO_DIR", "/data/emu/source/myrient.erista.me/files/No-Intro")
+    os.environ.get("GAMEBOY_NOINTRO_DIR") or os.environ.get("NO_INTRO_DIR") or "No-Intro"
 )
 #: boot ROM name (machines.Machine.boot_rom) -> (zip under NOINTRO, SHA-256 of the image)
 LOCAL = {
