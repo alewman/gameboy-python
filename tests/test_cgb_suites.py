@@ -44,7 +44,7 @@ def test_cgb_acid2_pixel_exact():
 
 MEALYBUG = BASE / "mealybug-tearoom-tests/ppu"
 #: Mealybug's CPU CGB D pictures the board draws exactly, from the real CGB boot ROM (a DMG
-#: cartridge: the compatibility mode, dmg_pixels.py). Left out: m3_lcdc_obj_size_change_scx,
+#: cartridge: the compatibility mode, pixels.py). Left out: m3_lcdc_obj_size_change_scx,
 #: whose expected picture has a 4x4 block that the CGB-D photograph does not (docs/validation.md).
 MEALYBUG_CGB_D = sorted(
     p.name[: -len("_cgb_d.png")]

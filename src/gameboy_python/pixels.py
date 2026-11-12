@@ -1,14 +1,14 @@
-"""The DMG picture: OAM scan and mode 3 as a background fetcher, an object fetcher and two FIFOs.
+"""The picture: OAM scan and mode 3 as a background fetcher, an object fetcher and two FIFOs.
 
 This machine only draws. STAT, the interrupts and the VRAM/OAM locks keep their timing from
 ``ppu.PPU`` (fitted to Mooneye and Gambatte); this one runs alongside it, ``DRAW_LAG`` dots behind,
 reading the registers, VRAM and OAM as they are on each of its dots, and writes the picture into
-its own frame. It draws on DMG hardware, and on CGB hardware while it runs a DMG cartridge (the
-compatibility mode, ``cgb_mode`` false); a CGB game is still drawn by the PPU's shadow.
+its own frame, on DMG and CGB hardware alike (a CGB in its own mode or in the compatibility mode
+a DMG cartridge gets, ``cgb_mode`` false).
 
 It is a translation of docboy's pixel pipeline (``src/docboy/docboy/ppu/ppu.cpp``;
 github.com/Docheinstein/docboy, MIT licence, notice below), the emulator that draws all of
-Mealybug Tearoom's DMG and CGB-D pictures. What it models, in its words:
+Mealybug Tearoom's DMG and CGB-D pictures and cgb-acid-hell. What it models, in its words:
 
 * the first fetch of a line is thrown away (dots 80-82), and ``SCX % 8`` pixels are dropped;
 * ``lx`` counts from 0 and the first 8 pixels are popped but not shown, so an object at OAM X is
@@ -24,14 +24,18 @@ Mealybug Tearoom's DMG and CGB-D pictures. What it models, in its words:
 
 The DMG: WX is seen a dot late, and the window starts a pixel late if LCDC.5 was off a dot before;
 a pixel is coloured with LCDC.0/.1 as they were a dot before (except at ``lx == 8``) and with
-``BGP | the previous dot's BGP`` (Mealybug m3_bgp_change). Three things here are not docboy's and
-come from Gambatte's hardware pictures: the map column follows the pixel position and SCX, the
-``SCX % 8`` drop follows SCX as it changes, and WX=166 (see ``_check_window``).
+``BGP | the previous dot's BGP`` (Mealybug m3_bgp_change); with LCDC.0 clear the background's
+colour 0 still goes through BGP (Gambatte, SameBoy; docboy draws white).
 
-The CGB (compatibility mode): LCDC, SCX, SCY and WX writes reach it ``CGB_REG_DELAY`` dots late;
-no BGP glitch; SCY is taken once per tile, at GetTile; the map column follows docboy's tile
-counter; and three glitches: TILE_SEL changed between a data read's two dots, WX met again during
-a window tile fetch, and the window turned off on the dot it starts.
+The CGB: LCDC, SCX, SCY and WX writes reach it ``CGB_REG_DELAY`` dots late (one more in double
+speed); no BGP glitch; SCY is taken once per tile, at GetTile; three glitches: TILE_SEL changed
+between a data read's two dots, WX met again during a window tile fetch, and the window turned off
+on the dot it starts; and, in its own mode, each tile's attributes from VRAM bank 1 (palette,
+bank, flips, priority), objects in OAM order, and SameBoy's TILE_SEL glitch (``_number_glitch``).
+
+Not docboy's, and taken from Gambatte's hardware pictures: the map column follows the pixel
+position and SCX (``scx_during_m3``), the ``SCX % 8`` drop follows SCX as it changes, and the DMG's
+WX=166 rule (see ``_check_window``).
 
 docboy, Copyright (c) 2025 Docheinstein. Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation files (the "Software"), to deal in
@@ -61,10 +65,11 @@ PIXELS_START = 80  # the dot pixel transfer starts at, on every line
 DUMMY_DOTS = 3  # the thrown-away first fetch: the FIFO is filled with junk on its last dot
 DMA_INDEX_BACK = 1
 CGB_REG_DELAY = 2  # CGB: dots before an LCDC, SCX, SCY or WX write reaches the pixel pipeline
+CGB_REG_DELAY_DS = 3  # FITTED (Gambatte cgb04c scx_during_m3 *_ds_*): ... in double speed
 
 
-class DmgPixels:
-    """The DMG picture's drawing machine (see the module notes)."""
+class Pixels:
+    """The drawing machine (see the module notes)."""
 
     def __init__(self, ppu: PPU) -> None:
         self.ppu = ppu  # the registers, VRAM and OAM are read from here
@@ -98,7 +103,7 @@ class DmgPixels:
         """One dot at line ``ly``, dot ``dot``."""
         p = self.ppu
         if self.cgb:
-            d = CGB_REG_DELAY
+            d = CGB_REG_DELAY_DS if p.double_speed else CGB_REG_DELAY
             self.lcdc, self.scx = p.lcdc_hist[-1 - d], p.scx_hist[-1 - d]
             self.scy, self.wx = p.scy_hist[-1 - d], p.wx_hist[-1 - d]
             self.next_lcdc = p.lcdc_hist[-d]
@@ -185,7 +190,8 @@ class DmgPixels:
     def _reset_fetcher(self) -> None:
         self.lx = 0
         self.popped = False
-        self.bg_fifo: list[int] = []  # colour numbers
+        self.bg_fifo: list[int] = []  # colour number | the tile's CGB attributes << 2
+        self.tile_attrs = 0  # CGB mode: the tile's attributes, from VRAM bank 1
         self.obj_fifo: list[tuple[int, int, int, int]] = []  # (colour, attributes, entry, x)
         self.push_enabled = False
         self.pending_fill = False
@@ -197,13 +203,12 @@ class DmgPixels:
         self.w_off_while_starting = False  # CGB: the window was turned off on the dot it started
         self.tile_number = 0
         self.tile_scy = 0  # CGB: SCY taken at GetTile
-        self.bw_lx = 0  # CGB: the background fetcher's tile counter, in pixels
-        self.lx_countdown = 2  # CGB: Push dots before that counter moves on
+        self.last_fetch_decay = 0  # CGB: the last read is not reused across a line start
         self.map_address = 0
         self.data_address = 0
         self.data_low = 0
         self.data_high = 0
-        self.kept: tuple[int, int] | None = None  # a fetched tile held over an object fetch
+        self.kept: tuple[int, int, int] | None = None  # a fetched tile held over an object fetch
         self.win_x = 0  # the window fetcher's tile counter
         self.obj_entry = (0, 0)
         self.obj_tile = 0
@@ -274,13 +279,24 @@ class DmgPixels:
         if popped:
             self._next_lx()
 
-    def _colour(self, colour: int, obj: tuple[int, int, int, int] | None, lx: int) -> None:
+    def _colour(self, pixel: int, obj: tuple[int, int, int, int] | None, lx: int) -> None:
         p = self.ppu
+        colour = pixel & 3
+        i = self.ly * SCREEN_W + lx - 8
         if self.cgb:
             lcdc = self.lcdc
         else:
             lcdc = self.lcdc if lx == 8 else self.last_lcdc  # LCDC.0/.1 a dot late, but at lx 8
-        i = self.ly * SCREEN_W + lx - 8
+        if p.cgb_mode:
+            # CGB mode: LCDC.0 clear takes the background's priority away, it still draws; a
+            # background pixel of colour 1-3 is over the object when either asks for it
+            attrs = pixel >> 2
+            if obj is not None and obj[0] and lcdc & 2:
+                if not lcdc & 1 or not colour or not ((attrs | obj[1]) & 0x80):
+                    self.framebuffer[i] = p._rgb(p.obj_pal, obj[1] & 7, obj[0])
+                    return
+            self.framebuffer[i] = p._rgb(p.bg_pal, attrs & 7, colour)
+            return
         if obj is not None and obj[0] and lcdc & 2:
             if not lcdc & 1 or not colour or not obj[1] & 0x80:
                 shade = ((p.obp1 if obj[1] & 0x10 else p.obp0) >> (obj[0] * 2)) & 3
@@ -314,22 +330,21 @@ class DmgPixels:
     def _pending_fill(self) -> None:
         if self.pending_fill:
             self.pending_fill = False
-            self.bg_fifo = _row(self.data_low, self.data_high, False)
+            self.bg_fifo = self._tile_row()
         elif self.partial_fill:
             # CGB, the window turned off as it starts: the FIFO's pixels left are overwritten
             # with whatever the fetcher holds
             size, self.partial_fill = self.partial_fill, 0
-            self.bg_fifo = _row(self.data_low, self.data_high, False)[:size]
+            self.bg_fifo = self._tile_row()[:size]
+
+    def _tile_row(self) -> list[int]:
+        attrs = self.tile_attrs
+        return _row(self.data_low, self.data_high, bool(attrs & 0x20), attrs)
 
     def _push(self) -> None:
         """The Push step: into an empty FIFO, or an object fetch from here."""
         if not self.push_enabled or self.fetching_object:
             return
-        if self.cgb and self.lx_countdown:
-            # CGB: the tile counter moves on once the fetcher has been in Push for two dots
-            self.lx_countdown -= 1
-            if not self.lx_countdown:
-                self.bw_lx += 8
         can_push = not self.bg_fifo
         if can_push:
             if (
@@ -348,14 +363,13 @@ class DmgPixels:
                 return
         if self._obj_due():
             if not can_push:
-                self.kept = (self.data_low, self.data_high)
+                self.kept = (self.data_low, self.data_high, self.tile_attrs)
             self.fetching_object = True
             self.obj_entry = self.oam_entries[self.lx].pop()
             self._obj_tile_0()
 
     def _push_off(self) -> None:
         self.push_enabled = False
-        self.lx_countdown = 2
 
     def _tick_fetcher(self) -> None:
         if self.last_fetch_decay:
@@ -418,14 +432,12 @@ class DmgPixels:
         self._bg_tile_0()
 
     def _bg_tile_0(self) -> None:
-        if self.cgb:
-            tile_x = ((self.bw_lx + self.scx) >> 3) & 31
-        else:
-            # the map column is worked out from the pixel position (after this dot's pixel) and
-            # SCX at this dot, as SameBoy's position_in_line + SCX: a write that changes SCX's low
-            # bits mid-line moves the column (Gambatte scx_during_m3, hardware). docboy keeps a
-            # tile counter instead, which agrees while SCX stands still.
-            tile_x = ((self.lx + self.popped + self.scx) >> 3) & 31
+        # the map column is worked out from the pixel position and SCX at this dot, as SameBoy's
+        # position_in_line + SCX: a write that changes SCX's low bits mid-line moves the column
+        # (Gambatte scx_during_m3, hardware; docboy keeps a tile counter, which agrees while SCX
+        # stands still). The DMG counts the pixel popped on this dot, the CGB does not.
+        position = self.lx if self.cgb else self.lx + self.popped
+        tile_x = ((position + self.scx) >> 3) & 31
         tile_y = ((self.ly + self.scy) & 255) >> 3
         self.map_address = (0x1C00 if self.lcdc & 8 else 0x1800) + tile_y * 32 + tile_x
         if self.cgb and (self.w_off_while_starting or self.last_fetch_decay == 1):
@@ -444,7 +456,11 @@ class DmgPixels:
 
     def _bg_data_address(self) -> None:
         scy = self.tile_scy if self.cgb else self.scy  # the CGB takes SCY once, at GetTile
-        self.data_address = self._data_base() + ((self.ly + scy) & 7) * 2
+        row = (self.ly + scy) & 7
+        attrs = self.tile_attrs
+        if attrs & 0x40:  # CGB mode: vertical flip
+            row ^= 7
+        self.data_address = self._data_base() + row * 2 + (0x2000 if attrs & 8 else 0)
 
     def _bg_low_0(self) -> None:
         self._bg_data_address()
@@ -490,7 +506,11 @@ class DmgPixels:
         self.fetch = self._win_low_0
 
     def _win_data_address(self) -> None:
-        self.data_address = self._data_base() + (self.wly & 7) * 2
+        row = self.wly & 7
+        attrs = self.tile_attrs
+        if attrs & 0x40:  # CGB mode: vertical flip
+            row ^= 7
+        self.data_address = self._data_base() + row * 2 + (0x2000 if attrs & 8 else 0)
 
     def _win_low_0(self) -> None:
         if not self.lcdc & 0x20:
@@ -539,7 +559,7 @@ class DmgPixels:
         if self.last_lcdc & 0x10 and not self.lcdc & 0x10:
             address()
             self._read_high() if high else self._read_low()
-        elif not self.last_lcdc & 0x10 and self.lcdc & 0x10 and not self.data_address & 0x800:
+        elif not self.last_lcdc & 0x10 and self.lcdc & 0x10 and not self.data_address & 0x800:  # bit 11 of the address in its bank
             if high:
                 self.data_high = self.last_unsigned
             else:
@@ -549,11 +569,26 @@ class DmgPixels:
 
     def _read_tile_number(self) -> None:
         self.tile_number = self.ppu.vram[self.map_address]
+        self.tile_attrs = self.ppu.vram[0x2000 + self.map_address] if self.ppu.cgb_mode else 0
         if self.cgb:
             self.data_high = self.tile_number  # the CGB's tile number and high byte share a latch
             self.last_fetch, self.last_fetch_decay = self.tile_number, 2
 
+    def _number_glitch(self) -> bool:
+        """CGB mode, single speed: a background data read on the dot LCDC.4's fall reaches the
+        pipeline returns the tile's number, for numbers below $80 (SameBoy
+        data_for_tile_sel_glitch; cgb-acid-hell, column 80)."""
+        p = self.ppu
+        if not (p.cgb_mode and not p.double_speed and self.tile_number < 0x80):
+            return False
+        h = p.lcdc_hist
+        k = CGB_REG_DELAY
+        return bool(h[-2 - k] & ~h[-1 - k] & 0x10)
+
     def _read_low(self, obj: bool = False) -> None:
+        if not obj and self._number_glitch():
+            self.data_low = self.tile_number
+            return
         self.data_low = value = self.ppu.vram[self.data_address]
         if self.cgb:
             self.last_low = value
@@ -562,6 +597,9 @@ class DmgPixels:
             self.last_fetch, self.last_fetch_decay = value, 2
 
     def _read_high(self, obj: bool = False) -> None:
+        if not obj and self._number_glitch():
+            self.data_high = self.tile_number
+            return
         self.data_high = value = self.ppu.vram[self.data_address + 1]
         if self.cgb:
             self.last_high = value
@@ -582,7 +620,9 @@ class DmgPixels:
             # bytes at the DMA's address (docboy OamBus::read_word_request; strikethrough.gb)
             address = (self.ppu.dma.index - DMA_INDEX_BACK) & 0xFE
         self.obj_tile = oam[address]
-        self.obj_attrs = oam[address + 1] & 0xF0  # the low nibble is a CGB game's
+        self.obj_attrs = oam[address + 1]
+        if not self.ppu.cgb_mode:
+            self.obj_attrs &= 0xF0  # the low nibble is a CGB game's
         self.fetch = self._obj_low_0
 
     def _obj_data_address(self) -> None:
@@ -592,7 +632,7 @@ class DmgPixels:
         if self.obj_attrs & 0x40:
             row ^= mask
         tile = self.obj_tile & 0xFE if tall else self.obj_tile
-        self.data_address = tile * 16 + row * 2
+        self.data_address = tile * 16 + row * 2 + (0x2000 if self.obj_attrs & 8 else 0)
 
     def _obj_low_0(self) -> None:
         self.fetch = self._obj_low_1
@@ -609,7 +649,7 @@ class DmgPixels:
         self._obj_data_address()
         self._read_high(obj=True)
         attrs, number, lx = self.obj_attrs, self.obj_entry[0], self.lx
-        colours = _row(self.data_low, self.data_high, bool(attrs & 0x20))
+        colours = _row(self.data_low, self.data_high, bool(attrs & 0x20), 0)
         by_x = not self.cgb or self.ppu.opri & 1  # the CGB in its own mode: OAM order only
         fifo = self.obj_fifo
         for i, c in enumerate(colours):
@@ -626,7 +666,7 @@ class DmgPixels:
             self.fetch = self._obj_tile_0
         else:
             if self.kept is not None:
-                self.data_low, self.data_high = self.kept
+                self.data_low, self.data_high, self.tile_attrs = self.kept
                 self.kept = None
             self.fetching_object = False
             # back to the Push step with the kept tile; with none kept (the object came on a
@@ -634,7 +674,8 @@ class DmgPixels:
             self.fetch = self._fetch_idle if self.push_enabled else self._bgwin_tile_0
 
 
-def _row(low: int, high: int, flip: bool) -> list[int]:
-    """The 8 colour numbers of a tile row, leftmost first."""
+def _row(low: int, high: int, flip: bool, attrs: int) -> list[int]:
+    """The 8 colour numbers of a tile row, leftmost first, each with ``attrs << 2`` added."""
     bits = range(8) if flip else range(7, -1, -1)
-    return [((low >> b) & 1) | (((high >> b) & 1) << 1) for b in bits]
+    tag = attrs << 2
+    return [((low >> b) & 1) | (((high >> b) & 1) << 1) | tag for b in bits]

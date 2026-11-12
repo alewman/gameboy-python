@@ -87,7 +87,7 @@
   "date": "2026-08-21T00:48:22+02:00",
   "sparse": [],
   "license": "MIT",
-  "note": "Docheinstein's emulator; src/gameboy_python/dmg_pixels.py translates its pixel pipeline"
+  "note": "Docheinstein's emulator; src/gameboy_python/pixels.py translates its pixel pipeline"
  },
  {
   "path": "reference/src/gambatte-core",

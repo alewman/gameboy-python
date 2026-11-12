@@ -35,7 +35,7 @@ MEALYBUG = GBTR / "mealybug-tearoom-tests" / "ppu"
 #: are booted with the real DMG boot ROM.
 MEALYBUG_EXACT = sorted(
     p.name[: -len("_dmg_blob.png")] for p in MEALYBUG.glob("*_dmg_blob.png")
-)  # all 24 (dmg_pixels.py)
+)  # all 24 (pixels.py)
 
 
 @pytest.mark.slow
@@ -73,7 +73,7 @@ def test_a_bgp_write_glitches_one_pixel_of_one_frame():
 
 def test_strikethrough_reads_oam_through_a_dma():
     """strikethrough.gb: the scan keeps its last Y and X while an OAM DMA holds the bus, and an
-    object's tile read gets the pair of bytes the DMA is writing (dmg_pixels.py)."""
+    object's tile read gets the pair of bytes the DMA is writing (pixels.py)."""
     path = GBTR / "strikethrough"
     if not (path / "strikethrough.gb").exists():
         pytest.skip("run scripts/fetch_references.py")

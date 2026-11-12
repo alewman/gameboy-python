@@ -9,7 +9,7 @@ measure it at, to the precision the penalties are right; the tile-data fetch *ti
 modelled (UNVERIFIED against Mealybug: the first place to look if a picture is a few pixels off).
 
 The picture: a DMG cartridge's (on DMG hardware, and on a CGB in its compatibility mode) is drawn
-by ``dmg_pixels.DmgPixels``, a literal fetcher and FIFO pair (after docboy) that runs
+by ``pixels.Pixels``, a literal fetcher and FIFO pair (after docboy) that runs
 ``DRAW_LAG`` dots behind this PPU and matches Mealybug Tearoom's DMG and CGB-D pictures; this PPU
 then only times. A CGB game is drawn by a *shadow* copy of this PPU, ``SHADOW_LAG`` dots behind,
 as the paragraph above describes.
@@ -24,10 +24,11 @@ from __future__ import annotations
 from array import array
 from collections.abc import Callable
 
-from gameboy_python.dmg_pixels import DmgPixels
+from gameboy_python.pixels import Pixels
 from gameboy_python.machines import DOTS_PER_LINE
 
-DMG_PIXELS = 1  # the DMG picture is drawn by dmg_pixels.DmgPixels (0: by the shadow PPU, as before)
+CGB_MODE_PIXELS = 1  # a CGB game is drawn by pixels.py too (0: by the shadow PPU)
+DMG_PIXELS = 1  # the DMG picture is drawn by pixels.Pixels (0: by the shadow PPU, as before)
 DRAW_LAG = 5  # FITTED (Mealybug: all 24 DMG and 20 of 21 CGB-D exact at 5 only): dots the drawing machine runs behind
 
 MODE2_END = 80
@@ -439,10 +440,10 @@ class PPU:
         self.obj_entry = None
         self.win_start_x = -1
         self.shadow: PPU | None = None
-        self.pixels: DmgPixels | None = None
+        self.pixels: Pixels | None = None
         self.dma = None  # the board's OAM DMA, which the drawing machine looks at
         if not _shadow and DMG_PIXELS:
-            self.pixels = DmgPixels(self)  # the DMG picture, a CGB's in compatibility mode too
+            self.pixels = Pixels(self)  # the DMG picture, a CGB's in compatibility mode too
         if not _shadow and cgb:
             self.shadow = PPU(_ignore_irq, False, _shadow=True, cgb=cgb)
             self.shadow.vram = self.vram
@@ -558,7 +559,7 @@ class PPU:
             self._colour_pixels()
         if self.is_shadow:
             return
-        if self.pixels is not None and not self.cgb_mode:
+        if self.pixels is not None and (CGB_MODE_PIXELS or not self.cgb_mode):
             self._step_pixels()
         elif self.shadow is not None:
             self._step_shadow()
@@ -659,7 +660,7 @@ class PPU:
             self.mode3_start = MODE2_END - LINE0_LEAD
         if self.ly == VBLANK_LINE:
             self.frames += 1
-            if self.pixels is not None and not self.cgb_mode:
+            if self.pixels is not None and (CGB_MODE_PIXELS or not self.cgb_mode):
                 self.frame = bytes(self.pixels.framebuffer)
             else:
                 self.frame = (self.shadow or self).framebuffer.tobytes() if self.cgb else bytes((self.shadow or self).framebuffer)

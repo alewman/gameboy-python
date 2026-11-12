@@ -916,6 +916,19 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   `lyc0int` and `lycm2int` verdicts; `speed_switch_timing_ly` passes at `SWITCH_LY_LEAD` 2 and
   loses 3 (above). Likely a CPU CGB revision difference (Gambatte's CGB is a CGB-04, the board
   claims CGB E); not settled.
+* **CGB games, redrawn (2026-11-11)**: the drawing machine (renamed `pixels.py`) now draws a CGB
+  game too: each tile's attributes from VRAM bank 1 (palette, bank, X and Y flip, priority), bank
+  1 object tiles, CGB palettes with the background-priority rule, objects in OAM order. Three fits,
+  all Gambatte-led: the map column follows the pixel position on the CGB as on the DMG, without
+  the DMG's pixel-of-this-dot offset (CGB `scx_during_m3`, 82 of 93 with it off, 74 with it on);
+  register writes reach the pipeline 3 dots late in double speed (`CGB_REG_DELAY_DS`; the `_ds_`
+  pictures, 90 of 93 at 3, 82 at 2, 41 at 4); and SameBoy's TILE_SEL rule in CGB mode beside
+  docboy's (a data read on the dot LCDC.4's fall arrives returns the tile number below $80),
+  which cgb-acid-hell needs at column 80. One bug found on the way: docboy clears its last-read
+  decay at each line start, the translation had not (cgb-acid-hell's first four columns).
+  Gambatte CGB-04c 2,821 -> 2,864 (+43, nothing lost; its picture tests 127 -> 170 of 198),
+  DMG-08 1,695 unchanged, cgb-acid2 and cgb-acid-hell exact, Mealybug unchanged. CGB emulation
+  about 2x faster (8.4 -> 16.4 frames per CPU second on cgb-acid2): the shadow PPU no longer runs.
 * **Not done**: SameBoy columns for the CGB runs, the SGB and AGB rows, DMG0/CGB0 revisions of
   the CGB, the real-boot and skip-boot equivalence check for CGB (the DMG's was identical), and
   the CGB speed-switch's PPU "odd mode".
