@@ -353,7 +353,7 @@ from the dates in the headings, SameBoy is not tabulated beside the CGB runs yet
 | Gambatte `cgb04c` (the testrunner's CGB verdicts, 3,221) | **2,120** (65.8 %) | `scripts/gambatte_dmg08.py --cgb --skip-boot` |
 | SameSuite, the ROMs that apply to a CGB E (69; 2026-10-22) | **69** (APU 63 of 63) | `scripts/cgb_suites.py same-suite` |
 | AGE, the ROMs verified on CGB E (28; 2026-10-22) | 8 | `scripts/cgb_suites.py age` |
-| Mealybug CGB D pictures (21) | 3 pixel-exact | `scripts/cgb_pictures.py` |
+| Mealybug CGB D pictures (20, and cgb-acid-hell) | 3 pixel-exact; **20 of 20 against hardware** since 2026-11-11 (19 equal to the expected picture; `m3_lcdc_obj_size_change_scx` equals the CGB-D photograph, which its expected picture does not) | `scripts/cgb_pictures.py` |
 
 ### What was built
 
@@ -885,6 +885,24 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
     the `SCX % 8` drop compares with SCX as it changes (docboy reads it once), and SameBoy's
     WX=166 rule (no window that line, a window row counted, the next line starting inside the
     window at tile 1: `window/on_screen/wxA6_*`).
+* **The CGB's compatibility mode, redrawn (2026-11-11)**: a CGB running a DMG cartridge
+  (`cgb_mode` false) now draws with `dmg_pixels.py` too, at the same `DRAW_LAG` of 5, with
+  docboy's CGB paths: LCDC, SCX, SCY and WX reach the pipeline 2 dots late (`CGB_REG_DELAY`), no
+  BGP glitch, SCY taken once per tile, the map column from docboy's tile counter (it moves on
+  after two dots in Push), and three glitches: TILE_SEL changed between a data read's two dots
+  (re-read, or the last unsigned read), WX met again during a window tile fetch (last tile, high
+  for low, low for high), and the window turned off on the dot it starts (the FIFO refilled with
+  what the fetcher holds). A CGB game is still drawn by the shadow PPU. Mealybug CPU CGB D 3 ->
+  20 of 20 against hardware: 19 equal to the expected pictures, and `m3_lcdc_obj_size_change_scx`
+  is 15 pixels off its expected picture in one 4x4 block that the CGB-D photograph in the same
+  repository does not show (`photos/CPU CGB D/`; docboy's own expected picture is ours, pixel
+  for pixel). cgb-acid-hell stays exact; Gambatte CGB-04c 2,821, DMG-08 1,695, both unchanged.
+  The Emulator Shootout: **255 of 258** (235 before this day); left are daid
+  `ppu_scanline_bgp` (GBC) and `speed_switch_timing_ly`, and `strikethrough.gb`. Not modelled:
+  the CPU CGB C pictures (17 of 28 equal: the C reads SCY at each fetch step like a DMG, and
+  differs on BGP and the window's timing), and the two DMG-CPU B pictures, which differ from
+  the blob ones by 7 pixels: B shows LCDC.0 turning on a dot sooner than blob (the enable bits
+  ORed with the previous dot's, 4 pixels left after that) and the window a dot sooner.
 * **Not done**: SameBoy columns for the CGB runs, the SGB and AGB rows, DMG0/CGB0 revisions of
   the CGB, the real-boot and skip-boot equivalence check for CGB (the DMG's was identical), and
   the CGB speed-switch's PPU "odd mode".

@@ -1,4 +1,4 @@
-"""SameSuite and AGE ROMs that pass on the CGB E board today (milestone 7), plus cgb-acid2.
+"""SameSuite and AGE ROMs that pass on the CGB E board today (milestone 7), cgb-acid2, Mealybug CGB D.
 
 ``tests/cgb_suites_pass.txt`` lists them (SameSuite 23 of 76, AGE 7 of 28 on 2026-10-10; the rest
 are open items in docs/validation.md "Results: milestone 7"). Each passes when B, C, D, E, H, L =
@@ -39,4 +39,31 @@ def test_cgb_acid2_pixel_exact():
 
     got = words(run(BASE / "cgb-acid2/cgb-acid2.gbc", 300, "real"))
     want, _w, _h = read_rgb555(BASE / "cgb-acid2/cgb-acid2.png")
+    assert got == want
+
+
+MEALYBUG = BASE / "mealybug-tearoom-tests/ppu"
+#: Mealybug's CPU CGB D pictures the board draws exactly, from the real CGB boot ROM (a DMG
+#: cartridge: the compatibility mode, dmg_pixels.py). Left out: m3_lcdc_obj_size_change_scx,
+#: whose expected picture has a 4x4 block that the CGB-D photograph does not (docs/validation.md).
+MEALYBUG_CGB_D = sorted(
+    p.name[: -len("_cgb_d.png")]
+    for p in MEALYBUG.glob("*_cgb_d.png")
+    if p.name != "m3_lcdc_obj_size_change_scx_cgb_d.png"
+)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(find_boot_rom("CGB")[1] != "real boot ROM", reason="no real CGB boot ROM")
+@pytest.mark.parametrize("name", MEALYBUG_CGB_D)
+def test_mealybug_cgb_d(name):
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    sys.path.insert(0, str(ROOT / "tests"))
+    from cgb_picture import run, words
+    from pngread import read_rgb555
+
+    got = words(run(MEALYBUG / f"{name}.gb", 260, "real"))
+    want, _w, _h = read_rgb555(MEALYBUG / f"{name}_cgb_d.png")
     assert got == want
