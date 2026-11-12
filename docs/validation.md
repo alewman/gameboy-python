@@ -942,6 +942,20 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   An open lead, not a hardware verdict either way: SameBoy is a detector, the shadow's
   double-speed SCX delay had been fitted partly to SameBoy's fetch log, and Gambatte's hardware
   pictures favour the new machine (+43 CGB, none lost).
+* **The Color sweep's differences, triaged (2026-11-12, `efdde44`)**: two causes covered 13 of
+  the 45. (1) In double speed STAT read mode 0 for line 0's first 4 dots (the line-0 rule ran
+  after the double-speed mode-2 rule); every other line shows mode 2 at once. Hi-colour titles
+  that poll STAT for mode 0 to start a palette stream (Bust-A-Move / Puzzle Bobble Millennium:
+  ~4,100 FF69 writes a frame) started a line early on some frames and tore; afterwards every
+  board picture is one SameBoy shows. Gambatte CGB-04c unchanged. Also fixed MTV Sports: Pure
+  Ride, Tom and Jerry: Mouse Attacks!, Chicken Run, Pokemon Puzzle Challenge, Portal Runner,
+  Sangokushi 2, Warau Inu no Bouken. (2) Not the board: games that switch the LCD off for a
+  moment every few frames (Rugrats: Totally/Typisch Angelica, Les Razmoket, NHL 2000) show
+  a white frame on the board, as Pan Docs says the LCD does, where SameBoy holds the last
+  picture; `compat_sweep.py` now judges a white checkpoint on the next picture that is not
+  white (record field `lcd_flash`). 32 still differ (`tests/compat_differs_cgb.txt`); of
+  those, Nakayoshi Pet Series 3/4/5 and Dragon Warrior / Quest Monsters 2 are RAM-seeded
+  randomness (SameBoy randomises RAM), not triageable from pictures.
 * **Not done**: SameBoy columns for the CGB runs, the SGB and AGB rows, DMG0/CGB0 revisions of
   the CGB, the real-boot and skip-boot equivalence check for CGB (the DMG's was identical), and
   the CGB speed-switch's PPU "odd mode".
