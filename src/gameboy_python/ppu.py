@@ -205,6 +205,7 @@ class PPU:
         "lyc_flag",
         "lyc_next",
         "lyc_wait",
+        "lyc153_late",
         "m0_early",
         "m0_hidden",
         "oam_hidden",
@@ -304,6 +305,7 @@ class PPU:
         self.mode0_dots = 0
         self.glitching = False
         self.early_lyc153 = False
+        self.lyc153_late = False  # CGB D/E line 153 comparator (machines.py; the board sets it)
         self.early_fired = False
         self.m0_early = False  # the HBlank interrupt reached IF early in this M-cycle (board)
         # the HBlank source rose in this M-cycle under a line held high (2: in a lead dot; 3: in the
@@ -1054,10 +1056,15 @@ class PPU:
         return bool(self.stat_select & 0x08)
 
     def _compare_ly(self) -> int:
-        """The LY the comparator sees: 153 for line 153's first 8 dots (a read sees it for 4)."""
+        """The LY the comparator sees: 153 for line 153's first 8 dots (a read sees it for 4);
+        on a CGB D or E the whole sequence runs 4 dots later (machines.py lyc153_4_dots_later)."""
         if self.ly == LAST_LINE:
-            return LAST_LINE if self.dot < 8 else 0
+            return LAST_LINE if self.dot < 8 + self._lyc153_shift() else 0
         return self.ly
+
+    def _lyc153_shift(self) -> int:
+        """Dots line 153's LY=LYC sequence runs later on a CGB D or E than on a DMG or CGB C."""
+        return 4 if self.lyc153_late else 0
 
     def _lyc_match(self) -> bool:
         """The LY=LYC flag: false for 4 dots after the comparator's LY changes (at a line's start,
@@ -1066,7 +1073,7 @@ class PPU:
         dot = self.dot
         if dot < 4 and self.ly != 0:
             return False
-        if self.ly == LAST_LINE and 8 <= dot < 12:
+        if self.ly == LAST_LINE and 8 + self._lyc153_shift() <= dot < 12 + self._lyc153_shift():
             return False
         return self._compare_ly() == self.lyc
 
@@ -1090,7 +1097,7 @@ class PPU:
         line_153_lyc0_int_inc_sled, line_153_lyc_int_b)."""
         if (
             self.ly == LAST_LINE
-            and self.dot == 8
+            and self.dot == 8 + self._lyc153_shift()
             and self.lcd_on
             and self.stat_select & 0x40
             and self.lyc == 0

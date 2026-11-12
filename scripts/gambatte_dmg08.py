@@ -123,15 +123,17 @@ def judge(frame: bytes, tests: list[tuple[str, str]], cgb: bool = False) -> list
     return out
 
 
-def run(args: tuple[Path, bool, bool, bool]) -> list[tuple[str, str, bool, bool | None]]:
-    rom, skip_boot, with_sameboy, cgb = args
+def run(args: tuple) -> list[tuple[str, str, bool, bool | None]]:
+    """(rom, skip_boot, with_sameboy, cgb[, machine]): ``machine`` names the CGB row, "cgb" (E)."""
+    rom, skip_boot, with_sameboy, cgb, *rest = args
+    machine = rest[0] if rest else "cgb"
     tests = plan(rom, cgb)
     if not tests:
         return []
     boot, label = (None, "") if skip_boot else find_boot_rom("CGB" if cgb else "DMG")
     if not skip_boot and label != "real boot ROM":
         raise SystemExit("no real boot ROM")
-    gb = GameBoy(load_cartridge(rom.read_bytes()), MACHINES["cgb"] if cgb else DMG_B, boot_rom=boot)
+    gb = GameBoy(load_cartridge(rom.read_bytes()), MACHINES[machine] if cgb else DMG_B, boot_rom=boot)
     end = (15 if skip_boot else (CGB_FRAMES if cgb else FRAMES)) * FRAME_T
     step = gb.cpu.step
     while gb.t < end:
@@ -171,6 +173,7 @@ def main() -> int:
     parser.add_argument("--sameboy-from", type=Path, help="reuse the SameBoy column of an earlier --json")
     parser.add_argument("--jobs", type=int, default=14)
     parser.add_argument("--cgb", action="store_true", help="the CGB-04c verdicts, on the CGB E board")
+    parser.add_argument("--machine", default="cgb", help="with --cgb: the CGB row to run (cgb, cgb-c)")
     parser.add_argument(
         "--set",
         action="append",
@@ -189,7 +192,7 @@ def main() -> int:
     roms = [p for p in sorted(base.rglob("*")) if p.suffix in (".gb", ".gbc") and plan(p, args.cgb)]
     if args.match:
         roms = [p for p in roms if re.search(args.match, p.name)]
-    work = [(p, args.skip_boot, args.sameboy, args.cgb) for p in roms]
+    work = [(p, args.skip_boot, args.sameboy, args.cgb, args.machine) for p in roms]
     with Pool(args.jobs) as pool:
         results = [r for rs in pool.imap(run, work, chunksize=2) for r in rs]
     if args.sameboy_from:

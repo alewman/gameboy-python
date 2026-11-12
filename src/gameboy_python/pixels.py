@@ -80,7 +80,12 @@ class Pixels:
         # the registers as the pipeline sees them on this dot (the CGB's arrive late)
         self.lcdc = self.scx = self.scy = self.wx = 0
         self.next_lcdc = 0  # CGB: what LCDC will be on the next dot
+        # CGB C and older: SCY read again at each tile-data fetch (machines.py; the board sets it)
+        self.scy_at_data_fetch = False
+        # CGB C and older: a BGP/OBP0/OBP1 write reaches the pixels a dot later (machines.py)
+        self.palette_late = False
         self.last_bgp = 0
+        self.last_obp0 = self.last_obp1 = 0
         self.last_wx = 0
         self.last_lcdc = 0
         self.active_for_frame = False  # WY met LY with the window on, at some dot of this frame
@@ -135,6 +140,7 @@ class Pixels:
         if not self.active_for_frame and self.lcdc & 0x20 and ly == p.wy:
             self.active_for_frame = True
         self.last_bgp = p.bgp
+        self.last_obp0, self.last_obp1 = p.obp0, p.obp1
         self.last_wx = self.wx
         self.last_lcdc = self.lcdc
 
@@ -299,11 +305,16 @@ class Pixels:
             return
         if obj is not None and obj[0] and lcdc & 2:
             if not lcdc & 1 or not colour or not obj[1] & 0x80:
-                shade = ((p.obp1 if obj[1] & 0x10 else p.obp0) >> (obj[0] * 2)) & 3
+                if self.palette_late:
+                    obp = self.last_obp1 if obj[1] & 0x10 else self.last_obp0
+                else:
+                    obp = p.obp1 if obj[1] & 0x10 else p.obp0
+                shade = (obp >> (obj[0] * 2)) & 3
                 self.framebuffer[i] = p._rgb(p.obj_pal, (obj[1] >> 4) & 1, shade) if self.cgb else shade
                 return
         if self.cgb:
-            shade = (p.bgp >> (colour * 2)) & 3 if lcdc & 1 else 0
+            bgp = self.last_bgp if self.palette_late else p.bgp
+            shade = (bgp >> (colour * 2)) & 3 if lcdc & 1 else 0
             self.framebuffer[i] = p._rgb(p.bg_pal, 0, shade)
         else:
             # LCDC.0 clear: the background's colour number is 0, still looked up in BGP (Gambatte
@@ -455,7 +466,8 @@ class Pixels:
         return n * 16 if self.lcdc & 0x10 else 0x1000 + ((n ^ 0x80) - 0x80) * 16
 
     def _bg_data_address(self) -> None:
-        scy = self.tile_scy if self.cgb else self.scy  # the CGB takes SCY once, at GetTile
+        # the CGB D and E take SCY once, at GetTile; the DMG and CGB C and older read it again here
+        scy = self.tile_scy if self.cgb and not self.scy_at_data_fetch else self.scy
         row = (self.ly + scy) & 7
         attrs = self.tile_attrs
         if attrs & 0x40:  # CGB mode: vertical flip

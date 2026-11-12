@@ -146,6 +146,9 @@ class GameBoy:
         self.apu = APU(model=CGB if cgb else DMG)
         self.dma = OamDma(self._dma_source, self._dma_write)
         self.ppu.dma = self.dma
+        self.ppu.pixels.scy_at_data_fetch = machine.scy_at_data_fetch
+        self.ppu.pixels.palette_late = machine.palette_write_late
+        self.ppu.lyc153_late = machine.lyc153_4_dots_later
         self._cpu_step = self.cpu.step
         if cgb:
             self.cpu.step = self.step  # instruction boundaries are where HDMA blocks run

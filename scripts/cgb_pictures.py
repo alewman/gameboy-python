@@ -34,9 +34,13 @@ def cases(revision: str) -> list[tuple[Path, Path]]:
     return found
 
 
-def one(args: tuple[Path, Path, int]) -> tuple[str, int]:
-    rom, png, frames = args
-    got = words(run(rom, frames, "real"))
+#: the machine row each revision's pictures run on (machines.py)
+MACHINE = {"cgb_d": "cgb", "cgb_c": "cgb-c"}
+
+
+def one(args: tuple[Path, Path, int, str]) -> tuple[str, int]:
+    rom, png, frames, machine = args
+    got = words(run(rom, frames, "real", machine))
     want, _w, _h = read_rgb555(png)
     return rom.name, sum(a != b for a, b in zip(got, want, strict=True))
 
@@ -46,10 +50,10 @@ def main() -> int:
     parser.add_argument("names", nargs="*")
     parser.add_argument("--jobs", type=int, default=8)
     parser.add_argument("--frames", type=int, default=260)
-    parser.add_argument("--revision", default="cgb_d")
+    parser.add_argument("--revision", default="cgb_d", help="cgb_d (on the CGB E row) or cgb_c")
     args = parser.parse_args()
     work = [
-        (rom, png, args.frames)
+        (rom, png, args.frames, MACHINE.get(args.revision, "cgb"))
         for rom, png in cases(args.revision)
         if not args.names or any(n in rom.name for n in args.names)
     ]

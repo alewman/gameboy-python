@@ -67,3 +67,34 @@ def test_mealybug_cgb_d(name):
     got = words(run(MEALYBUG / f"{name}.gb", 260, "real"))
     want, _w, _h = read_rgb555(MEALYBUG / f"{name}_cgb_d.png")
     assert got == want
+
+
+#: Mealybug's CPU CGB C pictures, on the ``cgb-c`` machine row. Left out: the two TILE_SEL
+#: change2 tests (166 pixels each: SameBoy has a CGB C TILE_SEL rule of its own, not modelled)
+#: and m3_lcdc_obj_size_change_scx (15 pixels, as on the CGB D).
+MEALYBUG_CGB_C_OPEN = {
+    "m3_lcdc_obj_size_change_scx",
+    "m3_lcdc_tile_sel_change2",
+    "m3_lcdc_tile_sel_win_change2",
+}
+MEALYBUG_CGB_C = sorted(
+    name
+    for name in (p.name[: -len("_cgb_c.png")] for p in MEALYBUG.glob("*_cgb_c.png"))
+    if name not in MEALYBUG_CGB_C_OPEN and (MEALYBUG / f"{name}.gb").exists()
+)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(find_boot_rom("CGB")[1] != "real boot ROM", reason="no real CGB boot ROM")
+@pytest.mark.parametrize("name", MEALYBUG_CGB_C)
+def test_mealybug_cgb_c(name):
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    sys.path.insert(0, str(ROOT / "tests"))
+    from cgb_picture import run, words
+    from pngread import read_rgb555
+
+    got = words(run(MEALYBUG / f"{name}.gb", 260, "real", "cgb-c"))
+    want, _w, _h = read_rgb555(MEALYBUG / f"{name}_cgb_c.png")
+    assert got == want

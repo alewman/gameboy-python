@@ -113,7 +113,7 @@ SingleStepTests `sm83` belongs to the CPU core, not here; sm83-python's
 
 ## Local romsets (read in place, never copied into the repository)
 
-`/data/emu/source/myrient.erista.me/files/No-Intro/Nintendo - Game Boy*`
+`$NO_INTRO_DIR/Nintendo - Game Boy*`
 (GB 1,958, GBC 1,960, plus Aftermarket and Private sets);
 `/data/emu/roms/gb` and `/data/emu/roms/gbc` (frontend sets, with the
 `[BIOS]` boot ROMs: DMG `4ed31ec6…`, DMG0, MGB, CGB revisions). MAME's
@@ -956,6 +956,29 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   white (record field `lcd_flash`). 32 still differ (`tests/compat_differs_cgb.txt`); of
   those, Nakayoshi Pet Series 3/4/5 and Dragon Warrior / Quest Monsters 2 are RAM-seeded
   randomness (SameBoy randomises RAM), not triageable from pictures.
+* **CGB revision rows (2026-11-12)**: Gambatte's 354 CGB-04c misses were partly the revision.
+  SameBoy splits its CGB at `model > GB_MODEL_CGB_C` in a handful of places; each one checked
+  here sided with Gambatte on the C side and with Mealybug CGB-D / daid on the D/E side, so the
+  board has a `cgb-c` machine row (`machines.py`, CPU CGB C) next to the reference `cgb` (CPU CGB
+  E) and the quirks are row fields:
+  * `scy_at_data_fetch` (C): SCY read again at each tile-data fetch; D/E keep GetTile's value
+    (SameBoy `fetcher_y`). Gambatte `scy/` 18 -> 43 of 43 on the C row; on the E row it cost
+    Mealybug CGB-D `m3_scy_change`, whose CGB C photo agrees with the C rule.
+  * `palette_write_late` (C): a BGP/OBP0/OBP1 write reaches the pixels a dot later (SameBoy
+    `GB_CONFLICT_PALETTE_CGB`): Mealybug CGB C `m3_bgp_change`, `_sprites`, `m3_obp0_change`,
+    and with it `m3_window_timing*` and `m3_lcdc_obj_en_change_variant`.
+  * `lyc153_4_dots_later` (E): line 153's LY=LYC sequence (comparator 153 -> 0, the no-compare
+    gap, LYC=0's early interrupt) 4 dots later than on DMG / CGB C (SameBoy line 153). daid
+    `ppu_scanline_bgp` GBC exact; the 23 Gambatte `ly0`/`lycEnable`/`lyc0int` verdicts it costs
+    the E row are the C row's.
+  Results: Gambatte CGB-04c on the `cgb-c` row **2,892** of 3,221 (was 2,864 on E; nothing lost)
+  — `tests/gambatte_cgb04c_pass.txt` is now the C row's list and the test runs it there.
+  Mealybug CPU CGB C pictures on `cgb-c`: **24 of 27** exact (was 17 on the E row); left: the
+  two TILE_SEL `change2` pictures (SameBoy's C-only TILE_SEL read rule, not modelled) and
+  `m3_lcdc_obj_size_change_scx` (15 px, as on D). The E row: Mealybug CGB-D unchanged (20 of 21),
+  daid `ppu_scanline_bgp` GBC now exact. Not split yet: `fea0_read` for C (reads $00, the
+  revision's masked RAM is not modelled), SameBoy's double-speed OAM read blocking split, the C
+  APU differences (gb-apu-python has no C row).
 * **Not done**: SameBoy columns for the CGB runs, the SGB and AGB rows, DMG0/CGB0 revisions of
   the CGB, the real-boot and skip-boot equivalence check for CGB (the DMG's was identical), and
   the CGB speed-switch's PPU "odd mode".

@@ -1,10 +1,11 @@
-"""Gambatte's ``cgb04c`` hardware tests on the CGB E board: keep passing what it passes today.
+"""Gambatte's ``cgb04c`` hardware tests on the CPU CGB C row: keep passing what it passes today.
 
-``tests/gambatte_cgb04c_pass.txt`` (2,820 verdicts, written by ``scripts/gambatte_dmg08.py --cgb
+``tests/gambatte_cgb04c_pass.txt`` (written by ``scripts/gambatte_dmg08.py --cgb --machine cgb-c
 --skip-boot --write``) lists them; this holds every STRIDE-th one, from the CGB post-boot state.
-Gambatte's reference is a CPU CGB C (04c); the board is a CGB E, so the open items are not all
-bugs (docs/validation.md "Results: milestone 7"). Rerun the script after a change that touches
-timing.
+Gambatte's captures behave as a CPU CGB C where SameBoy's C and E differ (2026-11-12:
+docs/validation.md "CGB revision rows"), so they judge the ``cgb-c`` row; the reference CGB E row
+is judged by Mealybug CGB-D, Mooneye, SameSuite and daid. Rerun the script after a change that
+touches timing.
 """
 
 from __future__ import annotations
@@ -37,5 +38,5 @@ def _runner():
 def test_passes(name, kind):
     runner = _runner()
     rom = SUITE / name
-    results = runner.run((rom, True, False, True))
+    results = runner.run((rom, True, False, True, "cgb-c"))
     assert any(ok for _n, k, ok, _sb in results if k == kind), f"{name} [{kind}]"

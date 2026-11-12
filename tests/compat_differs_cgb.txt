@@ -1,5 +1,6 @@
 # scripts/compat_sweep.py --model cgb --tier titles at 9d1e640: {'skipped': 1308, 'same': 791, 'near': 282, 'differs': 45, 'unsupported': 12}
 # --tier failures at efdde44 (line-0 mode 2 in double speed; LCD-off blinks judged on the next picture): 13 no longer differ, 32 still do
+# --tier titles --stride 4 at 36e14e1 + CGB revision rows: no new differences; Macross 7 added (9799 px, the same at 36e14e1)
 # dump, pixels at best at the worst of frames 600, 960, 1500, board
 Aqualife (Japan) (SGB Enhanced) (GB Compatible).zip	903 px	mbc5
 Baby Felix - Halloween (Europe) (En,Fr,De,Es,It,Nl).zip	2388 px	mbc5
@@ -18,6 +19,7 @@ Jisedai Begoma Battle Beyblade (Japan).zip	128 px	mbc5
 Katou Hifumi Kudan - Shougi Kyoushitsu (Japan) (SGB Enhanced) (GB Compatible).zip	932 px	mbc5
 LEGO Alpha Team (USA).zip	21546 px	mbc5
 Lodoss-tou Senki - Eiyuu Kishiden GB (Japan) (SGB Enhanced) (GB Compatible).zip	149 px	mbc5
+Macross 7 - Ginga no Heart o Furuwasero!! (Japan).zip	9799 px	mbc5
 Micro Maniacs (Europe).zip	576 px	mbc5
 Mizuki Shigeru no Shin Youkaiden (Japan).zip	1961 px	mbc5
 Moorhuhn 2 - Die Jagd geht weiter (Germany).zip	80 px	mbc5

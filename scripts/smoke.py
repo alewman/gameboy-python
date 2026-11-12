@@ -115,7 +115,9 @@ def run_pytest(args: tuple[list[str], list[str]]) -> tuple[str, list[str], list[
 
 def run_rom(args: tuple[str, str]) -> tuple[str, str, list[tuple[str, bool]]]:
     mode, path = args
-    results = gambatte_dmg08.run((gambatte_dmg08.SUITE / path, True, False, mode == "cgb"))
+    # the cgb04c verdicts judge the CPU CGB C row (tests/test_gambatte_cgb04c.py)
+    cgb = mode == "cgb"
+    results = gambatte_dmg08.run((gambatte_dmg08.SUITE / path, True, False, cgb, "cgb-c"))
     return mode, path, [(kind, ok) for _name, kind, ok, _sb in results]
 
 
