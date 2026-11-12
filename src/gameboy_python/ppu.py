@@ -70,9 +70,10 @@ M1_SRC_DOT = 1
 M0_SRC_END = 1
 LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interrupt)
 WX166_CARRY = 1  # DMG: WX=166 starts the window at the next line's start (SameBoy display.c)
-WX_GLITCH = 0  # 1 = Pan Docs' WX-reached-again colour-0 pixel; it made wx_4/5 worse, so off
+ZERO_TICKET = [0, 0, 0, 1, 0]  # a fetched tile of colour 0
 SHADOW_LAG = 2  # the pixel-drawing PPU runs this many dots behind the one that times STAT
-SHADOW_WX_LAG = 4
+SHADOW_WX_LAG = 2  # FITTED with WX_EDGE_LEAD (Mealybug m3_wx_6_change exact at 2 and 7 only)
+WX_EDGE_LEAD = 7  # WX=w below 7 is compared 7 - w dots before the first shown pixel's compare
 WX_LAG = 1  # FITTED (Gambatte cgb04c window 143 -> 148 of 193 at 0 or 1; was 4, the shadow's SHADOW_WX_LAG carries the Mealybug fit): the timing PPU's window comparator sees WX this many dots late
 WIN_LAG = 0  # ... and LCDC.5/.0 this many
 # CGB: LCDC.5 cleared just after the window starts puts the background back, as in Gambatte's
@@ -82,6 +83,7 @@ WIN_UNDO_REFUND = 3  # ... and gives back this many of the dots the window's sta
 # FITTED (GBMicrotest win*; Gambatte window scx2 CGB +4, DMG +5 over 4)
 WINDOW_HEAD = 3  # fetcher dots the window restart gets for free
 WINDOW_HEAD_DS = 4  # ... in double speed (3 loses the m2int_wx*_m3stat_ds_2 halves)
+SHADOW_HEAD = 0  # ... for the drawing PPU on a DMG (Mealybug m3_window_timing)
 WINDOW_EDGE_HEAD = 6  # ... when the window starts at the left edge (WX < 7)
 VBLANK_IF_LATE = 4  # FITTED (GBMicrotest stat_write_glitch_l143_*): IF shows VBlank this much later
 MODE1_IRQ_DOT = 4  # FITTED (GBMicrotest vblank_int_if_*): the STAT VBlank source comes this late
@@ -219,6 +221,7 @@ class PPU:
         "framebuffer",
         "frames",
         "free_skip",
+        "win_hidden",
         "glitching",
         "hblank_early",
         "irq_defer",
@@ -293,7 +296,7 @@ class PPU:
         "win_carry",
         "win_mid",
         "win_stall",
-        "win_started_wx",
+        "win_start_x",
         "window_active",
         "win_undo",
         "win_refund",
@@ -424,7 +427,7 @@ class PPU:
         self.obj_low_at = self.obj_high_at = 0
         self.obj_dots = 0
         self.obj_entry = None
-        self.win_started_wx = -1
+        self.win_start_x = -1
         self.shadow: PPU | None = None
         if not _shadow:
             self.shadow = PPU(_ignore_irq, False, _shadow=True, cgb=cgb)
@@ -716,6 +719,7 @@ class PPU:
             self.window_used = True
         self.win_undo = None
         self.free_skip = 0
+        self.win_hidden = 0
         self.bg: list[tuple[list[int], int]] = []  # the background FIFO: (tile ticket, bit)
         self.obj_fifo: list[tuple[int, int, int]] = []  # (colour, flags, OAM index) for the next pixels
         self.f_step = 0  # 0 tile, 1 data low, 2 data high, 3 waiting to push
@@ -949,23 +953,38 @@ class PPU:
             lag = SHADOW_WX_LAG if self.is_shadow else WX_LAG
             wx = self.wx_hist[-lag] if lag else self.wx
             win_lcdc = self._lcdc_ago(WIN_LAG)
+            edge = False
+            if x == 0 and not self.window_active:
+                # WX below 7: the comparator matched on one of the hidden pixels left of the
+                # screen, WX=6 one dot before the first shown pixel, WX=5 two. Those pixels are
+                # not dots here, so each value is looked for where its dot was (Mealybug
+                # m3_wx_4/5/6_change: a WX write lands between the WX=5 and the WX=6 dot).
+                hist = self.wx_hist
+                for low in range(7):
+                    depth = lag + WX_EDGE_LEAD - low
+                    if (hist[-depth] if depth > 0 else self.wx) == low:
+                        edge = True
+                        wx = low
+                        break
             if (
                 self.window_active
-                and WX_GLITCH
                 and x + 7 == wx
-                and wx != self.win_started_wx
-                and self.is_shadow
+                and len(self.bg) == 8
+                and x != self.win_start_x
+                and not self.cgb
+                and not self.f_step
+                and not self.f_dot
             ):
-                # WX reached again after the window started: a colour-0 pixel is pushed (Pan Docs
-                # pixel_fifo.md "The Window")
-                self.win_started_wx = wx
-                self.bg.insert(0, ([0, 0, 0, 1, 0], 0))
+                # DMG: WX matches again on the dot a window tile went into the shifter: a colour-0
+                # pixel goes out ahead of the tile (SameBoy insert_bg_pixel; Mealybug
+                # m3_wx_4_change, m3_wx_5_change)
+                self.bg.insert(0, (ZERO_TICKET, 0))
             if (
                 not self.window_active
                 and win_lcdc & 0x20
                 and (win_lcdc & 1 or self.cgb_mode)
                 and self.wy_hit
-                and (x + 7 == wx or (x == 0 and wx < 7))
+                and (x + 7 == wx or edge)
             ):
                 if wx == 166 and not self.cgb and WX166_CARRY:
                     # DMG: WX=166 does not start the window here, but it counts as a window line
@@ -974,7 +993,7 @@ class PPU:
                 else:
                     self.window_active = True
                     self.win_mid = True
-                    self.win_started_wx = wx
+                    self.win_start_x = x
                     self.window_used = True
                     if self.cgb:
                         self.win_undo = (
@@ -988,11 +1007,27 @@ class PPU:
                     self.f_step = 0
                     self.f_dot = 0
                     self.fetch_col = 0
-                    self.free_skip = max(0, 7 - wx)  # hidden window pixels cost no dots
-                    head = WINDOW_HEAD_DS if self.double_speed else WINDOW_HEAD
-                    for _ in range(1 + (WINDOW_EDGE_HEAD if wx < 7 else head)):
+                    if not self.is_shadow or self.cgb:
+                        self.free_skip = max(0, 7 - wx)  # hidden window pixels cost no dots
+                        head = WINDOW_HEAD_DS if self.double_speed else WINDOW_HEAD
+                        for _ in range(1 + (WINDOW_EDGE_HEAD if wx < 7 else head)):
+                            self._fetcher_dot()
+                        return
+                    if wx >= 7:
+                        for _ in range(1 + SHADOW_HEAD):
+                            self._fetcher_dot()
+                        return
+                    # The drawing PPU, WX below 7: the window began 7 - WX dots ago, on a hidden
+                    # pixel; its fetch has run since, and its first 7 - WX pixels take a dot
+                    # each and are not shown (Mealybug m3_window_timing: the first shown pixel
+                    # comes 6 dots late whatever WX is)
+                    self.win_hidden = 7 - wx
+                    if wx == 0 and not self.scx & 7:
+                        # WX=0: its fetch was over a dot ago and one hidden pixel is out already
+                        self.win_hidden = 6
+                        self.free_skip = 1
+                    for _ in range(7 - wx):
                         self._fetcher_dot()
-                    return
             objs = self.line_objs
             if self.next_obj < len(objs) and objs[self.next_obj][0] - 8 <= x:
                 if not lcdc & 2:
@@ -1010,7 +1045,9 @@ class PPU:
                     return
         if self.bg:
             colour = self.bg.pop(0)  # (ticket, bit): resolved when the pixel is coloured
-            if self.skip:
+            if self.win_hidden:
+                self.win_hidden -= 1
+            elif self.skip:
                 self.dropped = (self.dropped + 1) & 7
             else:
                 obj = self.obj_fifo.pop(0) if self.obj_fifo else (0, 0, 255)

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from multiprocessing import Pool
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,35 +30,48 @@ from tests.pngread import read_shades  # noqa: E402
 PPU_DIR = ROOT / "tests/test_roms/gbtr/mealybug-tearoom-tests/ppu"
 
 
+def score(job: tuple[Path, bytes | None, int, Path | None]) -> tuple[str, int]:
+    rom, boot, frames, png_dir = job
+    gb = GameBoy(load_cartridge(rom.read_bytes()), boot_rom=boot)
+    run_mooneye(gb, max_frames=frames)
+    want = read_shades(PPU_DIR / f"{rom.stem}_dmg_blob.png")[0]
+    if png_dir:
+        write_png(png_dir / f"{rom.stem}.png", gb.ppu.frame)
+    return rom.stem, sum(1 for a, b in zip(gb.ppu.frame, want, strict=True) if a != b)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--frames", type=int, default=420, help="frames to run, boot included")
     parser.add_argument("--skip-boot", action="store_true", help="start from the skip-boot state")
     parser.add_argument("--png-dir", type=Path)
+    parser.add_argument("--jobs", type=int, default=1)
+    parser.add_argument("--only", help="run the tests whose name holds this text")
     args = parser.parse_args()
     boot = None
     if not args.skip_boot:
         boot, label = find_boot_rom("DMG")
         if label != "real boot ROM":
             sys.exit(f"no real DMG boot ROM ({label}); pass --skip-boot")
-    exact = total = 0
-    for rom in sorted(PPU_DIR.glob("*.gb")):
-        expected = PPU_DIR / f"{rom.stem}_dmg_blob.png"
-        if not expected.exists():
-            continue
-        gb = GameBoy(load_cartridge(rom.read_bytes()), boot_rom=boot)
-        run_mooneye(gb, max_frames=args.frames)
-        want = read_shades(expected)[0]
-        diff = sum(1 for a, b in zip(gb.ppu.frame, want, strict=True) if a != b)
-        print(f"{rom.stem:40s} {diff:6d}")
-        exact += diff == 0
-        total += 1
-        if args.png_dir:
-            args.png_dir.mkdir(parents=True, exist_ok=True)
-            write_png(args.png_dir / f"{rom.stem}.png", gb.ppu.frame)
-    print(f"{exact} of {total} pixel-exact")
+    if args.png_dir:
+        args.png_dir.mkdir(parents=True, exist_ok=True)
+    roms = [
+        rom
+        for rom in sorted(PPU_DIR.glob("*.gb"))
+        if (PPU_DIR / f"{rom.stem}_dmg_blob.png").exists() and (args.only or "") in rom.stem
+    ]
+    jobs = [(rom, boot, args.frames, args.png_dir) for rom in roms]
+    with Pool(args.jobs) as pool:
+        results = pool.map(score, jobs, chunksize=1)
+    for name, diff in results:
+        print(f"{name:40s} {diff:6d}")
+    exact = sum(diff == 0 for _, diff in results)
+    print(f"{exact} of {len(results)} pixel-exact, {sum(d for _, d in results)} pixels differ")
     return 0
 
 
 if __name__ == "__main__":
+    import nursery
+
+    nursery.small()
     sys.exit(main())

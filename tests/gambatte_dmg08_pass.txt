@@ -1580,6 +1580,7 @@ window/late_wx_scx3_3_dmg08_cgb04c_out3.gbc out
 window/late_wx_scx5_1_dmg08_cgb04c_out0.gbc out
 window/late_wx_scx5_2_dmg08_cgb04c_out3.gbc out
 window/late_wx_wx03_1_dmg08_cgb04c_out0.gbc out
+window/late_wx_wx03_2_dmg08_cgb04c_out3.gbc out
 window/late_wx_wx0f_1_dmg08_cgb04c_out0.gbc out
 window/late_wx_wx0f_2_dmg08_cgb04c_out3.gbc out
 window/late_wy_2_dmg08_cgb04c_out3.gbc out
@@ -1636,6 +1637,7 @@ window/m2int_wxA6_spxA7_m3stat_5_dmg08_cgb04c_out0.gbc out
 window/m2int_wxA6_vrambusyread_1_dmg08_cgb04c_out0.gbc out
 window/m2int_wxA6_vrambusyread_2_dmg08_out5_cgb04c_out0.gbc out
 window/m2int_wxA6_vrambusyread_3_dmg08_cgb04c_out5.gbc out
+window/on_screen/wx17_weoff_wxA5_weon.gbc png
 window/on_screen/wx17_wxA5.gbc png
 window/on_screen/wxA5_weoff_at_xposA5.gbc png
 window/on_screen/wxA6_3.gbc png

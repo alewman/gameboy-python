@@ -39,6 +39,12 @@ MEALYBUG_EXACT = [
     "m3_obp0_change",
     "m3_scx_high_5_bits",
     "m3_scx_low_3_bits",
+    "m3_window_timing",
+    "m3_window_timing_wx_0",
+    "m3_wx_4_change",
+    "m3_wx_4_change_sprites",
+    "m3_wx_5_change",
+    "m3_wx_6_change",
 ]
 
 
