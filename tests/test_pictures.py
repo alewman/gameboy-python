@@ -65,9 +65,7 @@ def test_a_bgp_write_glitches_one_pixel_of_one_frame():
     old = gb.ppu.bgp
     gb.ppu.write_bgp(old ^ 0xFF)  # a glitch pixel, then the other palette ...
     gb.ppu.write_bgp(old)  # ... and back before the next pixel
-    assert gb.ppu.bgp_glitch[1:] == (20, 0xFF)
     gb.run_frames(3)
-    assert gb.ppu.bgp_glitch == (-1, -1, 0)
     assert gb.ppu.frame == still
 
 

@@ -1,18 +1,11 @@
-"""The PPU, dot by dot: OAM scan, a pixel stepper for mode 3, LY, the STAT line, VBlank.
+"""The PPU's timing, dot by dot: OAM scan, mode 3's length, LY, the STAT line, VBlank.
 
-One call to ``_dot`` per PPU dot (4 per M-cycle). Mode 3 is a **pixel stepper** rather than a
-literal fetcher and FIFO pair: after the 12-dot start-up plus ``SCX % 8`` it emits one pixel per
-dot, and stalls for the Pan Docs penalties (6 dots for the window, 6-11 per object by the
-"OBJ penalty algorithm", Rendering.md). Pixel values are read from VRAM and the registers at the dot
-the pixel is emitted, so a mid-line write to BGP, SCX, LCDC lands on the dot Mealybug's tests
-measure it at, to the precision the penalties are right; the tile-data fetch *time* is not
-modelled (UNVERIFIED against Mealybug: the first place to look if a picture is a few pixels off).
-
-The picture: a DMG cartridge's (on DMG hardware, and on a CGB in its compatibility mode) is drawn
-by ``pixels.Pixels``, a literal fetcher and FIFO pair (after docboy) that runs
-``DRAW_LAG`` dots behind this PPU and matches Mealybug Tearoom's DMG and CGB-D pictures; this PPU
-then only times. A CGB game is drawn by a *shadow* copy of this PPU, ``SHADOW_LAG`` dots behind,
-as the paragraph above describes.
+One call to ``_dot`` per PPU dot (4 per M-cycle). Mode 3 is a **pixel stepper**: after the start-up
+plus ``SCX % 8`` it moves one pixel per dot and stalls for the window and the objects (Pan Docs
+Rendering.md "OBJ penalty algorithm"), so STAT, the interrupts and the VRAM/OAM locks see mode 3
+end where the hardware does. It does not draw: the picture is drawn by ``pixels.Pixels``, a
+literal fetcher and FIFO pair (after docboy) that runs ``DRAW_LAG`` dots behind this PPU and
+matches Mealybug Tearoom's DMG and CGB-D pictures (``_step_pixels``).
 
 Also modelled: 456 dots per line, 154 lines, LYC, the STAT interrupt **line** (rising edge only),
 the VBlank interrupt at LY 144, VRAM locked in mode 3 and OAM in modes 2-3 (reads return $FF,
@@ -21,14 +14,11 @@ writes dropped), nothing locked with the LCD off. The mode edges are fitted to M
 
 from __future__ import annotations
 
-from array import array
 from collections.abc import Callable
 
-from gameboy_python.pixels import Pixels
 from gameboy_python.machines import DOTS_PER_LINE
+from gameboy_python.pixels import Pixels
 
-CGB_MODE_PIXELS = 1  # a CGB game is drawn by pixels.py too (0: by the shadow PPU)
-DMG_PIXELS = 1  # the DMG picture is drawn by pixels.Pixels (0: by the shadow PPU, as before)
 DRAW_LAG = 5  # FITTED (Mealybug: all 24 DMG and 20 of 21 CGB-D exact at 5 only): dots the drawing machine runs behind
 
 MODE2_END = 80
@@ -82,10 +72,8 @@ M0_SRC_END = 1
 LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interrupt)
 WX166_CARRY = 1  # DMG: WX=166 starts the window at the next line's start (SameBoy display.c)
 ZERO_TICKET = [0, 0, 0, 1, 0]  # a fetched tile of colour 0
-SHADOW_LAG = 2  # the pixel-drawing PPU runs this many dots behind the one that times STAT
-SHADOW_WX_LAG = 2  # FITTED with WX_EDGE_LEAD (Mealybug m3_wx_6_change exact at 2 and 7 only)
 WX_EDGE_LEAD = 7  # WX=w below 7 is compared 7 - w dots before the first shown pixel's compare
-WX_LAG = 1  # FITTED (Gambatte cgb04c window 143 -> 148 of 193 at 0 or 1; was 4, the shadow's SHADOW_WX_LAG carries the Mealybug fit): the timing PPU's window comparator sees WX this many dots late
+WX_LAG = 1  # FITTED (Gambatte cgb04c window 143 -> 148 of 193 at 0 or 1): the window comparator sees WX this many dots late
 WIN_LAG = 0  # ... and LCDC.5/.0 this many
 # CGB: LCDC.5 cleared just after the window starts puts the background back, as in Gambatte's
 # StartWindowDraw (DMG keeps the window). FITTED (Gambatte cgb04c window +16 -2, late_disable_*):
@@ -117,25 +105,9 @@ LINE0_START_DOT = 4  # FITTED: after LCD on, line 0 is 'late by 2 T' (Mooneye lc
 # a lock read against the LCD-on moment, are lost); odd values break scx_during_m3
 LCD_ON_DS = -2
 LINE0_LEAD = 0  # FITTED (Mealybug line_0_fix): on line 0 the pixel pipeline runs this early
-BGP_GLITCH_DOT = 1  # FITTED: the dot, counted from the write's, whose palette is the OR
-# FITTED (Mealybug): dots from a pop to each register sample
-LCDC_DELAY = 3
-BGP_DELAY = 1
-SCY_LAG = 4
-  # FITTED (Gambatte scy/scy_during_m3_*): dots a SCY write takes to reach the fetcher
-# FITTED (Gambatte scx_during_m3, Mealybug m3_scx_high_5_bits, dmg-acid2, cgb-acid2; SameBoy
-# display.c's fetcher, x = (SCX + position + 8 - (cgb && !during_object_fetch)) / 8): a map read
-# takes its column from SCX this many dots after its step's first dot, and the screen position at
-# that first dot
-SCX_COL_DOT = 2
-SCX_COL_DOT_OBJ = 5  # ... once an object has been fetched (our fetches then run 3 dots early)
-SCX_COL0_DOT = 0  # column 0: SCX >> 3 at its step's first dot (scx_during_m3 variants 3 and 4)
 # FITTED (Gambatte scx_during_m3, Mealybug m3_scx_low_3_bits): dots late the fine-scroll drop
 # sees SCX
 SKIP_LAG = 7
-# FITTED (Gambatte scx_during_m3_ds_*, against SameBoy CGB E's fetch log): in double speed the
-# drawing PPU sees SCX writes this many dots late (they reach ours 4 dots before SameBoy's)
-DS_SCX_LAG = 4
 # FITTED (Gambatte window/arg/late_wy_*_2, CGB 207 -> 217 of 273 in window): on CGB a written WY is
 # compared this many dots later (SameBoy runs the compare at the next 4-dot boundary, on CGB one
 # phase later than on DMG); 4-5 gain, 6 loses the _1 halves, DMG keeps the immediate compare
@@ -177,17 +149,7 @@ OAM_RISE_LY0_CGB = 2  # ... and on line 0, one written before this dot of the li
 # FITTED (Gambatte scx_during_m3_ds_* row 0): in double speed line 0's OAM interrupt also comes
 # early, by one M-cycle (SameBoy's line-0 writes land one M-cycle after line 1's, ours two)
 EARLY_LINE0_DS = 2
-OBP_DELAY = 4
-# FITTED (cgb-acid-hell: 1 and 3 leave its two pixels wrong): dots from a write clearing LCDC.4
-# to the tile data read that returns the tile number instead (the CGB's TILE_SEL glitch)
-SEL_GLITCH_LAG = 2
-BG_MAP_LAG = 4  # FITTED (Gambatte bgtilemap): dots LCDC.3 (map select) arrives late at the fetcher
-BG_DATA_LAG = 4  # ... and LCDC.4 (tile data select); both make Gambatte bgtilemap/bgtiledata rows below the sprites exact
-OBJ_SIZE_LAG = 0  # FITTED (Mealybug): dots LCDC.2 arrives late at an object fetch
-# FITTED (Mealybug): dots each background VRAM read is deferred past its fetcher step
-MAP_SHIFT = 4
-LOW_SHIFT = 4
-HIGH_SHIFT = 4
+OBJ_SIZE_LAG = 0  # dots LCDC.2 arrives late at an object fetch
 MAP_READ_DOT = LOW_READ_DOT = HIGH_READ_DOT = 2  # which dot (1 or 2) of its step each fetch reads
 OBJ_FETCH_DOTS = 6
 FIRST_OBJECT_DISCOUNT = 3  # FITTED to Mooneye ppu/intr_2_mode0_timing_sprites
@@ -196,10 +158,6 @@ VBLANK_LINE = 144
 LAST_LINE = 153
 SCREEN_W = 160
 SCREEN_H = 144
-
-
-def _ignore_irq(bit: int) -> None:
-    return None
 
 
 class PPU:
@@ -213,7 +171,6 @@ class PPU:
         "bg",
         "bg_pal",
         "bgp",
-        "bgp_glitch",
         "cgb",
         "cgb_mode",
         "dot",
@@ -224,11 +181,9 @@ class PPU:
         "early_fired",
         "early_lyc153",
         "f_dot",
-        "f_events",
         "f_step",
         "fetch_col",
         "frame",
-        "framebuffer",
         "frames",
         "free_skip",
         "glitching",
@@ -236,7 +191,6 @@ class PPU:
         "irq_defer",
         "irq_early_by",
         "irq_halt_delay",
-        "is_shadow",
         "lcdc",
         "lcdc_hist",
         "line0",
@@ -244,7 +198,6 @@ class PPU:
         "ly",
         "ly153_dots",
         "ly_lead",
-        "sel_fell",
         "lyc",
         "lyc_early",
         "lyc_flag",
@@ -281,14 +234,12 @@ class PPU:
         "owed",
         "pal_hold",
         "penalised",
-        "pipe",
         "raise_irq",
         "read_mode",
         "scx",
         "scx_hist",
         "scy",
         "scy_hist",
-        "shadow",
         "pixels",
         "dma",
         "skip",
@@ -325,14 +276,10 @@ class PPU:
         self,
         raise_irq: Callable[[int], None],
         stat_write_glitch: bool = False,
-        _shadow: bool = False,
         stat_blocking: bool = True,
         cgb: bool = False,
     ) -> None:
-        """A PPU is two: this one times the mode, the STAT line and the interrupts from register
-        values at the pops; a *shadow* copy of the same machinery runs ``SHADOW_LAG`` dots behind
-        it, shares VRAM and OAM, sees the registers as they are by then, and draws the picture."""
-        self.is_shadow = _shadow
+        """This PPU times the mode, the STAT line and the interrupts; ``pixels.Pixels`` draws."""
         #: CGB hardware: two VRAM banks and palette RAM; ``cgb_mode`` is false when the boot ROM
         #: chose the DMG-compatible mode (KEY0), where BGP/OBPn still pick the shades
         self.cgb = cgb
@@ -371,13 +318,11 @@ class PPU:
         self.irq_defer = False  # the interrupt just raised reaches the dispatch a cycle later
         self.irq_halt_delay = 0  # dots later a halted CPU sees the STAT interrupt just raised
         self.sub = 0  # the dot within the M-cycle being ticked (0-3)
-        self.sel_fell = False  # CGB: LCDC.4 fell where a tile data read of this dot sees it
         self.ly_lead = 0  # dots LY shows the next line early, in double speed (LY_LEAD_DS)
         self.owed = 0  # dots of this M-cycle left to run after the access (IRQ_LEAD)
         self.vram = bytearray(0x4000 if cgb else 0x2000)
         self.oam = bytearray(0xA0)
         self.lcdc = 0
-        self.f_events: list[list[int]] = []  # deferred fetcher reads [dots left, step]
         self.wx_hist = [0] * 16
         self.scy_hist = [0] * 16
         self.scx_hist = [0] * 16
@@ -396,7 +341,6 @@ class PPU:
         self.frames = 0  # VBlanks since power-on
         # shades 0-3 (DMG); on CGB hardware RGB555 words, 16 bits per pixel little-endian in
         # ``frame``, the last completed picture
-        self.framebuffer = array("H", [0x7FFF] * (SCREEN_W * SCREEN_H)) if cgb else bytearray(SCREEN_W * SCREEN_H)
         self.frame = self._blank()
         # per-line state
         self.line_objs: list[
@@ -418,7 +362,6 @@ class PPU:
         self.pal_hold = 0  # dots the CGB palettes stay locked after read_mode leaves 3
         self.read_mode = 0  # the mode as the CPU sees it: ``mode`` from MODE_READ_LAG dots ago
         self._recent = [0] * MODE_READ_LAG
-        self.pipe: list[list] = []  # popped pixels waiting for their register samples
         self.drawing = False  # mode 3 is running
         self.line0 = False  # the first line after LCD on: starts at dot 4
         self.mode3_start = MODE2_END
@@ -431,7 +374,6 @@ class PPU:
         self.ticket_col = 0
         self.obj_lo = self.obj_hi = 0
         self.dummy = False
-        self.bgp_glitch: tuple[int, int, int] = (-1, -1, 0)  # (dot, line, OR of old and new)
         self.penalised = False
         self.obj_wait_left = 0
         self.obj_tiles_waited = set()
@@ -439,17 +381,8 @@ class PPU:
         self.obj_dots = 0
         self.obj_entry = None
         self.win_start_x = -1
-        self.shadow: PPU | None = None
-        self.pixels: Pixels | None = None
         self.dma = None  # the board's OAM DMA, which the drawing machine looks at
-        if not _shadow and DMG_PIXELS:
-            self.pixels = Pixels(self)  # the DMG picture, a CGB's in compatibility mode too
-        if not _shadow and cgb:
-            self.shadow = PPU(_ignore_irq, False, _shadow=True, cgb=cgb)
-            self.shadow.vram = self.vram
-            self.shadow.oam = self.oam
-            self.shadow.bg_pal = self.bg_pal
-            self.shadow.obj_pal = self.obj_pal
+        self.pixels = Pixels(self)  # the picture
 
     # ----- state --------------------------------------------------------------------------
 
@@ -553,16 +486,7 @@ class PPU:
             if self.mode0_dot and dot >= self.mode0_dot:
                 self.mode = 0
                 self.mode0_dot = 0
-        if self.f_events:
-            self._run_fetch_events()
-        if self.pipe:
-            self._colour_pixels()
-        if self.is_shadow:
-            return
-        if self.pixels is not None and (CGB_MODE_PIXELS or not self.cgb_mode):
-            self._step_pixels()
-        elif self.shadow is not None:
-            self._step_shadow()
+        self._step_pixels()
         self._recent.append(self.mode)
         lagged = self._recent.pop(0)
         self.mode0_dots = self.mode0_dots + 1 if self.mode == 0 else 0
@@ -586,33 +510,9 @@ class PPU:
         self.read_mode = lagged
         self._update_stat_line()
 
-    def _step_shadow(self) -> None:
-        shadow = self.shadow
-        assert shadow is not None
-        shadow.lcdc = (
-            (self.lcdc & ~0x18)
-            | (self._lcdc_ago(BG_MAP_LAG) & 0x08)
-            | (self._lcdc_ago(BG_DATA_LAG) & 0x10)
-        )
-        shadow.sel_fell = bool(
-            self.cgb
-            and not self.double_speed
-            and self._lcdc_ago(SEL_GLITCH_LAG + 1) & ~self._lcdc_ago(SEL_GLITCH_LAG) & 0x10
-        )
-        shadow.cgb_mode, shadow.opri = self.cgb_mode, self.opri
-        shadow.scx = self.scx_hist[-DS_SCX_LAG] if self.double_speed else self.scx
-        shadow.scy = self.scy_hist[-SCY_LAG] if SCY_LAG else self.scy
-        shadow.wx, shadow.wy = self.wx, self.wy
-        shadow.wy_hit = self.wy_hit  # one WY comparator: the shadow does not keep its own
-        shadow.bgp, shadow.obp0, shadow.obp1 = self.bgp, self.obp0, self.obp1
-        g_dot, g_ly, g_value = self.bgp_glitch
-        shadow.bgp_glitch = (g_dot - SHADOW_LAG, g_ly, g_value)
-        shadow._dot()
-
     def _step_pixels(self) -> None:
-        """One dot of the DMG picture's drawing machine, DRAW_LAG dots behind this PPU."""
+        """One dot of the drawing machine, DRAW_LAG dots behind this PPU."""
         pixels = self.pixels
-        assert pixels is not None
         ly, dot = self.ly, self.dot - DRAW_LAG
         if dot < 0:
             if self.line0:
@@ -621,22 +521,6 @@ class PPU:
         if dot == 0 and not self.line0:
             pixels.line_done()
         pixels.tick(ly, dot)
-
-    def _follow(self) -> None:
-        """Put the shadow SHADOW_LAG dots behind where this PPU is now."""
-        shadow = self.shadow
-        if shadow is None:
-            return
-        ly, dot = self.ly, self.dot - SHADOW_LAG
-        if dot < 0 and self.ly == 0 and not self.line0:
-            ly, dot = LAST_LINE, dot + DOTS_PER_LINE
-        elif dot < 0 and not self.line0:
-            ly, dot = ly - 1, dot + DOTS_PER_LINE
-        shadow.ly, shadow.dot = ly, dot
-        shadow.line0, shadow.skip_scan = self.line0, self.skip_scan
-        shadow.mode3_start = self.mode3_start
-        shadow.wy_hit = self.wy_hit
-        shadow.window_line = self.window_line
 
     def _next_line(self) -> None:
         self.dot = 0
@@ -648,22 +532,13 @@ class PPU:
             self.window_line = (self.window_line + 1) & 255
         self.window_used = False
         self.ly = 0 if self.ly == LAST_LINE else self.ly + 1
-        # a BGP write's one-dot glitch belongs to its own line of its own frame: forget it once the
-        # shadow, a few dots behind, has left that line too (it used to stay and repaint the same
-        # pixel in every later frame: one wrong pixel on a still screen, as in Bill & Ted's title)
-        glitch_ly = self.bgp_glitch[1]
-        if glitch_ly >= 0 and (self.ly - glitch_ly) % (LAST_LINE + 1) > 1:
-            self.bgp_glitch = (-1, -1, 0)
         if self.ly == 0:
             self.window_line = 0
             self.wy_hit = False
             self.mode3_start = MODE2_END - LINE0_LEAD
         if self.ly == VBLANK_LINE:
             self.frames += 1
-            if self.pixels is not None and (CGB_MODE_PIXELS or not self.cgb_mode):
-                self.frame = bytes(self.pixels.framebuffer)
-            else:
-                self.frame = (self.shadow or self).framebuffer.tobytes() if self.cgb else bytes((self.shadow or self).framebuffer)
+            self.frame = bytes(self.pixels.framebuffer)
             self.mode = 1
             self.irq_early_by = VBLANK_IF_LATE
             self.irq_halt_delay = 0
@@ -771,70 +646,6 @@ class PPU:
     def _lcdc_ago(self, lag: int) -> int:
         return self.lcdc_hist[-lag] if lag else self.lcdc
 
-    def _fetch_read(
-        self, step: int, ticket: list[int], window: bool, col: int, pos: int = 0, obj: bool = False
-    ) -> None:
-        """The VRAM read of one fetcher step, with the registers as they are *now*; ``ticket``
-        collects a tile's [map byte, data low, data high, done]."""
-        if not self.is_shadow:  # this PPU only needs the timing, not the data
-            if step == 2:
-                ticket[3] = 1
-            return
-        lcdc = self.lcdc
-        if step == 0:
-            if window:
-                base = 0x1C00 if lcdc & 0x40 else 0x1800
-                index = base + (self.window_line >> 3) * 32 + (col & 31)
-            else:
-                base = 0x1C00 if lcdc & 8 else 0x1800
-                row = (self.ly + self.scy) & 255
-                # this read runs MAP_SHIFT + MAP_READ_DOT - 1 dots after its step's first dot
-                ago = MAP_SHIFT + MAP_READ_DOT
-                if not col:
-                    tile_x = (self.scx_hist[SCX_COL0_DOT - ago] >> 3) & 31
-                else:
-                    d = SCX_COL_DOT_OBJ if self.penalised else SCX_COL_DOT
-                    if obj:  # begun during an object fetch: SameBoy reads after it, SCX at the read
-                        d = ago - 1
-                    scx = self.scx_hist[d - ago]
-                    tile_x = ((scx + pos + 8 - (self.cgb and not obj)) >> 3) & 31
-                index = base + (row >> 3) * 32 + tile_x
-            ticket[0] = self.vram[index]
-            if self.cgb_mode:
-                ticket[4] = self.vram[0x2000 + index]  # the tile's attributes, from bank 1
-            return
-        tile = ticket[0]
-        signed = 0x1000 + ((tile ^ 0x80) - 0x80) * 16
-        address = tile * 16 if lcdc & 0x10 else signed
-        # The CGB's TILE_SEL glitch (Matt Currie, "The comprehensive Game Boy PPU documentation",
-        # TILE_SEL; SameBoy data_for_tile_sel_glitch; cgb-acid-hell): a tile data read on the dot
-        # LCDC.4's fall arrives returns the tile's number in place of its data, for numbers below
-        # $80. Single speed only: double speed has another rule (SameBoy), not written here, and
-        # this one there loses Gambatte bgtiledata_spx09_ds_2.
-        if self.sel_fell and tile < 0x80:
-            ticket[step] = tile
-            if step == 2:
-                ticket[3] = 1
-            return
-        row = self.window_line if window else (self.ly + self.scy) & 255
-        attr = ticket[4]
-        if attr & 0x40:
-            row = 7 - (row & 7)  # vertical flip
-        address += (row & 7) * 2 + (step - 1) + (0x2000 if attr & 8 else 0)
-        ticket[step] = self.vram[address]
-        if step == 2:
-            ticket[3] = 1
-
-    def _run_fetch_events(self) -> None:
-        pending = []
-        for event in self.f_events:
-            event[0] -= 1
-            if event[0] <= 0:
-                self._fetch_read(*event[1:])
-            else:
-                pending.append(event)
-        self.f_events = pending
-
     def _fetcher_dot(self) -> None:
         step = self.f_step
         if step < 3:
@@ -855,13 +666,6 @@ class PPU:
                     self.ticket = [0, 0, 0, 0, 0]
                     self.ticket_col = self.fetch_col
                     self.fetch_col += 1
-                args = (step, self.ticket, self.window_active, self.ticket_col, self.t1_x)
-                args += (self.t1_obj,)
-                shift = (MAP_SHIFT, LOW_SHIFT, HIGH_SHIFT)[step]
-                if shift:
-                    self.f_events.append([shift, *args])
-                else:
-                    self._fetch_read(*args)
             if self.f_dot < 2:
                 return
             self.f_dot = 0
@@ -984,8 +788,7 @@ class PPU:
                 self._undo_window()
         if self.bg and not self.skip:
             x = self.x
-            lag = SHADOW_WX_LAG if self.is_shadow else WX_LAG
-            wx = self.wx_hist[-lag] if lag else self.wx
+            wx = self.wx_hist[-WX_LAG] if WX_LAG else self.wx
             win_lcdc = self._lcdc_ago(WIN_LAG)
             edge = False
             if x == 0 and not self.window_active:
@@ -995,7 +798,7 @@ class PPU:
                 # m3_wx_4/5/6_change: a WX write lands between the WX=5 and the WX=6 dot).
                 hist = self.wx_hist
                 for low in range(7):
-                    depth = lag + WX_EDGE_LEAD - low
+                    depth = WX_LAG + WX_EDGE_LEAD - low
                     if (hist[-depth] if depth > 0 else self.wx) == low:
                         edge = True
                         wx = low
@@ -1066,28 +869,12 @@ class PPU:
                         self._start_object_fetch(entry)
                     return
         if self.bg:
-            colour = self.bg.pop(0)  # (ticket, bit): resolved when the pixel is coloured
+            self.bg.pop(0)
             if self.skip:
                 self.dropped = (self.dropped + 1) & 7
             else:
-                obj = self.obj_fifo.pop(0) if self.obj_fifo else (0, 0, 255)
-                d = self.dot
-                if self.is_shadow:
-                    self.pipe.append(
-                        [
-                            self.x,
-                            colour,
-                            obj,
-                            d + LCDC_DELAY,
-                            d + BGP_DELAY,
-                            d + OBP_DELAY,
-                            None,
-                            None,
-                            None,
-                            None,
-                            self.ly,
-                        ]
-                    )
+                if self.obj_fifo:
+                    self.obj_fifo.pop(0)
                 self.x += 1
                 if (
                     self.x == SCREEN_W - HBLANK_IRQ_EARLY
@@ -1107,48 +894,10 @@ class PPU:
                     return
         self._fetcher_dot()
 
-    # A popped pixel is coloured from three registers, each sampled a fixed number of dots after
-    # the pop (they pass different stages of the pipeline): LCDC's BG/OBJ enables, BGP, OBP0/1.
-
-    def _colour_pixels(self) -> None:
-        dot = self.dot
-        keep = []
-        for rec in self.pipe:
-            # rec = [x, bg, obj, lcdc_due, bgp_due, obp_due, lcdc, bgp, obp0, obp1, ly]
-            if rec[3] <= dot and rec[6] is None:
-                rec[6] = self.lcdc
-            if rec[4] <= dot and rec[7] is None:
-                g_dot, g_ly, g_value = self.bgp_glitch
-                glitch = g_dot + BGP_GLITCH_DOT == dot and g_ly == self.ly
-                rec[7] = g_value if glitch else self.bgp
-            if rec[5] <= dot and rec[8] is None:
-                rec[8], rec[9] = self.obp0, self.obp1
-            if rec[8] is None or rec[7] is None or rec[6] is None or not rec[1][0][3]:
-                keep.append(rec)
-                continue
-            self.framebuffer[rec[10] * SCREEN_W + rec[0]] = self._pixel(rec)
-        self.pipe = keep
-
     def _rgb(self, palette: bytearray, number: int, colour: int) -> int:
         """RGB555 colour ``colour`` of palette ``number`` in palette RAM."""
         i = number * 8 + colour * 2
         return (palette[i] | (palette[i + 1] << 8)) & 0x7FFF
-
-    def _pixel(self, rec: list) -> int:
-        _x, (ticket, bit), (colour, flags, _i), _a, _b, _c, lcdc, bgp, obp0, obp1, _ly = rec
-        bg = ((ticket[1] >> bit) & 1) | (((ticket[2] >> bit) & 1) << 1)
-        if self.cgb_mode:
-            # LCDC.0 clear: the background loses its priority over objects; it is still drawn
-            if colour and lcdc & 2 and (not lcdc & 1 or not ((flags | ticket[4]) & 0x80 and bg)):
-                return self._rgb(self.obj_pal, flags & 7, colour)
-            return self._rgb(self.bg_pal, ticket[4] & 7, bg)
-        if not lcdc & 1:
-            bg = 0
-        if colour and lcdc & 2 and not (flags & 0x80 and bg):
-            shade = ((obp1 if flags & 0x10 else obp0) >> (colour * 2)) & 3
-            return self._rgb(self.obj_pal, (flags >> 4) & 1, shade) if self.cgb else shade
-        shade = (bgp >> (bg * 2)) & 3
-        return self._rgb(self.bg_pal, 0, shade) if self.cgb else shade
 
     @property
     def visible_ly(self) -> int:
@@ -1433,16 +1182,9 @@ class PPU:
             self.window_line = 0
             self.window_used = self.window_active = self.wy_hit = self.win_carry = False
             self.line_objs = []
-            self.pipe = []
             self._settle(0)
-            if self.shadow is not None:
-                self.shadow.lcdc = value
-                self.shadow.write_lcdc(value)
-            if self.pixels is not None:
-                self.pixels.lcd_off()
-            blank = self._blank()  # the screen goes blank (white)
-            self.framebuffer[:] = array("H", blank) if self.cgb else blank
-            self.frame = blank
+            self.pixels.lcd_off()
+            self.frame = self._blank()  # the screen goes blank (white)
         elif not was_on and self.lcd_on:  # LCD on: line 0 starts now, but late
             self.ly = 0
             self.dot = LINE0_START_DOT + (LCD_ON_DS if self.double_speed else 0)
@@ -1453,14 +1195,9 @@ class PPU:
             self.skip_scan = True  # and has no OAM scan
             self._settle(0)
             self.wy_hit = self.wy == 0 and bool(self.lcdc & 0x20)
-            if self.shadow is not None:
-                self.shadow.wy = self.wy
-                self.shadow.write_lcdc(value)
-                self._follow()
-            if self.pixels is not None:
-                self.pixels.lcd_on()
+            self.pixels.lcd_on()
             self._update_stat_line()
-        elif self.lcd_on and value & 0x20 and not self.is_shadow:  # LCDC.5 set: WY compared again
+        elif self.lcd_on and value & 0x20:  # LCDC.5 set: WY compared again
             if self.cgb:
                 self.wy_wait = WIN_EN_WAIT_DS if self.double_speed else WIN_EN_WAIT
             else:
@@ -1475,15 +1212,10 @@ class PPU:
         """Put the beam at a line, dot and mode (the skip-boot hand-off state)."""
         self.ly, self.dot = ly, dot + IRQ_LEAD  # the PPU is the lead ahead of the access
         self._settle(mode)
-        self._follow()
         self._update_stat_line()
 
     def write_bgp(self, value: int) -> None:
-        """DMG: for one dot around a BGP write the palette is the OR of the old and new values
-        (Mealybug m3_bgp_change: each band is one pixel wider at both edges). A CGB shows the new
-        value at the same dot with no such pixel (the same test's CPU CGB D picture)."""
-        if not self.cgb:
-            self.bgp_glitch = (self.dot, self.ly, self.bgp | value)
+        """(The DMG's one-dot OR of the old and new BGP is drawn by pixels.Pixels.)"""
         self.bgp = value
 
     # ----- CGB palette RAM ($FF68-$FF6B) ----------------------------------------------------------

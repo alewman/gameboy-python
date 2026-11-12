@@ -929,6 +929,12 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   Gambatte CGB-04c 2,821 -> 2,864 (+43, nothing lost; its picture tests 127 -> 170 of 198),
   DMG-08 1,695 unchanged, cgb-acid2 and cgb-acid-hell exact, Mealybug unchanged. CGB emulation
   about 2x faster (8.4 -> 16.4 frames per CPU second on cgb-acid2): the shadow PPU no longer runs.
+* **The shadow PPU, removed (2026-11-11)**: with every picture drawn by `pixels.py`, the shadow
+  copy of the PPU and the timing PPU's own drawing paths had nothing left to do: the deferred
+  fetcher reads, the colouring pipe and its register delays, the BGP glitch record, the
+  framebuffer, and the constants only they used (`ppu.py` 299 lines shorter). The timing PPU's
+  results are unchanged (every picture test, both Gambatte lists, smoke and the test suite
+  identical before and after).
 * **Not done**: SameBoy columns for the CGB runs, the SGB and AGB rows, DMG0/CGB0 revisions of
   the CGB, the real-boot and skip-boot equivalence check for CGB (the DMG's was identical), and
   the CGB speed-switch's PPU "odd mode".

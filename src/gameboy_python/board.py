@@ -431,8 +431,6 @@ class GameBoy:
                 self._stop_held.append((name, memory))
                 blank = bytearray([fill]) * len(memory)
                 setattr(ppu, name, blank)
-                if ppu.shadow:
-                    setattr(ppu.shadow, name, blank)
         elif ppu.lcd_on:
             ppu.frame = ppu._blank()  # the oscillator stops and the LCD goes blank (stop_instr.gb)
         return StopResult(StopAction.STOP, consume_operand=not pending)
@@ -459,8 +457,6 @@ class GameBoy:
         ppu = self.ppu
         for name, memory in self._stop_held:
             setattr(ppu, name, memory)
-            if ppu.shadow:
-                setattr(ppu.shadow, name, memory)
         self._stop_held.clear()
 
     # ----- the bus ------------------------------------------------------------------------
