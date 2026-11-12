@@ -19,7 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SUITE = ROOT / "tests/test_roms/gbtr/gambatte"
 LIST = Path(__file__).with_name("gambatte_cgb04c_pass.txt")
 STRIDE = 60
-ENTRIES = [line.split() for line in LIST.read_text().splitlines()][::STRIDE] if LIST.exists() else []
+ENTRIES = (
+    [line.split() for line in LIST.read_text().splitlines()][::STRIDE] if LIST.exists() else []
+)
 
 pytestmark = [
     pytest.mark.slow,
@@ -28,7 +30,9 @@ pytestmark = [
 
 
 def _runner():
-    spec = importlib.util.spec_from_file_location("gambatte_dmg08", ROOT / "scripts/gambatte_dmg08.py")
+    spec = importlib.util.spec_from_file_location(
+        "gambatte_dmg08", ROOT / "scripts/gambatte_dmg08.py"
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

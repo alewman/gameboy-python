@@ -91,10 +91,17 @@ def main() -> int:
     if args.sameboy:
         theirs = {path.name: sameboy(path) for path in roms}
         mine = {r[0]: r[1] for r in results}
-        table: dict[str, list[str]] = {"both": [], "board only": [], "SameBoy only": [], "neither": []}
+        table: dict[str, list[str]] = {
+            "both": [],
+            "board only": [],
+            "SameBoy only": [],
+            "neither": [],
+        }
         for name, got in mine.items():
             a, b = got == 1, theirs[name] == 1
-            table["both" if a and b else "board only" if a else "SameBoy only" if b else "neither"].append(name)
+            table[
+                "both" if a and b else "board only" if a else "SameBoy only" if b else "neither"
+            ].append(name)
         for key, names in table.items():
             print(f"{key} pass: {len(names)}")
             if key != "both":

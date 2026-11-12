@@ -75,7 +75,9 @@ class Pixels:
         self.ppu = ppu  # the registers, VRAM and OAM are read from here
         self.cgb = ppu.cgb
         self.framebuffer = (
-            array("H", [0x7FFF] * (SCREEN_W * SCREEN_H)) if self.cgb else bytearray(SCREEN_W * SCREEN_H)
+            array("H", [0x7FFF] * (SCREEN_W * SCREEN_H))
+            if self.cgb
+            else bytearray(SCREEN_W * SCREEN_H)
         )
         # the registers as the pipeline sees them on this dot (the CGB's arrive late)
         self.lcdc = self.scx = self.scy = self.wx = 0
@@ -310,7 +312,9 @@ class Pixels:
                 else:
                     obp = p.obp1 if obj[1] & 0x10 else p.obp0
                 shade = (obp >> (obj[0] * 2)) & 3
-                self.framebuffer[i] = p._rgb(p.obj_pal, (obj[1] >> 4) & 1, shade) if self.cgb else shade
+                self.framebuffer[i] = (
+                    p._rgb(p.obj_pal, (obj[1] >> 4) & 1, shade) if self.cgb else shade
+                )
                 return
         if self.cgb:
             bgp = self.last_bgp if self.palette_late else p.bgp
@@ -571,7 +575,9 @@ class Pixels:
         if self.last_lcdc & 0x10 and not self.lcdc & 0x10:
             address()
             self._read_high() if high else self._read_low()
-        elif not self.last_lcdc & 0x10 and self.lcdc & 0x10 and not self.data_address & 0x800:  # bit 11 of the address in its bank
+        elif (
+            not self.last_lcdc & 0x10 and self.lcdc & 0x10 and not self.data_address & 0x800
+        ):  # bit 11 of the address in its bank
             if high:
                 self.data_high = self.last_unsigned
             else:

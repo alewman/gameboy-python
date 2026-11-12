@@ -109,7 +109,12 @@ def run_microtest(gb: GameBoy, frames: int = 4, vram_flag: bool = False) -> RomR
     if vram_flag:
         flag = gb.peek(0x8000)
         return RomResult(
-            "microtest", flag == 0x55, f"flag ${flag:02X}, expected $55", registers(gb), gb.t, gb.ppu.frames
+            "microtest",
+            flag == 0x55,
+            f"flag ${flag:02X}, expected $55",
+            registers(gb),
+            gb.t,
+            gb.ppu.frames,
         )
     result = gb.hram[0x02]
     return RomResult(

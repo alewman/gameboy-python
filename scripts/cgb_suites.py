@@ -30,9 +30,7 @@ BASE = ROOT / "tests/test_roms/gbtr"
 
 def applies_age(name: str) -> bool:
     stem = Path(name).stem
-    return any(
-        re.fullmatch(r"(cgb|ncm)[A-Z]*E[A-Z]*", part) for part in stem.split("-")[1:]
-    )
+    return any(re.fullmatch(r"(cgb|ncm)[A-Z]*E[A-Z]*", part) for part in stem.split("-")[1:])
 
 
 def roms(suite: str) -> list[Path]:
@@ -45,7 +43,10 @@ def roms(suite: str) -> list[Path]:
             p
             for p in found
             if "sgb" not in p.parts
-            and (not (m := re.search(r"-([A-Za-z0-9]+)\.gb$", p.name)) or re.fullmatch(r"cgb[0-9A-Z]*E", m.group(1)))
+            and (
+                not (m := re.search(r"-([A-Za-z0-9]+)\.gb$", p.name))
+                or re.fullmatch(r"cgb[0-9A-Z]*E", m.group(1))
+            )
         ]
     return [p for p in found if applies_age(p.name)]
 

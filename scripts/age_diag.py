@@ -66,7 +66,11 @@ def timing(gb: GameBoy, text: str) -> int:
         line = line.split(";")[0].strip()
         if line.upper().startswith("DB"):
             lines.append(
-                [eff if v.strip() == "EFF" else int(v.strip().replace("$", "0x"), 0) for v in line[2:].split(",") if v.strip()]
+                [
+                    eff if v.strip() == "EFF" else int(v.strip().replace("$", "0x"), 0)
+                    for v in line[2:].split(",")
+                    if v.strip()
+                ]
             )
     bad = 0
     for i, want in enumerate(lines):
@@ -74,7 +78,7 @@ def timing(gb: GameBoy, text: str) -> int:
         if got != want:
             bad += 1
             print(f"line {i:3d} got  " + " ".join(f"{v:02x}" for v in got))
-            print(f"         want " + " ".join(f"{v:02x}" for v in want))
+            print("         want " + " ".join(f"{v:02x}" for v in want))
     print(f"{len(lines) - bad} of {len(lines)} timing lines match")
     return 0
 
@@ -108,7 +112,9 @@ def main() -> int:
         bad += got != row
         print("got ", " ".join(f"{v:02x}" for v in got))
         print("want", " ".join(f"{v:02x}" for v in row), mark)
-    print(f"{len(want) - bad} of {len(want)} rows match ({'non-CGB' if non_cgb else 'CGB'} mode table)")
+    print(
+        f"{len(want) - bad} of {len(want)} rows match ({'non-CGB' if non_cgb else 'CGB'} mode table)"
+    )
     return 0
 
 

@@ -33,7 +33,9 @@ def expected(source: str) -> list[list[int]]:
         if inside:
             text = line.split(";")[0].strip()
             if text.lower().startswith("db"):
-                values = [int(v.strip().replace("$", "0x"), 0) for v in text[2:].split(",") if v.strip()]
+                values = [
+                    int(v.strip().replace("$", "0x"), 0) for v in text[2:].split(",") if v.strip()
+                ]
                 rows.append(values)
             elif text and not text.lower().startswith(("dw", "ds")) and rows:
                 break
@@ -53,7 +55,11 @@ def main() -> int:
     while gb.t < end:
         gb.cpu.step()
     want = expected(source)
-    n = int(re.search(r"RESULTS_N_ROWS\s+EQU\s+(\d+)", source).group(1)) if "RESULTS_N_ROWS" in source else len(want)
+    n = (
+        int(re.search(r"RESULTS_N_ROWS\s+EQU\s+(\d+)", source).group(1))
+        if "RESULTS_N_ROWS" in source
+        else len(want)
+    )
     width = len(want[0]) if want else 8
     bad = 0
     for i in range(n):

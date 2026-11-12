@@ -18,10 +18,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 
+from pngread import read_rgb555  # noqa: E402
+
 from gameboy_python import MACHINES, GameBoy, load_cartridge  # noqa: E402
 from gameboy_python.boot import find_boot_rom  # noqa: E402
 from gameboy_python.image import write_rgb_png  # noqa: E402
-from pngread import read_rgb555  # noqa: E402
 
 FRAME_T = 70224
 
@@ -64,7 +65,11 @@ def main() -> int:
             print(
                 "".join(
                     "X"
-                    if any(got[(y + dy) * 160 + x] != want[(y + dy) * 160 + x] for dy in range(4) for x in range(xx, xx + 4))
+                    if any(
+                        got[(y + dy) * 160 + x] != want[(y + dy) * 160 + x]
+                        for dy in range(4)
+                        for x in range(xx, xx + 4)
+                    )
                     else "."
                     for xx in range(0, 160, 4)
                 )

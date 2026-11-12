@@ -1,4 +1,4 @@
-"""SameSuite and AGE ROMs that pass on the CGB E board today (milestone 7), cgb-acid2, Mealybug CGB D.
+"""SameSuite and AGE ROMs that pass on the CGB E board (milestone 7), cgb-acid2, Mealybug CGB D.
 
 ``tests/cgb_suites_pass.txt`` lists them (SameSuite 23 of 76, AGE 7 of 28 on 2026-10-10; the rest
 are open items in docs/validation.md "Results: milestone 7"). Each passes when B, C, D, E, H, L =
@@ -18,7 +18,9 @@ BASE = ROOT / "tests/test_roms/gbtr"
 LIST = Path(__file__).with_name("cgb_suites_pass.txt")
 NAMES = LIST.read_text().split() if LIST.exists() else []
 
-pytestmark = pytest.mark.skipif(not BASE.exists() or not NAMES, reason="run scripts/fetch_references.py")
+pytestmark = pytest.mark.skipif(
+    not BASE.exists() or not NAMES, reason="run scripts/fetch_references.py"
+)
 
 
 @pytest.mark.parametrize("name", NAMES)

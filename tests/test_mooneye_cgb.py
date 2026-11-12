@@ -20,7 +20,9 @@ ACCEPTANCE = applicable("cgb")
 MISC = applicable_misc()
 BOOT, LABEL = find_boot_rom("CGB")
 
-pytestmark = pytest.mark.skipif(ROMS is None or not ACCEPTANCE, reason="run scripts/fetch_references.py")
+pytestmark = pytest.mark.skipif(
+    ROMS is None or not ACCEPTANCE, reason="run scripts/fetch_references.py"
+)
 
 
 def run(path: Path, boot: bytes | None) -> bool:

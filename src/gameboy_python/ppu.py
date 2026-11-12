@@ -19,7 +19,9 @@ from collections.abc import Callable
 from gameboy_python.machines import DOTS_PER_LINE
 from gameboy_python.pixels import Pixels
 
-DRAW_LAG = 5  # FITTED (Mealybug: all 24 DMG and 20 of 21 CGB-D exact at 5 only): dots the drawing machine runs behind
+# FITTED (Mealybug: all 24 DMG and 20 of 21 CGB-D exact at 5 only): dots the drawing machine
+# runs behind
+DRAW_LAG = 5
 
 MODE2_END = 80
 OAM_BUG_LAST_ROW = 19  # FITTED (blargg oam_bug 7): the last row that can be corrupted
@@ -63,7 +65,8 @@ LYC_CANCEL_DMG = 1  # an LYC write ending the match cancels an LY=LYC raise earl
 OAM_HIDDEN_DMG = 1  # the hidden rise (m0_hidden) of the OAM pulse
 OAM_HIDDEN_DS = 1  # ... and on CGB in double speed
 # Line 144: the mode 1 STAT source rises this many dots after the LY=LYC flag falls (unless mode 0
-# is selected and holds the line), so LYC=143 then mode 1 is a new edge. FITTED (Gambatte m1 lycint143_*)
+# is selected and holds the line), so LYC=143 then mode 1 is a new edge. FITTED (Gambatte m1
+# lycint143_*)
 M1_SRC_DOT = 1
 # CGB, lines 0-142: the HBlank STAT source ends this many dots before the line does unless the
 # mode 2 source is selected (it takes over at once), so an LY=LYC rise at the next line's start is
@@ -73,7 +76,9 @@ LY_LEAD = 0  # FITTED (Mooneye hblank_ly_scx_timing with the early HBlank interr
 WX166_CARRY = 1  # DMG: WX=166 starts the window at the next line's start (SameBoy display.c)
 ZERO_TICKET = [0, 0, 0, 1, 0]  # a fetched tile of colour 0
 WX_EDGE_LEAD = 7  # WX=w below 7 is compared 7 - w dots before the first shown pixel's compare
-WX_LAG = 1  # FITTED (Gambatte cgb04c window 143 -> 148 of 193 at 0 or 1): the window comparator sees WX this many dots late
+# FITTED (Gambatte cgb04c window 143 -> 148 of 193 at 0 or 1): the window comparator sees WX
+# this many dots late
+WX_LAG = 1
 WIN_LAG = 0  # ... and LCDC.5/.0 this many
 # CGB: LCDC.5 cleared just after the window starts puts the background back, as in Gambatte's
 # StartWindowDraw (DMG keeps the window). FITTED (Gambatte cgb04c window +16 -2, late_disable_*):
@@ -153,7 +158,9 @@ OBJ_SIZE_LAG = 0  # dots LCDC.2 arrives late at an object fetch
 MAP_READ_DOT = LOW_READ_DOT = HIGH_READ_DOT = 2  # which dot (1 or 2) of its step each fetch reads
 OBJ_FETCH_DOTS = 6
 FIRST_OBJECT_DISCOUNT = 3  # FITTED to Mooneye ppu/intr_2_mode0_timing_sprites
-FIRST_OBJECT_DISCOUNT_DS = 2  # FITTED (Gambatte cgb04c sprites/space in double speed, 261 -> 341 of 380); AGE stat-mode-sprites (single speed) needs 3
+# FITTED (Gambatte cgb04c sprites/space in double speed, 261 -> 341 of 380); AGE
+# stat-mode-sprites (single speed) needs 3
+FIRST_OBJECT_DISCOUNT_DS = 2
 VBLANK_LINE = 144
 LAST_LINE = 153
 SCREEN_W = 160
@@ -173,6 +180,7 @@ class PPU:
         "bgp",
         "cgb",
         "cgb_mode",
+        "dma",
         "dot",
         "double_speed",
         "drawing",
@@ -201,17 +209,14 @@ class PPU:
         "ly153_dots",
         "ly_lead",
         "lyc",
+        "lyc153_late",
         "lyc_early",
         "lyc_flag",
         "lyc_next",
+        "lyc_rose",
         "lyc_wait",
-        "lyc153_late",
         "m0_early",
         "m0_hidden",
-        "oam_hidden",
-        "oam_raw",
-        "lyc_rose",
-        "stat_fell",
         "m1_early",
         "m3",
         "mode",
@@ -220,6 +225,8 @@ class PPU:
         "mode3_start",
         "next_obj",
         "oam",
+        "oam_hidden",
+        "oam_raw",
         "obj_dots",
         "obj_entry",
         "obj_fifo",
@@ -237,17 +244,17 @@ class PPU:
         "owed",
         "pal_hold",
         "penalised",
+        "pixels",
         "raise_irq",
         "read_mode",
         "scx",
         "scx_hist",
         "scy",
         "scy_hist",
-        "pixels",
-        "dma",
         "skip",
         "skip_scan",
         "stat_blocking",
+        "stat_fell",
         "stat_line",
         "stat_select",
         "stat_write_glitch",
@@ -260,11 +267,11 @@ class PPU:
         "vram_bank",
         "win_carry",
         "win_mid",
+        "win_refund",
         "win_stall",
         "win_start_x",
-        "window_active",
         "win_undo",
-        "win_refund",
+        "window_active",
         "window_line",
         "window_used",
         "wx",
@@ -272,7 +279,7 @@ class PPU:
         "wy",
         "wy_hit",
         "wy_wait",
-        "x"
+        "x",
     )
 
     def __init__(
@@ -647,7 +654,9 @@ class PPU:
         self.win_undo = None
         self.free_skip = 0
         self.bg: list[tuple[list[int], int]] = []  # the background FIFO: (tile ticket, bit)
-        self.obj_fifo: list[tuple[int, int, int]] = []  # (colour, flags, OAM index) for the next pixels
+        self.obj_fifo: list[
+            tuple[int, int, int]
+        ] = []  # (colour, flags, OAM index) for the next pixels
         self.f_step = 0  # 0 tile, 1 data low, 2 data high, 3 waiting to push
         self.f_dot = 0
         self.t1_x = 0
@@ -735,8 +744,20 @@ class PPU:
 
     def _undo_window(self) -> None:
         """CGB: the window was switched off just after it started; the background goes on."""
-        (self.bg, self.f_step, self.f_dot, self.fetch_col, self.ticket, self.ticket_col,
-         self.t1_x, self.t1_obj, self.dummy, self.free_skip, _end, x) = self.win_undo
+        (
+            self.bg,
+            self.f_step,
+            self.f_dot,
+            self.fetch_col,
+            self.ticket,
+            self.ticket_col,
+            self.t1_x,
+            self.t1_obj,
+            self.dummy,
+            self.free_skip,
+            _end,
+            x,
+        ) = self.win_undo
         del self.bg[: self.x - x]  # the window's pixels already out stand for the background's
         self.win_undo = None
         self.window_active = False
@@ -747,7 +768,11 @@ class PPU:
         dots = OBJ_FETCH_DOTS
         if not self.penalised:  # FITTED: the first object on a line costs less
             self.penalised = True
-            dots -= FIRST_OBJECT_DISCOUNT_DS if self.cgb_mode and self.double_speed else FIRST_OBJECT_DISCOUNT
+            dots -= (
+                FIRST_OBJECT_DISCOUNT_DS
+                if self.cgb_mode and self.double_speed
+                else FIRST_OBJECT_DISCOUNT
+            )
         self.obj_dots = dots
         self.obj_low_at = max(dots - 3, 0)
         self.obj_high_at = max(dots - 5, 0)
@@ -857,9 +882,18 @@ class PPU:
                     self.window_used = True
                     if self.cgb:
                         self.win_undo = (
-                            self.bg, self.f_step, self.f_dot, self.fetch_col, self.ticket,
-                            self.ticket_col, self.t1_x, self.t1_obj, self.dummy, self.free_skip,
-                            self.m3 + WIN_UNDO_DOTS, x,
+                            self.bg,
+                            self.f_step,
+                            self.f_dot,
+                            self.fetch_col,
+                            self.ticket,
+                            self.ticket_col,
+                            self.t1_x,
+                            self.t1_obj,
+                            self.dummy,
+                            self.free_skip,
+                            self.m3 + WIN_UNDO_DOTS,
+                            x,
                         )
                     if self.double_speed and self.penalised:  # an object was fetched before it
                         self.win_stall = WIN_OBJ_STALL_DS
@@ -902,9 +936,10 @@ class PPU:
                 ):
                     self.hblank_early = True  # the HBlank interrupt precedes mode 0 by a few dots
                 if self.x >= SCREEN_W:
-                    self.win_carry = bool(
-                        WX166_CARRY and not self.cgb and self.wy_hit and lcdc & 0x20
-                    ) and self.wx == 166
+                    self.win_carry = (
+                        bool(WX166_CARRY and not self.cgb and self.wy_hit and lcdc & 0x20)
+                        and self.wx == 166
+                    )
                     if self.mode3_start < MODE2_END:  # line 0: the pipeline ran early, STAT did not
                         self.mode0_dot = self.dot + MODE2_END - self.mode3_start
                     else:
@@ -1246,7 +1281,7 @@ class PPU:
 
     @property
     def palettes_blocked(self) -> bool:
-        """Palette RAM is out of reach of the CPU while the LCD is drawing (Pan Docs Palettes.md)."""
+        """Palette RAM is out of the CPU's reach while the LCD is drawing (Pan Docs Palettes.md)."""
         return self.lcd_on and (self.read_mode == 3 or self.pal_hold > 0)
 
     def read_palette(self, obj: bool) -> int:

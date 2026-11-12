@@ -13,9 +13,9 @@ IE ($FFFF) and IF ($FF0F) live in the core: the board raises an IF bit with
 
 from __future__ import annotations
 
+from gb_apu_python import APU, CGB, DMG
 from sm83_python import SM83, CPUState, StopAction, StopResult
 
-from gb_apu_python import APU, CGB, DMG
 from gameboy_python import ppu as ppu_module
 from gameboy_python.cartridge import Cartridge
 from gameboy_python.dma import EXTERNAL, INTERNAL, VIDEO, OamDma, bus_of
@@ -28,7 +28,8 @@ from gameboy_python.timer import Timer
 #: post-boot register values for DMG-CPU A/B/C (Pan Docs Power_Up_Sequence.md "CPU registers",
 #: confirmed by Mooneye boot_regs-dmgABC); F's Z is always set, H and C follow the header checksum
 POST_BOOT_DMG = {"a": 0x01, "b": 0x00, "c": 0x13, "d": 0x00, "e": 0xD8, "h": 0x01, "l": 0x4D}
-#: ... and for a CGB (Pan Docs Power_Up_Sequence.md): a CGB game, and a DMG game in compatibility mode
+#: ... and for a CGB (Pan Docs Power_Up_Sequence.md): a CGB game, and a DMG game in
+#: compatibility mode
 POST_BOOT_CGB = {"a": 0x11, "b": 0x00, "c": 0x00, "d": 0xFF, "e": 0x56, "h": 0x00, "l": 0x0D}
 POST_BOOT_CGB_COMPAT = {"a": 0x11, "b": 0x00, "c": 0x00, "d": 0x00, "e": 0x08, "h": 0x99, "l": 0x1A}
 
@@ -185,9 +186,7 @@ class GameBoy:
         header = self.cartridge.header
         cgb_game = header.cgb_enhanced
         regs = POST_BOOT_CGB if cgb_game else POST_BOOT_CGB_COMPAT
-        self.cpu.restore_state(
-            CPUState(**regs, f=0x80, sp=0xFFFE, pc=0x0100, if_=0x01)
-        )
+        self.cpu.restore_state(CPUState(**regs, f=0x80, sp=0xFFFE, pc=0x0100, if_=0x01))
         ppu = self.ppu
         ppu.cgb_mode = cgb_game
         ppu.opri = self.opri_register = 0 if cgb_game else 1
@@ -416,7 +415,9 @@ class GameBoy:
                 self._lcd_freeze = -skew  # the LCD stands still this many dots
             if pending:
                 return StopResult(StopAction.NOP, consume_operand=False)
-            self._switch_wait = SPEED_SWITCH_HALT if not self.double_speed else SPEED_SWITCH_HALT_TO_DOUBLE
+            self._switch_wait = (
+                SPEED_SWITCH_HALT if not self.double_speed else SPEED_SWITCH_HALT_TO_DOUBLE
+            )
             return StopResult(StopAction.HALT)
         self._write_div()
         self._stopped = 1
@@ -470,8 +471,12 @@ class GameBoy:
 
     def _read(self, address: int) -> int:
         cpu = self.cpu
-        self._halt_cycle = bool(HALT_CYCLE_HALTED and not cpu.idu and address == cpu.pc
-                                and self.peek((address - 1) & 0xFFFF) == 0x76)
+        self._halt_cycle = bool(
+            HALT_CYCLE_HALTED
+            and not cpu.idu
+            and address == cpu.pc
+            and self.peek((address - 1) & 0xFFFF) == 0x76
+        )
         self._tick()
         self._halt_cycle = False
         self._bug(address, "readinc" if self.cpu.idu else "read")
@@ -521,8 +526,11 @@ class GameBoy:
                 # reads of the whole $FExx page return $FF while the DMA owns OAM (Gambatte
                 # oamdma_src*_busypopFE9F/FEFF read $FEA0 and $FEFF as $FF, DMG-08)
                 return 0xFF
-            if (address < 0xFE00 and bus_of(address) == dma.bus != INTERNAL
-                    and not self.machine.cgb_hardware):
+            if (
+                address < 0xFE00
+                and bus_of(address) == dma.bus != INTERNAL
+                and not self.machine.cgb_hardware
+            ):
                 return dma.byte  # bus conflict: the CPU gets the DMA's byte
         return self.peek(address)
 
@@ -613,7 +621,9 @@ class GameBoy:
         return "wram" if page < 0xE0 else "bad"
 
     def _cgb_dma_conflict(self, address: int) -> bool:
-        return address < 0xFE00 and bool(self._CGB_CONFLICT[self._cgb_dma_kind()] >> (address >> 12) & 1)
+        return address < 0xFE00 and bool(
+            self._CGB_CONFLICT[self._cgb_dma_kind()] >> (address >> 12) & 1
+        )
 
     def _dma_wram_index(self, address: int) -> int:
         # the WRAM half is named by bit 4 of the DMA page, not by SVBK's bank at $C000

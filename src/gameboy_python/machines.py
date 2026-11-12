@@ -94,7 +94,8 @@ MACHINES: dict[str, Machine] = {
         "CGB",
         cgb_hardware=True,
         oam_bug=False,
-        tac_disable_glitch=True,  # Mooneye timer/rapid_toggle passes on CGB with it (Pan Docs says no)
+        # Mooneye timer/rapid_toggle passes on CGB with it (Pan Docs says no)
+        tac_disable_glitch=True,
         stat_write_glitch=False,
         wave_ram_while_on_glitch=False,
         fea0_read="high_nibble_twice",

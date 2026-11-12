@@ -24,10 +24,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from gameboy_python import MACHINES, GameBoy, load_cartridge  # noqa: E402
-from gameboy_python.machines import DMG_B  # noqa: E402
-from gameboy_python.boot import find_boot_rom  # noqa: E402
 from pngread import read_rgb888, read_shades  # noqa: E402
+
+from gameboy_python import MACHINES, GameBoy, load_cartridge  # noqa: E402
+from gameboy_python.boot import find_boot_rom  # noqa: E402
+from gameboy_python.machines import DMG_B  # noqa: E402
 
 SUITE = ROOT / "tests/test_roms/gbtr/gambatte"
 FRAME_T = 70224
@@ -56,7 +57,9 @@ def _glyphs() -> dict[str, bytes]:
         "e": "........|.#######|.#......|.#......|.#######|.#......|.#......|.#######",
         "f": "........|.#######|.#......|.#......|.#######|.#......|.#......|.#......",
     }
-    return {k: bytes(3 if c == "#" else 0 for r in v.split("|") for c in r) for k, v in rows.items()}
+    return {
+        k: bytes(3 if c == "#" else 0 for r in v.split("|") for c in r) for k, v in rows.items()
+    }
 
 
 TILES = _glyphs()
@@ -67,7 +70,9 @@ def plan(rom: Path, cgb: bool = False) -> list[tuple[str, str]]:
     CGB): ("out", digits) or ("png", path). A ROM named ``..._out`` with neither marker is CGB-only."""
     stem = rom.with_suffix("").name
     tests: list[tuple[str, str]] = []
-    markers = ("dmg08_cgb04c_out", "cgb04c_out", "_out") if cgb else ("dmg08_cgb04c_out", "dmg08_out")
+    markers = (
+        ("dmg08_cgb04c_out", "cgb04c_out", "_out") if cgb else ("dmg08_cgb04c_out", "dmg08_out")
+    )
     for marker in markers:
         if marker in stem and (not cgb or marker != "_out" or "dmg08_out" not in stem):
             tail = stem[stem.index(marker) + len(marker) :]
@@ -75,7 +80,9 @@ def plan(rom: Path, cgb: bool = False) -> list[tuple[str, str]]:
                 match = re.match(r"[0-9a-fA-F]+", tail)
                 tests.append(("out", match.group(0).lower() if match else ""))
             break
-    for suffix in (("_dmg08_cgb04c.png", "_cgb04c.png") if cgb else ("_dmg08_cgb04c.png", "_dmg08.png")):
+    for suffix in (
+        ("_dmg08_cgb04c.png", "_cgb04c.png") if cgb else ("_dmg08_cgb04c.png", "_dmg08.png")
+    ):
         png = rom.with_name(rom.with_suffix("").name + suffix)
         if png.exists():
             tests.append(("png", str(png)))
@@ -95,7 +102,11 @@ def matches_out(frame: bytes, digits: str) -> bool:
 def lut(word: int) -> int:
     """Gambatte's testrunner colour for an RGB555 word, as 0xRRGGBB (its ``lut`` in runTestRom)."""
     r, g, b = word & 31, (word >> 5) & 31, (word >> 10) & 31
-    return (((13 * r + 2 * g + b) >> 1) << 16) | (((3 * g + b) << 1) << 8) | ((3 * r + 2 * g + 11 * b) >> 1)
+    return (
+        (((13 * r + 2 * g + b) >> 1) << 16)
+        | (((3 * g + b) << 1) << 8)
+        | ((3 * r + 2 * g + 11 * b) >> 1)
+    )
 
 
 def cgb_shades(frame: bytes) -> bytes:
@@ -133,7 +144,9 @@ def run(args: tuple) -> list[tuple[str, str, bool, bool | None]]:
     boot, label = (None, "") if skip_boot else find_boot_rom("CGB" if cgb else "DMG")
     if not skip_boot and label != "real boot ROM":
         raise SystemExit("no real boot ROM")
-    gb = GameBoy(load_cartridge(rom.read_bytes()), MACHINES[machine] if cgb else DMG_B, boot_rom=boot)
+    gb = GameBoy(
+        load_cartridge(rom.read_bytes()), MACHINES[machine] if cgb else DMG_B, boot_rom=boot
+    )
     end = (15 if skip_boot else (CGB_FRAMES if cgb else FRAMES)) * FRAME_T
     step = gb.cpu.step
     while gb.t < end:
@@ -142,8 +155,7 @@ def run(args: tuple) -> list[tuple[str, str, bool, bool | None]]:
     ours = judge(frame, tests, cgb)
     theirs = sameboy(rom) if with_sameboy and not cgb else [None] * len(tests)
     return [
-        (suite_name(rom), k, ok, sb)
-        for (k, _), ok, sb in zip(tests, ours, theirs, strict=True)
+        (suite_name(rom), k, ok, sb) for (k, _), ok, sb in zip(tests, ours, theirs, strict=True)
     ]
 
 
@@ -168,12 +180,20 @@ def main() -> int:
     parser.add_argument("--only", help="a subdirectory of the suite, e.g. m2int_m2stat")
     parser.add_argument("--match", help="only ROMs whose file name matches this regular expression")
     parser.add_argument("--sameboy", action="store_true")
-    parser.add_argument("--skip-boot", action="store_true", help="start from the post-boot state, 15 frames")
+    parser.add_argument(
+        "--skip-boot", action="store_true", help="start from the post-boot state, 15 frames"
+    )
     parser.add_argument("--json", type=Path)
-    parser.add_argument("--sameboy-from", type=Path, help="reuse the SameBoy column of an earlier --json")
+    parser.add_argument(
+        "--sameboy-from", type=Path, help="reuse the SameBoy column of an earlier --json"
+    )
     parser.add_argument("--jobs", type=int, default=14)
-    parser.add_argument("--cgb", action="store_true", help="the CGB-04c verdicts, on the CGB E board")
-    parser.add_argument("--machine", default="cgb", help="with --cgb: the CGB row to run (cgb, cgb-c)")
+    parser.add_argument(
+        "--cgb", action="store_true", help="the CGB-04c verdicts, on the CGB E board"
+    )
+    parser.add_argument(
+        "--machine", default="cgb", help="with --cgb: the CGB row to run (cgb, cgb-c)"
+    )
     parser.add_argument(
         "--set",
         action="append",
@@ -217,8 +237,8 @@ def main() -> int:
         for _name, _kind, ok, sb in results:
             table[ok, sb] += 1
         print(
-            "board / SameBoy: both pass %d, both fail %d, board only %d, SameBoy only %d"
-            % (table[True, True], table[False, False], table[True, False], table[False, True])
+            f"board / SameBoy: both pass {table[True, True]}, both fail {table[False, False]}, "
+            f"board only {table[True, False]}, SameBoy only {table[False, True]}"
         )
         for name, kind, ok, sb in results:
             if not ok:
