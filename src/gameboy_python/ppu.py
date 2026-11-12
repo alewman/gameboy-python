@@ -891,7 +891,7 @@ class PPU:
         dots = OBJ_FETCH_DOTS
         if not self.penalised:  # FITTED: the first object on a line costs less
             self.penalised = True
-            if not self.is_shadow or not SHADOW_FULL_OBJECT:
+            if not self.is_shadow or self.cgb or not SHADOW_FULL_OBJECT:
                 dots -= FIRST_OBJECT_DISCOUNT_DS if self.cgb_mode and self.double_speed else FIRST_OBJECT_DISCOUNT
         self.obj_dots = dots
         self.obj_low_at = max(dots - 3, 0)
