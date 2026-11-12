@@ -1177,6 +1177,7 @@ scx_during_m3/scx_0367c0/scx_during_m3_4.gbc png
 scx_during_m3/scx_0367c0/scx_during_m3_5.gbc png
 scx_during_m3/scx_0367c0/scx_during_m3_6.gbc png
 scx_during_m3/scx_0761c0/scx_during_m3_1.gbc png
+scx_during_m3/scx_0761c0/scx_during_m3_4.gbc png
 scx_during_m3/scx_0761c0/scx_during_m3_5.gbc png
 scx_during_m3/scx_0761c0/scx_during_m3_6.gbc png
 scx_during_m3/scx_during_m3_spx0.gbc png
@@ -1185,10 +1186,14 @@ scx_during_m3/scx_during_m3_spx2.gbc png
 scx_during_m3/scx_m3_extend_1_dmg08_cgb04c_out3.gbc out
 scx_during_m3/scx_m3_extend_2_dmg08_cgb04c_out0.gbc out
 scy/scx3/scy_during_m3_1.gbc png
+scy/scx3/scy_during_m3_2.gbc png
+scy/scx3/scy_during_m3_3.gbc png
 scy/scx3/scy_during_m3_4.gbc png
 scy/scx3/scy_during_m3_5.gbc png
 scy/scx3/scy_during_m3_6.gbc png
 scy/scy_during_m3_1.gbc png
+scy/scy_during_m3_2.gbc png
+scy/scy_during_m3_3.gbc png
 scy/scy_during_m3_4.gbc png
 scy/scy_during_m3_5.gbc png
 scy/scy_during_m3_6.gbc png

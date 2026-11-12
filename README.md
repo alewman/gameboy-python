@@ -7,7 +7,7 @@ the picture processor dot by dot, the sound unit, OAM DMA, the serial port
 and joypad, the cartridge connector and the MBCs behind it, and the clock
 that ties them together.
 
-**Status (2026-10-07): milestone 1 done** (the CPU on the board: bus, timer, interrupts, serial, OAM DMA, ROM-only and MBC1, boot; the PPU is a timing skeleton; results in docs/validation.md). Run `python -m gameboy_python ROM.gb`. Earlier groundwork: The documents in
+**Status (2026-11-11):** DMG and CGB boards with sound, five MBC families and a play window. Gambatte's hardware verdicts: 1,695 of 1,784 DMG-08, 2,821 of 3,221 CGB-04c; all 24 of Mealybug Tearoom's DMG pictures pixel-exact (the DMG picture is drawn by `dmg_pixels.py`, translated from docboy); Mooneye, SameSuite, dmg-acid2, cgb-acid2 and cgb-acid-hell pass. Results and history in [docs/validation.md](docs/validation.md). Run `python -m gameboy_python play ROM.gb`. Earlier groundwork: The documents in
 [`docs/`](docs/README.md) gather what the build needs, every fact with its
 source and tier: the hardware, the timing, the cartridges, the quirks and
 contradictions, the oracles (with the die-level model running here), a
@@ -36,7 +36,7 @@ dumps.
 Nothing third-party is committed. `scripts/fetch_references.py` rebuilds
 `reference/` and `tests/test_roms/` from `scripts/pinned_files.json` (the c-sp
 test-ROM bundle v7.0, Gekkio's prebuilt Mooneye suite, GBCTR's PDF, RGBDS
-1.0.4, pinned by SHA-256) and `scripts/pinned_repos.json` (34 repositories at
+1.0.4, pinned by SHA-256) and `scripts/pinned_repos.json` (35 repositories at
 full commit SHAs: Pan Docs, GBCTR, the test suites, SameBoy, dmg-sim, GateBoy,
 the die schematics, Icarus Verilog):
 

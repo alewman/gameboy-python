@@ -33,19 +33,9 @@ MEALYBUG = GBTR / "mealybug-tearoom-tests" / "ppu"
 #: the Mealybug DMG pictures the board matches pixel for pixel (scripts/mealybug_compare.py scores
 #: all 24; the rest are listed in docs/validation.md). They draw the boot ROM's (R) tile, so they
 #: are booted with the real DMG boot ROM.
-MEALYBUG_EXACT = [
-    "m2_win_en_toggle",
-    "m3_bgp_change",
-    "m3_obp0_change",
-    "m3_scx_high_5_bits",
-    "m3_scx_low_3_bits",
-    "m3_window_timing",
-    "m3_window_timing_wx_0",
-    "m3_wx_4_change",
-    "m3_wx_4_change_sprites",
-    "m3_wx_5_change",
-    "m3_wx_6_change",
-]
+MEALYBUG_EXACT = sorted(
+    p.name[: -len("_dmg_blob.png")] for p in MEALYBUG.glob("*_dmg_blob.png")
+)  # all 24 (dmg_pixels.py)
 
 
 @pytest.mark.slow

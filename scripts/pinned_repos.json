@@ -81,6 +81,15 @@
   "note": "SystemVerilog DMG-CPU B incl. SM83 generated from dmg-schematics; boot/quickboot.bin; needs Icarus Verilog newer than 12"
  },
  {
+  "path": "reference/src/docboy",
+  "url": "https://github.com/Docheinstein/docboy",
+  "rev": "01e04d3d9fcb4ea28d05f468771127b2f6bd3549",
+  "date": "2026-08-21T00:48:22+02:00",
+  "sparse": [],
+  "license": "MIT",
+  "note": "Docheinstein's emulator; src/gameboy_python/dmg_pixels.py translates its pixel pipeline"
+ },
+ {
   "path": "reference/src/gambatte-core",
   "url": "https://github.com/pokemon-speedrunning/gambatte-core",
   "rev": "5a41a68c25402421fb1983ddadc9faf2418ddb0f",

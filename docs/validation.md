@@ -144,11 +144,13 @@ reads come a fitted number of dots after the pop. Every fitted constant is marke
 - **dmg-acid2**: pixel-exact on the DMG picture from skip-boot (`tests/test_pictures.py`).
 - **Mooneye**: all 66 applicable ROMs pass (skip-boot, quickboot and the real boot ROM), including
   `ppu/*` and the three boot-ROM phase tests.
-- **Mealybug (DMG blob)**: 5 of 24 pixel-exact (`m2_win_en_toggle`, `m3_bgp_change`, `m3_obp0_change`,
-  `m3_scx_high_5_bits`, `m3_scx_low_3_bits`; `scripts/mealybug_compare.py`, booted from the real boot
-  ROM because the tests draw its (R) tile); about 34,000 differing pixels over the other 19. This is
-  **not** the brief's acceptance (all DMG pictures): milestone 2 is open on it.
-  The PPU is now two machines: the one that times STAT, IRQs and the stalls from register values at
+- **Mealybug (DMG blob)**: **all 24 pixel-exact** since 2026-11-11 (`scripts/mealybug_compare.py`,
+  booted from the real boot ROM because the tests draw its (R) tile; `tests/test_pictures.py`
+  holds them all). The DMG picture is now drawn by `dmg_pixels.py`, a fetcher-and-FIFO machine
+  translated from docboy (see the 2026-11-11 entry below); this meets the brief's acceptance (all
+  DMG pictures) for milestone 2. The rest of this bullet is the history of the shadow PPU, which
+  still draws CGB games.
+  Before that the PPU was two machines: the one that times STAT, IRQs and the stalls from register values at
   the pops, and a *shadow* of the same code (`SHADOW_LAG` = 2 dots behind, sharing VRAM and OAM)
   that sees the registers later and draws. The split fixed the WX comparator (it now sees WX 4 dots
   late in the shadow) and cost about 2x per dot. What it did not fix, per picture:
@@ -860,6 +862,29 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   differ, 6 unsupported; of the 15, six were the stale BGP glitch above and the rest look like
   animation or random-number phase (bubbles, stars, a different attract-mode animal), which a
   picture cannot settle.
+* **The DMG picture, redrawn (2026-11-11)**: Mealybug DMG 5 -> 24 of 24 pixel-exact, Gambatte
+  DMG-08 1,648 -> 1,695 (nothing lost), CGB-04c 2,820 -> 2,821, DMG emulation about 1.8 times
+  faster (no second PPU). Three steps:
+  * the WX fixes (`1fa8c91`): WX below 7 compared per value, the DMG window's re-match colour-0
+    pixel (SameBoy `insert_bg_pixel`), which brought the four `m3_wx_*` pictures and
+    `m3_window_timing*` exact and Gambatte to 1,650;
+  * fits on the shadow PPU (`ff81edd`): object rows cut to the height LCDC.2 shows at each read
+    (SameBoy `get_object_line_address`), the drawing side paying for the line's first object in
+    full, and DMG colouring delays to match. Gambatte DMG 1,690 (+40, mostly `bgtiledata`,
+    `bgtilemap`, `scy` and `sprites` pictures) and Mealybug 14 of 24;
+  * the rest would not fit by constants: Mealybug's `m3_lcdc_tile_sel_change` bands, for one,
+    need an object fetch to fall after its tile's high byte for objects at X 8-17 but before the
+    tile's map read for X 0-2. The Emulator Shootout's leader, docboy (MIT, 258 of 261), draws all
+    24, so its DMG pixel pipeline is translated as `src/gameboy_python/dmg_pixels.py` and draws
+    the DMG picture, `DRAW_LAG` = 5 dots behind the timing PPU (all 24 at 5 only; 2 to 8 tried).
+    The timing PPU (STAT, interrupts, locks) is unchanged and no longer draws on a DMG; the DMG
+    paths of the shadow PPU are gone. docboy does not run Gambatte's tests, and its first cut lost
+    30 of Gambatte's hardware pictures; three changes, all Gambatte-led, won them back and five
+    more: the map column follows the pixel position and SCX at GetTile, as SameBoy computes it
+    (docboy keeps a tile counter: `scx_during_m3`, where a write changes SCX's low bits mid-line),
+    the `SCX % 8` drop compares with SCX as it changes (docboy reads it once), and SameBoy's
+    WX=166 rule (no window that line, a window row counted, the next line starting inside the
+    window at tile 1: `window/on_screen/wxA6_*`).
 * **Not done**: SameBoy columns for the CGB runs, the SGB and AGB rows, DMG0/CGB0 revisions of
   the CGB, the real-boot and skip-boot equivalence check for CGB (the DMG's was identical), and
   the CGB speed-switch's PPU "odd mode".
