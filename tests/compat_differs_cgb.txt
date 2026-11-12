@@ -1,0 +1,47 @@
+# scripts/compat_sweep.py --model cgb --tier titles at 9d1e640: {'skipped': 1308, 'same': 791, 'near': 282, 'differs': 45, 'unsupported': 12}
+# dump, pixels at best at the worst of frames 600, 960, 1500, board
+Aqualife (Japan) (SGB Enhanced) (GB Compatible).zip	903 px	mbc5
+Baby Felix - Halloween (Europe) (En,Fr,De,Es,It,Nl).zip	2388 px	mbc5
+Bakukyuu Renpatsu!! Super B-Daman - Gekitan! Rising Valkyrie!! (Japan) (SGB Enhanced) (GB Compatible).zip	20208 px	mbc5
+Bust-A-Move Millennium (USA, Europe).zip	6211 px	mbc5
+Chicken Run (USA, Europe) (En,Fr,De,Es,It).zip	38 px	mbc5
+Dino Breeder 3 - Gaia Fukkatsu (Japan) (SGB Enhanced) (GB Compatible).zip	1009 px	mbc5
+Dragon Quest Monsters 2 - Maruta no Fushigi na Kagi - Iru no Bouken (Japan) (SGB Enhanced) (GB Compatible).zip	353 px	mbc5
+Dragon Quest Monsters 2 - Maruta no Fushigi na Kagi - Ruka no Tabidachi (Japan) (Rev 1) (SGB Enhanced) (GB Compatible).zip	353 px	mbc5
+Dragon Warrior Monsters 2 - Cobi's Journey (USA) (SGB Enhanced) (GB Compatible).zip	348 px	mbc5
+Dragon Warrior Monsters 2 - Tara's Adventure (USA) (SGB Enhanced) (GB Compatible).zip	348 px	mbc5
+Golf Ou - The King of Golf (Japan) (SGB Enhanced) (GB Compatible).zip	49 px	mbc5
+Hamster Paradise 2 (Japan) (Rev 1).zip	56 px	mbc5
+Honkaku Shougi - Shougi Ou (Japan) (SGB Enhanced) (GB Compatible).zip	1038 px	mbc5
+J.League Excite Stage GB (Japan).zip	106 px	mbc5
+Jack no Daibouken - Daimaou no Gyakushuu (Japan) (SGB Enhanced) (GB Compatible).zip	827 px	mbc5
+Jisedai Begoma Battle Beyblade (Japan).zip	128 px	mbc5
+Katou Hifumi Kudan - Shougi Kyoushitsu (Japan) (SGB Enhanced) (GB Compatible).zip	932 px	mbc5
+LEGO Alpha Team (USA).zip	21546 px	mbc5
+Lodoss-tou Senki - Eiyuu Kishiden GB (Japan) (SGB Enhanced) (GB Compatible).zip	149 px	mbc5
+MTV Sports - Pure Ride (USA, Europe).zip	3893 px	mbc5
+Micro Maniacs (Europe).zip	576 px	mbc5
+Mizuki Shigeru no Shin Youkaiden (Japan).zip	1961 px	mbc5
+Moorhuhn 2 - Die Jagd geht weiter (Germany).zip	80 px	mbc5
+NHL 2000 (USA, Europe) (SGB Enhanced) (GB Compatible).zip	23040 px	mbc5
+Nakayoshi Pet Series 3 - Kawaii Koinu (Japan).zip	15841 px	mbc5
+Nakayoshi Pet Series 4 - Kawaii Koneko (Japan).zip	832 px	mbc5
+Nakayoshi Pet Series 5 - Kawaii Hamster 2 (Japan).zip	15464 px	mbc5
+Pokemon Puzzle Challenge (USA, Australia).zip	147 px	mbc5
+Pokemon de Panepon (Japan).zip	138 px	mbc5
+Portal Runner (USA).zip	6 px	mbc5
+Pro Darts (USA).zip	32 px	mbc5
+Puzzle Bobble Millennium (Japan).zip	6183 px	mbc5
+Quest - Brian's Journey (USA) (GB Compatible).zip	434 px	mbc5
+Razmoket, Les - 100% Angelica (France).zip	23040 px	mbc5
+Rugrats - Totally Angelica (USA, Europe).zip	23040 px	mbc5
+Rugrats - Typisch Angelica (Germany).zip	23040 px	mbc5
+Sangokushi - Game Boy Ban 2 (Japan) (SGB Enhanced) (GB Compatible).zip	40 px	mbc5
+Spawn (USA).zip	2 px	mbc5
+Supreme Snowboarding (Europe) (En,Fr,De).zip	8 px	mbc5
+Tom and Jerry in - Mouse Attacks! (USA) (Rev 1).zip	1485 px	mbc5
+Totsugeki! Papparatai (Japan) (SGB Enhanced) (GB Compatible).zip	4374 px	mbc5
+Tyrannosaurus Tex (World) (Piko Interactive).zip	7 px	mbc5
+Uchuujin Tanaka Tarou de - RPG Tsukuru GB 2 (Japan).zip	2083 px	mbc5
+Warau Inu no Bouken - Silly Go Lucky! (Japan).zip	64 px	mbc5
+Warlocked (USA).zip	516 px	mbc5
