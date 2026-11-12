@@ -7,7 +7,7 @@ the picture processor dot by dot, the sound unit, OAM DMA, the serial port
 and joypad, the cartridge connector and the MBCs behind it, and the clock
 that ties them together.
 
-**Status (2026-11-11):** DMG and CGB boards with sound, five MBC families and a play window. Gambatte's hardware verdicts: 1,695 of 1,784 DMG-08, 2,821 of 3,221 CGB-04c; all 24 of Mealybug Tearoom's DMG pictures and its 20 CPU CGB D ones match hardware (a DMG cartridge's picture is drawn by `dmg_pixels.py`, translated from docboy); the Emulator Shootout's list: 255 of 258; Mooneye, SameSuite, dmg-acid2, cgb-acid2 and cgb-acid-hell pass. Results and history in [docs/validation.md](docs/validation.md). Run `python -m gameboy_python play ROM.gb`. Earlier groundwork: The documents in
+**Status (2026-11-11):** DMG and CGB boards with sound, five MBC families and a play window. Gambatte's hardware verdicts: 1,695 of 1,784 DMG-08, 2,821 of 3,221 CGB-04c; all 24 of Mealybug Tearoom's DMG pictures and its 20 CPU CGB D ones match hardware (a DMG cartridge's picture is drawn by `dmg_pixels.py`, translated from docboy); the Emulator Shootout's list: 256 of 258; Mooneye, SameSuite, dmg-acid2, cgb-acid2 and cgb-acid-hell pass. Results and history in [docs/validation.md](docs/validation.md). Run `python -m gameboy_python play ROM.gb`. Earlier groundwork: The documents in
 [`docs/`](docs/README.md) gather what the build needs, every fact with its
 source and tier: the hardware, the timing, the cartridges, the quirks and
 contradictions, the oracles (with the die-level model running here), a

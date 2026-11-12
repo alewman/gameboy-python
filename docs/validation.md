@@ -903,6 +903,19 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   differs on BGP and the window's timing), and the two DMG-CPU B pictures, which differ from
   the blob ones by 7 pixels: B shows LCDC.0 turning on a dot sooner than blob (the enable bits
   ORed with the previous dot's, 4 pixels left after that) and the window a dot sooner.
+* **strikethrough.gb, and the two daid CGB tests (2026-11-11)**: the PPU's OAM reads during an OAM
+  DMA. While the DMA holds the bus the scan does not read and goes on with the Y and X it read
+  last, and an object's tile and attribute read gets the pair of bytes the DMA is writing
+  (docboy `OamBus::read_word_request`, SameBoy `oam_read`). `strikethrough.gb` is now exact on
+  the DMG (`tests/test_pictures.py`); Gambatte DMG-08 and CGB-04c unchanged, every picture test
+  unchanged. On a CGB (compatibility mode) its line 68 is still wrong (49 pixels): something in
+  the CGB's DMA timing, not the address read. The Emulator Shootout: **256 of 258**. The two
+  left are daid's CGB tests, and both pull against Gambatte's CGB-04c verdicts: `ppu_scanline_bgp`
+  (GBC) is exact when the CGB's whole line-153 LY=LYC sequence runs 4 dots later (the early
+  LYC=0 point at dot 12, the flag's gap to dot 16), which loses 9 Gambatte `ly0`, `lycEnable`,
+  `lyc0int` and `lycm2int` verdicts; `speed_switch_timing_ly` passes at `SWITCH_LY_LEAD` 2 and
+  loses 3 (above). Likely a CPU CGB revision difference (Gambatte's CGB is a CGB-04, the board
+  claims CGB E); not settled.
 * **Not done**: SameBoy columns for the CGB runs, the SGB and AGB rows, DMG0/CGB0 revisions of
   the CGB, the real-boot and skip-boot equivalence check for CGB (the DMG's was identical), and
   the CGB speed-switch's PPU "odd mode".

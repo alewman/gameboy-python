@@ -145,6 +145,7 @@ class GameBoy:
         self.ppu.cgb_mode = cgb  # the boot ROM runs in CGB mode and picks compatibility by KEY0
         self.apu = APU(model=CGB if cgb else DMG)
         self.dma = OamDma(self._dma_source, self._dma_write)
+        self.ppu.dma = self.dma
         self._cpu_step = self.cpu.step
         if cgb:
             self.cpu.step = self.step  # instruction boundaries are where HDMA blocks run

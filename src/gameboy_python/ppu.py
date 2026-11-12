@@ -289,6 +289,7 @@ class PPU:
         "scy_hist",
         "shadow",
         "pixels",
+        "dma",
         "skip",
         "skip_scan",
         "stat_blocking",
@@ -439,6 +440,7 @@ class PPU:
         self.win_start_x = -1
         self.shadow: PPU | None = None
         self.pixels: DmgPixels | None = None
+        self.dma = None  # the board's OAM DMA, which the drawing machine looks at
         if not _shadow and DMG_PIXELS:
             self.pixels = DmgPixels(self)  # the DMG picture, a CGB's in compatibility mode too
         if not _shadow and cgb:

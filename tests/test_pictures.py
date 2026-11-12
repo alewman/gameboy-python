@@ -69,3 +69,13 @@ def test_a_bgp_write_glitches_one_pixel_of_one_frame():
     gb.run_frames(3)
     assert gb.ppu.bgp_glitch == (-1, -1, 0)
     assert gb.ppu.frame == still
+
+
+def test_strikethrough_reads_oam_through_a_dma():
+    """strikethrough.gb: the scan keeps its last Y and X while an OAM DMA holds the bus, and an
+    object's tile read gets the pair of bytes the DMA is writing (dmg_pixels.py)."""
+    path = GBTR / "strikethrough"
+    if not (path / "strikethrough.gb").exists():
+        pytest.skip("run scripts/fetch_references.py")
+    want, _w, _h = read_shades(path / "strikethrough-dmg.png")
+    assert frame_of(path / "strikethrough.gb", 60) == want

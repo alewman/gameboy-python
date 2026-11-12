@@ -59,6 +59,7 @@ SCREEN_H = 144
 LAST_X = 168  # lx runs 0..167: 8 hidden pixels, then the 160 shown ones
 PIXELS_START = 80  # the dot pixel transfer starts at, on every line
 DUMMY_DOTS = 3  # the thrown-away first fetch: the FIFO is filled with junk on its last dot
+DMA_INDEX_BACK = 1
 CGB_REG_DELAY = 2  # CGB: dots before an LCDC, SCX, SCY or WX write reaches the pixel pipeline
 
 
@@ -84,6 +85,7 @@ class DmgPixels:
         self.stage = self._idle
         self.oam_entries: list[list[tuple[int, int]]] = [[] for _ in range(LAST_X)]
         self.scan_count = 0
+        self.scan_y = self.scan_x = 0
         # CGB: the last data the fetcher read, for its glitches
         self.last_low = self.last_high = self.last_unsigned = 0
         self.last_fetch = 0
@@ -152,15 +154,25 @@ class DmgPixels:
 
     # ----- OAM scan -----------------------------------------------------------------------
 
+    def _dma_busy(self) -> bool:
+        dma = self.ppu.dma
+        return dma is not None and dma.active
+
     def _scan(self, entry: int) -> None:
-        if self.scan_count >= 10 or entry >= 40:
+        if entry >= 40:
             return
         oam = self.ppu.oam
-        y = oam[entry * 4]
+        if not self._dma_busy():
+            # an OAM DMA holds the bus: the scan does not read, and goes on with the Y and X it
+            # read last (docboy oam_scan_flush_read_request; strikethrough.gb)
+            self.scan_y, self.scan_x = oam[entry * 4], oam[entry * 4 + 1]
+        if self.scan_count >= 10:
+            return
+        y = self.scan_y
         height = 16 if self.lcdc & 4 else 8
         top = y - 16
         if top <= self.ly < top + height:
-            x = oam[entry * 4 + 1]
+            x = self.scan_x
             if x < LAST_X:
                 self.oam_entries[x].append((entry, y))
             self.scan_count += 1
@@ -559,9 +571,13 @@ class DmgPixels:
 
     def _obj_tile_1(self) -> None:
         oam = self.ppu.oam
-        entry = self.obj_entry[0]
-        self.obj_tile = oam[entry * 4 + 2]
-        self.obj_attrs = oam[entry * 4 + 3] & 0xF0  # the low nibble is a CGB game's
+        address = self.obj_entry[0] * 4 + 2
+        if self._dma_busy():
+            # the PPU does not drive OAM's address while a DMA writes: the read gets the pair of
+            # bytes at the DMA's address (docboy OamBus::read_word_request; strikethrough.gb)
+            address = (self.ppu.dma.index - DMA_INDEX_BACK) & 0xFE
+        self.obj_tile = oam[address]
+        self.obj_attrs = oam[address + 1] & 0xF0  # the low nibble is a CGB game's
         self.fetch = self._obj_low_0
 
     def _obj_data_address(self) -> None:
