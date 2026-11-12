@@ -109,7 +109,8 @@ LCD_ON_DS = -2
 LINE0_LEAD = 0  # FITTED (Mealybug line_0_fix): on line 0 the pixel pipeline runs this early
 BGP_GLITCH_DOT = 1  # FITTED: the dot, counted from the write's, whose palette is the OR
 # FITTED (Mealybug): dots from a pop to each register sample
-LCDC_DELAY = 3
+LCDC_DELAY = 0  # DMG (its drawing PPU pays for objects in full)
+LCDC_DELAY_CGB = 3
 BGP_DELAY = 1
 SCY_LAG = 4
   # FITTED (Gambatte scy/scy_during_m3_*): dots a SCY write takes to reach the fetcher
@@ -118,6 +119,7 @@ SCY_LAG = 4
 # takes its column from SCX this many dots after its step's first dot, and the screen position at
 # that first dot
 SCX_COL_DOT = 2
+SHADOW_SCX_COL_DOT_OBJ = 2
 SCX_COL_DOT_OBJ = 5  # ... once an object has been fetched (our fetches then run 3 dots early)
 SCX_COL0_DOT = 0  # column 0: SCX >> 3 at its step's first dot (scx_during_m3 variants 3 and 4)
 # FITTED (Gambatte scx_during_m3, Mealybug m3_scx_low_3_bits): dots late the fine-scroll drop
@@ -167,7 +169,8 @@ OAM_RISE_LY0_CGB = 2  # ... and on line 0, one written before this dot of the li
 # FITTED (Gambatte scx_during_m3_ds_* row 0): in double speed line 0's OAM interrupt also comes
 # early, by one M-cycle (SameBoy's line-0 writes land one M-cycle after line 1's, ours two)
 EARLY_LINE0_DS = 2
-OBP_DELAY = 4
+OBP_DELAY = 1  # DMG
+OBP_DELAY_CGB = 4
 # FITTED (cgb-acid-hell: 1 and 3 leave its two pixels wrong): dots from a write clearing LCDC.4
 # to the tile data read that returns the tile number instead (the CGB's TILE_SEL glitch)
 SEL_GLITCH_LAG = 2
@@ -180,6 +183,8 @@ LOW_SHIFT = 4
 HIGH_SHIFT = 4
 MAP_READ_DOT = LOW_READ_DOT = HIGH_READ_DOT = 2  # which dot (1 or 2) of its step each fetch reads
 OBJ_FETCH_DOTS = 6
+OBJ_EARLY_RUN = 0
+OBJ_EARLY_X = 3  # DMG drawing PPU: objects left of this X are fetched before the wait
 SHADOW_FULL_OBJECT = 1  # the drawing PPU on a DMG pays for the first object in full (Mealybug m3_bgp_change_sprites)
 FIRST_OBJECT_DISCOUNT = 3  # FITTED to Mooneye ppu/intr_2_mode0_timing_sprites
 FIRST_OBJECT_DISCOUNT_DS = 2  # FITTED (Gambatte cgb04c sprites/space in double speed, 261 -> 341 of 380); AGE stat-mode-sprites (single speed) needs 3
@@ -266,6 +271,7 @@ class PPU:
         "obj_pal",
         "obj_tiles_waited",
         "obj_wait_left",
+        "obj_wait_after",
         "obp0",
         "obp1",
         "ocps",
@@ -424,6 +430,7 @@ class PPU:
         self.bgp_glitch: tuple[int, int, int] = (-1, -1, 0)  # (dot, line, OR of old and new)
         self.penalised = False
         self.obj_wait_left = 0
+        self.obj_wait_after = 0
         self.obj_tiles_waited = set()
         self.obj_low_at = self.obj_high_at = 0
         self.obj_dots = 0
@@ -731,6 +738,7 @@ class PPU:
         self.dummy = True  # the first fetch is thrown away (Pan Docs Rendering.md, "first12")
         self.penalised = False  # an object has been fetched on this line
         self.obj_wait_left = 0
+        self.obj_wait_after = 0
         self.obj_tiles_waited: set[tuple[bool, int | None]] = set()
         self.obj_dots = 0  # dots left of the object fetch
         self.obj_entry: tuple[int, int, int, int, int] | None = None
@@ -762,7 +770,10 @@ class PPU:
                 if not col:
                     tile_x = (self.scx_hist[SCX_COL0_DOT - ago] >> 3) & 31
                 else:
-                    d = SCX_COL_DOT_OBJ if self.penalised else SCX_COL_DOT
+                    d = SCX_COL_DOT
+                    if self.penalised:
+                        full = self.is_shadow and not self.cgb and SHADOW_FULL_OBJECT
+                        d = SHADOW_SCX_COL_DOT_OBJ if full else SCX_COL_DOT_OBJ
                     if obj:  # begun during an object fetch: SameBoy reads after it, SCX at the read
                         d = ago - 1
                     scx = self.scx_hist[d - ago]
@@ -861,11 +872,13 @@ class PPU:
         ox, index, tile, flags, oy = entry
         for read_at, is_high in ((self.obj_low_at, 0), (self.obj_high_at, 1)):
             if self.obj_dots == read_at:
-                height = 16 if self._lcdc_ago(OBJ_SIZE_LAG) & 4 else 8
-                row = self.ly - oy
+                # LCDC.2 is read at each of the two reads, and the row is cut to that height
+                # (SameBoy get_object_line_address; Mealybug m3_lcdc_obj_size_change)
+                mask = 15 if self._lcdc_ago(OBJ_SIZE_LAG) & 4 else 7
+                row = (self.ly - oy) & mask
                 if flags & 0x40:
-                    row = height - 1 - row
-                if height == 16:
+                    row ^= mask
+                if mask == 15:
                     tile &= 0xFE
                 bank = 0x2000 if self.cgb_mode and flags & 8 else 0
                 data = self.vram[bank + tile * 16 + row * 2 + is_high]
@@ -934,6 +947,11 @@ class PPU:
             return
         if self.obj_dots:
             self._object_dot()
+            return
+        if self.obj_wait_after:  # an early object's wait, spent after its fetch
+            self.obj_wait_after -= 1
+            if OBJ_EARLY_RUN:
+                self._fetcher_dot()
             return
         if self.obj_entry is not None:  # the wait for the object's tile is over: fetch it
             if self.obj_wait_left:
@@ -1043,6 +1061,12 @@ class PPU:
                     self.next_obj += 1
                     self.obj_entry = entry
                     self.obj_wait_left = self._object_wait(entry[0])
+                    if self.is_shadow and not self.cgb and entry[0] < OBJ_EARLY_X and not x:
+                        # DMG: an object this far left matched while the first tile's pixels were
+                        # still being thrown away, so it is fetched before the fetcher goes on
+                        # (Mealybug m3_lcdc_bg_map_change); the wait comes after it
+                        self.obj_wait_after = self.obj_wait_left
+                        self.obj_wait_left = 0
                     if self.obj_wait_left:  # this dot is the first of the wait
                         self.obj_wait_left -= 1
                         self._fetcher_dot()
@@ -1064,9 +1088,9 @@ class PPU:
                             self.x,
                             colour,
                             obj,
-                            d + LCDC_DELAY,
+                            d + (LCDC_DELAY_CGB if self.cgb else LCDC_DELAY),
                             d + BGP_DELAY,
-                            d + OBP_DELAY,
+                            d + (OBP_DELAY_CGB if self.cgb else OBP_DELAY),
                             None,
                             None,
                             None,
