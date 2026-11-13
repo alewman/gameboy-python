@@ -41,8 +41,7 @@ SPEED_SWITCH_HALT = 0x20008  # units, switching from double to single speed
 SPEED_SWITCH_HALT_TO_DOUBLE = 0x20008  # ... and from single to double; FITTED
 #: dots the LCD runs on its own when the speed switches to double, and to single (negative: it
 #: stands still). FITTED on Gambatte speedchange/lcd_offset/lcdoffset1 (230 -> 264 of 357; -4/3,
-#: -2/2, 1/2, -3/3 all lower). SameBoy's TODO has 2 PPU ticks single->double; Gambatte moves the
-#: LCD a cycle ahead on double->single, which is -3 here with our one ds M-cycle longer halt.
+#: -2/2, 1/2, -3/3 all lower). SameBoy's TODO has 2 PPU ticks single->double.
 SWITCH_LCD_DS = 2
 #: dots LY shows the next line early after a switch to double speed. daid's
 #: speed_switch_timing_ly.gbc wants 2 (as after an LCD-on in double speed: ppu.LY_LEAD_DS), but 2
@@ -606,53 +605,72 @@ class GameBoy:
 
     # ----- DMA hooks ----------------------------------------------------------------------
 
-    # Gambatte's CGB conflict map (memptrs.cpp): which 4 KiB regions the CPU shares with the DMA
-    # by the kind of source; bit n = region $n000.
-    _CGB_CONFLICT = {"rom": 0xFCFF, "sram": 0xFCFF, "vram": 0x0300, "wram": 0xF000, "bad": 0xFCFF}
+    # CGB OAM DMA against the CPU, as SameBoy models it (Core/memory.c is_addr_in_dma_use,
+    # GB_read_memory, GB_write_memory; Expat licence). A CGB has three buses: the cartridge
+    # ($0000-$7FFF, $A000-$BFFF), VRAM, and WRAM ($C000 up). While a DMA is moving bytes (not in
+    # its first cycle), a CPU access below $FE00 collides with it when it is on the bus the DMA
+    # reads, and also: anything from $C000 up collides unless the DMA reads VRAM; with a source
+    # from $E000 up (invalid on a CGB) everything but VRAM collides.
 
-    def _cgb_dma_kind(self) -> str:
-        page = self.dma.base
-        if page < 0x80:
-            return "rom"
-        if page < 0xA0:
-            return "vram"
-        if page < 0xC0:
-            return "sram"
-        return "wram" if page < 0xE0 else "bad"
+    @staticmethod
+    def _cgb_bus(address: int) -> int:
+        """0 the cartridge bus, 1 VRAM, 2 WRAM (a CGB's three buses)."""
+        if address < 0x8000 or 0xA000 <= address < 0xC000:
+            return 0
+        return 1 if address < 0xA000 else 2
 
     def _cgb_dma_conflict(self, address: int) -> bool:
-        return address < 0xFE00 and bool(
-            self._CGB_CONFLICT[self._cgb_dma_kind()] >> (address >> 12) & 1
-        )
+        dma = self.dma
+        if address >= 0xFE00 or not dma.index:
+            return False
+        last = (dma.base << 8) | (dma.index - 1)  # the address the DMA read this M-cycle
+        if address == last:
+            return False
+        if address >= 0xC000:
+            return self._cgb_bus(last) != 1
+        if dma.base >= 0xE0:
+            return self._cgb_bus(address) != 1
+        return self._cgb_bus(address) == self._cgb_bus(last)
 
     def _dma_wram_index(self, address: int) -> int:
-        # the WRAM half is named by bit 4 of the DMA page, not by SVBK's bank at $C000
+        # the WRAM half is the one the DMA's address names (its bit 12), not the CPU's
         if (self.dma.base >> 4) & 1:
             return (self.svbk << 12) | (address & 0xFFF)
         return address & 0xFFF
 
+    # What a colliding access does is fitted to Gambatte's oamdma_src*_busypush*/busypop* hardware
+    # verdicts (cgb04c, a CPU CGB C), where they differ from SameBoy (which has OAM get 0 for any
+    # ROM-source write on CGB C-E and never clears OAM on a read). The revisions after C are not
+    # judged: the same rules are used.
+
     def _cgb_dma_read(self, address: int) -> int:
-        # the CPU gets the byte the DMA just moved; from $C000 up and a non-WRAM source it reads
-        # WRAM instead (Gambatte nontrivial_read)
-        kind = self._cgb_dma_kind()
-        if kind != "wram" and address >= 0xC000:
+        dma = self.dma
+        if dma.base >= 0xE0 and self._cgb_bus(address) == 0:
+            return 0xFF  # an invalid source leaves the cartridge bus undriven
+        if address >= 0xC000 and (self._cgb_bus(dma.base << 8) != 2 or dma.base >= 0xE0):
             return self.wram[self._dma_wram_index(address)]
-        value = self.ppu.oam[self.dma.index - 1]
-        if kind == "vram":
-            self.ppu.oam[self.dma.index - 1] = 0
+        value = self.ppu.oam[dma.index - 1]  # the byte the DMA just moved
+        if 0x80 <= dma.base < 0xA0:
+            # a VRAM source: the byte is taken from OAM (busypop7FFF/9FFF from $8000/$9F00: 00)
+            self.ppu.oam[dma.index - 1] = 0
         return value
 
     def _cgb_dma_write(self, address: int, value: int) -> None:
-        kind = self._cgb_dma_kind()
-        if address < 0xC000:
-            self.ppu.oam[self.dma.index - 1] = 0 if kind == "vram" else value
-        elif kind != "wram":
-            self.wram[self._dma_wram_index(address)] = value
+        dma = self.dma
+        if address >= 0xC000:
+            # from a WRAM source the write is lost (srcC000 busypushC001); from any other it
+            # reaches WRAM, in the half the DMA's address names (src0000/A000/E000 busypushC001)
+            if not 0xC0 <= dma.base < 0xE0:
+                self.wram[self._dma_wram_index(address)] = value
+            return
+        # below $C000 the write is lost and OAM takes its place: the CPU's byte, or 0 from a VRAM
+        # source (busypushA001 from $0000/$A000/$E000: 55; busypush8001 from $8000: 00)
+        self.ppu.oam[dma.index - 1] = 0 if 0x80 <= dma.base < 0xA0 else value
 
     def _dma_source(self, address: int) -> int:
         """A DMA source read, on the bus the source page is on (no locks apply)."""
         if self.cgb and self.dma.base >= 0xE0:
-            return 0xFF  # CGB: sources from $E0 up are invalid (Gambatte oam_dma_src_invalid)
+            return 0xFF  # CGB: sources from $E0 up are invalid (SameBoy GB_dma_run)
         if self._boot_at(address):
             value = self.boot_rom[address]  # type: ignore[index]
         elif address < 0x8000 or 0xA000 <= address < 0xC000:

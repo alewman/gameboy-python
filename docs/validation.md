@@ -43,7 +43,7 @@ source commit `31510e12`; the bundle's Mooneye copy is older but has the same
 | **dmg-sim** (SystemVerilog, generated from `dmg-schematics` netlists `28f66aed`) | the whole DMG-CPU B **including the SM83**, WRAM, VRAM, LCD, APU, MBC1/MBC5 carts | from the die (msinger's SM83 schematics; `visual-sm83` exists too) | **~74 min of host time per emulated second**: Mooneye `bits/mem_oam` with `+SECS=0.4` took 29 min 26 s and 506 MB, and its frame 23 matched dmg-sim's expected picture byte for byte (measured 2026-10-05, Icarus Verilog 14.0-devel built here); README says 150 min/s on a Ryzen 5 3600 | The judge for anything a short ROM can show: its README table passes `cpu_instrs`, `instr_timing`, `mem_timing`, `halt_bug`, 11/12 `dmg_sound` (not 10, wave-RAM corruption), every applicable Mooneye acceptance test; not `oam_bug` ("depend on small differences in signal delays which could change with temperature"). |
 | **GateBoy** (aappleby, `metroboy` `36797ad4`) | every standard cell of DMG-CPU B; audio channels are traced in the source (`GateBoyCh1–4.cpp`, `/*#p13.…*/` gate tags) though the README says audio is not simulated (C6) | **"my current best guess"**: the CPU is *not* from the die (README) | README: 6–8 fps (≈8× slower than real time) in fast mode | A fast die-ish detector for PPU/timer/DMA; not a CPU judge. |
 | Gekkio's `gb-research/sm83-cpu-core` (VHDL) | the SM83 alone, from the die | from the die | sibling's measurement: ~6,400 instructions/s | sm83-python's die judge (its rung 5); listed here because a board failure the core cannot explain goes there first |
-| `dmg-schematics` / `DMG-CPU-Inside` (KiCad, CC BY-SA) | schematics, netlists; DMG-CPU-Inside is archived, its errors fixed in dmg-schematics | dmg-schematics includes `sm83/` | — | The document behind both models; read it to settle "which counter bit" questions. |
+| `dmg-schematics` (KiCad, CC BY-SA) | schematics, netlists (furrtek's earlier DMG-CPU-Inside is not used: its author objects to AI use of his work) | dmg-schematics includes `sm83/` | — | The document behind both models; read it to settle "which counter bit" questions. |
 
 **Running dmg-sim here** (no root needed; done 2026-10-05):
 
@@ -982,3 +982,24 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
 * **Not done**: SameBoy columns for the CGB runs, the SGB and AGB rows, DMG0/CGB0 revisions of
   the CGB, the real-boot and skip-boot equivalence check for CGB (the DMG's was identical), and
   the CGB speed-switch's PPU "odd mode".
+
+### Copyleft clean-up (2026-11-12)
+
+A licence audit found two pieces taken from Gambatte's GPL-2 source, both now replaced:
+
+* **CGB OAM DMA conflicts** (`board.py`): the conflict-region table and read/write rules had been
+  written from Gambatte's `memptrs.cpp`/`memory.cpp`. Rewritten from SameBoy's model (Expat:
+  `is_addr_in_dma_use`, `GB_read_memory`, `GB_write_memory`); where SameBoy disagrees with the
+  hardware captures (a colliding cartridge-bus write puts the CPU's byte in OAM, not 0; a colliding
+  read from a VRAM source clears that OAM byte), the rule is fitted to the `oamdma_src*_busypush*`
+  / `busypop*` verdicts and cites them. `oamdma` on `cgb-c` stays 370 of 418 (the same set).
+* **The test runner's reader** (`scripts/gambatte_dmg08.py`): the digit glyphs and the RGB555
+  colour formula had been copied from `testrunner.cpp`. Both are now learned from the tests
+  themselves by `scripts/gambatte_learn.py` (each digit ROM's name gives the digits its screen
+  shows; the expected PNGs give the colours): `tests/gambatte_glyphs.txt`,
+  `tests/gambatte_cgb_colours.txt` (six colour words cover all 198 CGB picture tests).
+
+Both pass lists are unchanged: DMG-08 1,695, CGB-04c on `cgb-c` 2,892 (the identical sets).
+Behaviour first read in Gambatte's source but fitted here (the CGB window undo,
+`WIN_UNDO_DOTS`) is marked as such in `ppu.py`. furrtek's DMG-CPU-Inside was dropped from the
+pins (its author objects to AI use of his work; it was never used in code).

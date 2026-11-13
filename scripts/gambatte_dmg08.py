@@ -3,7 +3,7 @@
 
     python scripts/gambatte_dmg08.py [--write tests/gambatte_dmg08_pass.txt] [--only SUBDIR]
 
-The rules are testrunner.cpp's. A ROM whose name holds ``dmg08_out<hex digits>`` or
+The protocol (encoded in the suite's file names) is: a ROM whose name holds ``dmg08_out<hex digits>`` or
 ``dmg08_cgb04c_out<hex digits>`` is a screen-digit test (the digits are 8x8 tiles along the top row
 of the picture); ``<name>_dmg08.png`` / ``<name>_dmg08_cgb04c.png`` beside a ROM is a picture test
 (every pixel compared after masking the low three bits of each channel). Both run on a DMG with the
@@ -33,40 +33,36 @@ from gameboy_python.machines import DMG_B  # noqa: E402
 SUITE = ROOT / "tests/test_roms/gbtr/gambatte"
 FRAME_T = 70224
 FRAMES = 334 + 15
-CGB_FRAMES = 186 + 15  # testrunner.cpp: the CGB boot ROM's frames and 15 more
+CGB_FRAMES = 186 + 15  # the CGB boot ROM's frames and the 15 the protocol waits
 
-# testrunner.cpp's 8x8 digit tiles: 3 black, 0 the lightest
+# The digit glyphs and the CGB picture colours, learned from the tests themselves by
+# scripts/gambatte_learn.py (the digits each ROM's name says its screen shows; the expected PNGs).
 
 
 def _glyphs() -> dict[str, bytes]:
-    rows = {
-        "0": "........|.#######|.#.....#|.#.....#|.#.....#|.#.....#|.#.....#|.#######",
-        "1": "........|....#...|....#...|....#...|....#...|....#...|....#...|....#...",
-        "2": "........|.#######|.......#|.......#|.#######|.#......|.#......|.#######",
-        "3": "........|.#######|.......#|.......#|..######|.......#|.......#|.#######",
-        "4": "........|.#.....#|.#.....#|.#.....#|.#######|.......#|.......#|.......#",
-        "5": "........|.#######|.#......|.#......|.######.|.......#|.......#|.######.",
-        "6": "........|.#######|.#......|.#......|.#######|.#.....#|.#.....#|.#######",
-        "7": "........|.#######|.......#|......#.|.....#..|....#...|...#....|...#....",
-        "8": "........|..#####.|.#.....#|.#.....#|..#####.|.#.....#|.#.....#|..#####.",
-        "9": "........|.#######|.#.....#|.#.....#|.#######|.......#|.......#|.#######",
-        "a": "........|....#...|..#...#.|.#.....#|.#######|.#.....#|.#.....#|.#.....#",
-        "b": "........|.######.|.#.....#|.#.....#|.######.|.#.....#|.#.....#|.######.",
-        "c": "........|..#####.|.#.....#|.#......|.#......|.#......|.#.....#|..#####.",
-        "d": "........|.######.|.#.....#|.#.....#|.#.....#|.#.....#|.#.....#|.######.",
-        "e": "........|.#######|.#......|.#......|.#######|.#......|.#......|.#######",
-        "f": "........|.#######|.#......|.#......|.#######|.#......|.#......|.#......",
-    }
-    return {
-        k: bytes(3 if c == "#" else 0 for r in v.split("|") for c in r) for k, v in rows.items()
-    }
+    out = {}
+    for line in (ROOT / "tests/gambatte_glyphs.txt").read_text().splitlines():
+        if line and not line.startswith("#"):
+            ch, rows = line.split()[:2]
+            out[ch] = bytes(3 if c == "#" else 0 for r in rows.split("|") for c in r)
+    return out
+
+
+def _colours() -> dict[int, int]:
+    out = {}
+    for line in (ROOT / "tests/gambatte_cgb_colours.txt").read_text().splitlines():
+        if line and not line.startswith("#"):
+            word, colour = line.split()
+            out[int(word, 16)] = int(colour, 16)
+    return out
 
 
 TILES = _glyphs()
+COLOURS = _colours()
 
 
 def plan(rom: Path, cgb: bool = False) -> list[tuple[str, str]]:
-    """The tests this ROM carries for the DMG-08 (or, with ``cgb``, the CGB-04c, the testrunner's
+    """The tests this ROM carries for the DMG-08 (or, with ``cgb``, the CGB-04c, the suite's
     CGB): ("out", digits) or ("png", path). A ROM named ``..._out`` with neither marker is CGB-only."""
     stem = rom.with_suffix("").name
     tests: list[tuple[str, str]] = []
@@ -100,13 +96,9 @@ def matches_out(frame: bytes, digits: str) -> bool:
 
 
 def lut(word: int) -> int:
-    """Gambatte's testrunner colour for an RGB555 word, as 0xRRGGBB (its ``lut`` in runTestRom)."""
-    r, g, b = word & 31, (word >> 5) & 31, (word >> 10) & 31
-    return (
-        (((13 * r + 2 * g + b) >> 1) << 16)
-        | (((3 * g + b) << 1) << 8)
-        | ((3 * r + 2 * g + 11 * b) >> 1)
-    )
+    """The expected PNGs' colour for an RGB555 word (tests/gambatte_cgb_colours.txt); -1 for a
+    word no picture test has shown, which matches nothing."""
+    return COLOURS.get(word & 0x7FFF, -1)
 
 
 def cgb_shades(frame: bytes) -> bytes:
@@ -126,7 +118,7 @@ def judge(frame: bytes, tests: list[tuple[str, str]], cgb: bool = False) -> list
             out.append(matches_out(shades, what))
         elif cgb:
             pixels, width, height = read_rgb888(Path(what))
-            got = [lut(frame[i] | (frame[i + 1] << 8)) & 0xF8F8F8 for i in range(0, len(frame), 2)]
+            got = [lut(frame[i] | (frame[i + 1] << 8)) for i in range(0, len(frame), 2)]
             out.append((width, height) == (160, 144) and got == [p & 0xF8F8F8 for p in pixels])
         else:
             expected, width, height = read_shades(Path(what))

@@ -80,8 +80,9 @@ WX_EDGE_LEAD = 7  # WX=w below 7 is compared 7 - w dots before the first shown p
 # this many dots late
 WX_LAG = 1
 WIN_LAG = 0  # ... and LCDC.5/.0 this many
-# CGB: LCDC.5 cleared just after the window starts puts the background back, as in Gambatte's
-# StartWindowDraw (DMG keeps the window). FITTED (Gambatte cgb04c window +16 -2, late_disable_*):
+# CGB: LCDC.5 cleared just after the window starts puts the background back (DMG keeps the
+# window). FITTED to the hardware verdicts (Gambatte cgb04c window/late_disable_*, +16 -2); the
+# idea was first read in Gambatte's source (docs/validation.md), the dots are this board's fit:
 WIN_UNDO_DOTS = 6  # the clear undoes the window for this many dots after it starts
 WIN_UNDO_REFUND = 3  # ... and gives back this many of the dots the window's start took
 # FITTED (GBMicrotest win*; Gambatte window scx2 CGB +4, DMG +5 over 4)

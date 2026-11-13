@@ -54,15 +54,6 @@
   "note": "reference image + hardware photos"
  },
  {
-  "path": "reference/src/DMG-CPU-Inside",
-  "url": "https://github.com/furrtek/DMG-CPU-Inside",
-  "rev": "dd70d93d6da3d903fb0d655934983708668d1c92",
-  "date": "2026-03-24T16:48:38+01:00",
-  "sparse": [],
-  "license": "CC-BY-SA-4.0",
-  "note": "furrtek's die overlay and schematics (archived)"
- },
- {
   "path": "reference/src/dmg-schematics",
   "url": "https://github.com/msinger/dmg-schematics",
   "rev": "28f66aedf974b91aafeb42443f2b731fcd7769e7",
