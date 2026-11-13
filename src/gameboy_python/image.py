@@ -54,6 +54,24 @@ def rgb_png_bytes(frame: bytes, width: int = 160, height: int = 144) -> bytes:
     )
 
 
+def rgb24_png_bytes(rgb: bytes, width: int, height: int) -> bytes:
+    """8-bit RGB, 3 bytes per pixel, rows top to bottom (a Super Game Boy picture: sgb.py)."""
+    stride = width * 3
+    rows = b"".join(b"\x00" + rgb[y * stride : (y + 1) * stride] for y in range(height))
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(rows, 6))
+        + chunk(b"IEND", b"")
+    )
+
+
 def write_rgb_png(path: Path, frame: bytes) -> None:
     path.write_bytes(rgb_png_bytes(frame))
 
