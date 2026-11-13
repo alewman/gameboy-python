@@ -1003,3 +1003,56 @@ Both pass lists are unchanged: DMG-08 1,695, CGB-04c on `cgb-c` 2,892 (the ident
 Behaviour first read in Gambatte's source but fitted here (the CGB window undo,
 `WIN_UNDO_DOTS`) is marked as such in `ppu.py`. furrtek's DMG-CPU-Inside was dropped from the
 pins (its author objects to AI use of his work; it was never used in code).
+
+### Super Game Boy, HLE (2026-11-13)
+
+`src/gameboy_python/sgb.py` (docs/sgb.md) against **snes-python running the real SGB BIOS**
+(Super Game Boy (World) (Rev 2), MAME's `sns_rom_sgb` boot ROM and SNES IPL, gameboy-python as
+its Game Boy; `scripts/sgb_lle_run.py`) and **SameBoy's HLE SGB** (`scripts/sgb_sameboy.py`,
+colour correction off). Both judges and the HLE boot the same SGB boot ROM. LLE pictures every
+30 SNES frames from 600 to 1800 (41 per game), each against the closest HLE picture within 3
+Game Boy frames, all 256 x 224 pixels at 5 bits per channel (`scripts/sgb_compare.py --lle`).
+
+The command packets the games send are identical in both runs, at the same Game Boy frames, and
+the Game Boy's own frames are byte-identical (checked on Donkey Kong at three points). Two
+layout facts came from the LLE run and are now in the module: the screen shows the layers from
+line 1 (with line 0 the whole picture was one line off), and the last line is black.
+
+| Game (No-Intro) | Exact of 41 | The rest |
+| --- | --- | --- |
+| Donkey Kong (World) (Rev 1) (SGB Enhanced) | 33 | 4 border fade-in (SNES 600-690); 4 window-only, 646-1,212 px |
+| Kirby's Dream Land 2 (USA, Europe) (SGB Enhanced) | 32 | 5 power-on and fade-in (600-720); 4 window-only, 289-720 px (one also an unblanked last line) |
+| Pokemon - Red Version (USA, Europe) (SGB Enhanced) | 36 | 4 fade-in (600-690); 1 window-only, 478 px |
+| Pokemon - Yellow Version (USA, Europe) (CGB+SGB Enhanced) | 35 | 4 fade-in (600-690); 2 window-only, 82 and 520 px |
+| Legend of Zelda, The - Link's Awakening DX (USA, Europe) (Rev 2) | 36 | 5 fade-in (600-720) |
+| Wario Land II (USA, Europe) (SGB Enhanced) | 35 | 4 power-on and fade-in (600-690); 2 window-only, 99 and 123 px |
+| Mario's Picross (USA, Europe) (SGB Enhanced) | 28 | 11 BIOS start-up and fade-in (600-900); 2 window-only, 656 px |
+| Tetris DX (World) (SGB Enhanced) | 0 | border exact from SNES 780 on; the window always differs (23,040 px) |
+
+Causes, each looked at:
+
+* **Fade-in.** The BIOS fades the border in after power-on and after a new PCT_TRN; the HLE
+  shows it at once (out of scope, docs/sgb.md). The differing pixels are the border's (window 0)
+  at dimmed colours.
+* **Window-only bands.** On Donkey Kong, SNES frame 870: Game Boy lines 120-126 of the LLE
+  picture equal lines 128-134 of the HLE picture (every candidate frame), i.e. the low-level
+  SGB showed one 8-line row from the next row's data: a race between the BIOS's copy of the
+  ICD2 row buffers and the Game Boy refilling them. The Game Boy frame itself matched. The
+  other games' bands have the same shape (a few rows, window only) and were not traced one by
+  one. Whether a real SGB tears like this is open (snes-python's `$6000` row count in VBlank
+  is fullsnes's $11, the emulators' $12: docs/cartridge.md there).
+* **Tetris DX** sends CHR_TRN, PCT_TRN and MASK_EN but no palette, so a real SGB keeps its
+  built-in palette 1-A, which is Nintendo's data; the HLE shows its grey ramp.
+
+**SameBoy** (detector), frames 600/900/1200/1500, each against the closest HLE frame within 6,
+SameBoy's line y + 1 against ours (it draws from layer line 0), last line excluded: **the
+border area is exact in all 32 pictures of the eight games.** The whole picture is exact for
+Mario's Picross (4/4), Donkey Kong at 900-1500 and Pokemon Red at 900. The other differences
+are in the Game Boy window only (Kirby 2: about 200 px; Pokemon Yellow, Zelda DX, Wario Land
+II: up to the whole window; Tetris DX: palette 1-A). SameBoy runs its own Game Boy, so its
+window also carries game-state and timing differences from gameboy-python; not analysed,
+since the LLE run (same Game Boy) is the judge for the SGB part.
+
+Tests: `tests/test_sgb.py` (16 synthetic tests: packets, players, every implemented command,
+VRAM-transfer timing, the border, masks, header packets, save states; one slow Donkey Kong
+regression picture where `NO_INTRO_DIR` is set). The fast suite is unchanged (310 passed).

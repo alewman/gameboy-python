@@ -63,7 +63,9 @@ CELLS_W, CELLS_H = 20, 18  # attribute cells (8 x 8 pixels each)
 BORDER_ROWS = 29  # PCT_TRN's map: 28 rows and the extra one (Pan Docs SGB_Command_Border.md)
 
 #: the default palettes (all four): a neutral grey ramp, white to black. The real BIOS starts
-#: from its built-in palette 1-A, which is Nintendo's data and not reproduced (docs/sgb.md).
+#: from its built-in palette 1-A, which is Nintendo's data and not reproduced (docs/sgb.md); a
+#: frontend may pass other colours (``SuperGameBoy(gb, palette=...)``). Games that never send a
+#: palette (Tetris DX) keep this one, so their Game Boy picture differs from a real SGB's.
 GREY_RAMP = (0x7FFF, 0x56B5, 0x294A, 0x0000)
 
 #: MLT_REQ's byte 1 (bits 1-0) -> the mask on the player number: one, two, (two), four players.
@@ -142,7 +144,7 @@ STATE_VERSION = 1
 class SuperGameBoy:
     """The ICD2 and an HLE of the SGB's SNES program, attached to one Game Boy."""
 
-    def __init__(self, gb: GameBoy) -> None:
+    def __init__(self, gb: GameBoy, palette: tuple[int, int, int, int] = GREY_RAMP) -> None:
         if gb.machine.model not in ("sgb", "sgb2"):
             raise ValueError(
                 f"a Super Game Boy needs an sgb or sgb2 machine, not {gb.machine.name}"
@@ -174,9 +176,9 @@ class SuperGameBoy:
         self.transfer_wait = 0
         # the SNES's palettes: 0-3 the Game Boy's (colours 0-3 used), 4-6 the border's, 7 unused
         self.cgram = array("H", bytes(256))
-        for palette in range(4):
+        for number in range(4):
             for shade in range(4):
-                self.cgram[palette * 16 + shade] = GREY_RAMP[shade]
+                self.cgram[number * 16 + shade] = palette[shade]
         self.system_palettes = array("H", bytes(512 * 4 * 2))  # PAL_TRN's 512 x 4 colours
         self.attr_map = bytearray(CELLS_W * CELLS_H)  # palette 0-3 per cell
         self.attr_files = bytearray(ATF_BYTES * ATF_COUNT)  # ATTR_TRN's 45 files
