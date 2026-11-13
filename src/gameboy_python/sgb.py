@@ -55,6 +55,10 @@ WINDOW_X, WINDOW_Y = 48, 40
 #: draws lines VOFS+1 to VOFS+224 (Pan Docs SGB_Command_Border.md). snes-python running the
 #: real BIOS agrees: its picture is this one's, one line up, 0 pixels off (docs/sgb.md).
 FIRST_LINE = 1
+#: ... so the last screen line would show the map's 29th row; the BIOS blanks it (INIDISP $80)
+#: almost always (Pan Docs SGB_Command_Border.md; snes-python: black in every settled frame of
+#: Pokemon Red and Kirby's Dream Land 2). It is drawn black here.
+BLANK_LINES = 1
 CELLS_W, CELLS_H = 20, 18  # attribute cells (8 x 8 pixels each)
 BORDER_ROWS = 29  # PCT_TRN's map: 28 rows and the extra one (Pan Docs SGB_Command_Border.md)
 
@@ -536,7 +540,7 @@ class SuperGameBoy:
         cgram = self.cgram
         backdrop = cgram[0]
         shown = self.shown
-        for screen_y in range(SNES_H):
+        for screen_y in range(SNES_H - BLANK_LINES):  # the blanked lines stay 0
             y = screen_y + FIRST_LINE
             gy = y - WINDOW_Y
             for x in range(SNES_W):
