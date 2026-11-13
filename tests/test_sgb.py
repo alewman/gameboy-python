@@ -352,3 +352,13 @@ def test_donkey_kong_title_with_border() -> None:
     assert sgb.enabled and sgb.border_loaded
     words = sgb.render()
     assert hashlib.sha1(rgb_bytes(words)).hexdigest() == DONKEY_KONG_600
+
+
+def test_from_skip_boot_the_first_packet_arrives() -> None:
+    """Skip-boot starts after the SGB boot ROM, which leaves the ICD2 at both lines high: a
+    game's very first packet (Pokemon Red's MLT_REQ check) is a write of $00 straight away,
+    and it must not be taken for no change."""
+    sgb = machine()
+    assert sgb.p1 == 0x30
+    send(sgb, bytes([0x89, 0x01]) + bytes(14))  # MLT_REQ, two players, with no $30 first
+    assert sgb.players == 1

@@ -68,7 +68,7 @@ u8 = one byte (bools as 0/1), words = little-endian u16s:
 
 | Field | Kind | Size | Meaning |
 | --- | --- | --- | --- |
-| p1 | u8 | | last select bits written ($00, $10, $20, $30) |
+| p1 | u8 | | last select bits written ($00, $10, $20, $30); at attach the board's own select when a boot ROM is mapped, else $30 (what the SGB boot ROM leaves) |
 | receiving, wait_high, bit_count | u8 | | packet receiver state |
 | packet | bytes | 16 | the packet being received |
 | players | u8 | | MLT_REQ byte 1 & 3 |
@@ -157,6 +157,14 @@ causes, all timing: the BIOS's border fade-in after power-on and after a new bor
 low-level SGB occasionally shows from the next row (a row-buffer race on the SNES side), and
 games that never send a palette (Tetris DX), whose window keeps the BIOS's built-in palette
 1-A. The packet stream is identical to the low-level run (same packets, same Game Boy frames).
+
+**From skip-boot** (no boot ROM, as play-gb runs): the ICD2 starts at $30, where the boot ROM's
+header packets leave it. Starting from the board's skip-boot select ($00) lost each game's first
+packet, a $00 start pulse taken for no change; for Pokemon Red that is its MLT_REQ check, so it
+never sent a border (found by the gameboy-rust transcription, 2026-11-13). With the fix, Pokemon
+Red (900 frames) and Pokemon Yellow, Kirby's Dream Land 2, Link's Awakening DX, Wario Land II and
+Tetris DX (1,500) all load their borders from skip-boot; Donkey Kong and Mario's Picross did
+before and still do.
 
 ## Out of scope (not done, on purpose)
 

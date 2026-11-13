@@ -151,7 +151,11 @@ class SuperGameBoy:
             )
         self.gb = gb
         # -- the ICD2: packet receiver, players, pads
-        self.p1 = gb.joypad.select  # the last select bits written (bits 5-4)
+        # the last select bits written (bits 5-4). The SGB boot ROM leaves the ICD2 at $30 (both
+        # lines high after its header packets); skip-boot starts after the boot ROM, so it starts
+        # there too: from the board's skip-boot select ($00) a game's first start pulse ($00)
+        # would look like no change and its first packet (Pokemon Red's MLT_REQ check) be lost
+        self.p1 = gb.joypad.select if gb.boot_mapped else 0x30
         self.receiving = False
         self.wait_high = False  # a pulse was seen: both lines must go high before the next bit
         self.bit_count = 0
