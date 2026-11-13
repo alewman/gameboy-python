@@ -321,9 +321,9 @@ class Pixels:
             shade = (bgp >> (colour * 2)) & 3 if lcdc & 1 else 0
             self.framebuffer[i] = p._rgb(p.bg_pal, 0, shade)
         else:
-            # LCDC.0 clear: the background's colour number is 0, still looked up in BGP (Gambatte
-            # ppu.cpp tileword, SameBoy; Megami Tensei Gaiden: Last Bible II fades this way).
-            # docboy and Pan Docs draw white, which is the same for the usual BGP
+            # LCDC.0 clear: the background's colour number is 0, still looked up in BGP (SameBoy;
+            # Megami Tensei Gaiden: Last Bible II fades this way). docboy and Pan Docs draw
+            # white, which is the same for the usual BGP
             if not lcdc & 1:
                 colour = 0
             self.framebuffer[i] = ((p.bgp | self.last_bgp) >> (colour * 2)) & 3

@@ -263,8 +263,8 @@ same ROM read $20 and $01 in two runs), so "SameBoy passes" is only believed for
 The 3 failures are the old ones: `halt_op_dupe_delay`, `stat_write_glitch_l154_d` (SameBoy fails
 both too), `win0_b`.
 
-**Gambatte `dmg08`** (1,784 ROMs, 1,784 verdicts: screen-digit and `_dmg08.png` picture tests with
-testrunner.cpp's rules; `scripts/gambatte_dmg08.py`, tabulated by `scripts/gambatte_table.py`). The
+**Gambatte `dmg08`** (1,784 ROMs, 1,784 verdicts: screen-digit and `_dmg08.png` picture tests by the
+suite's file-name protocol, glyphs and colours learned from the tests; `scripts/gambatte_dmg08.py`, tabulated by `scripts/gambatte_table.py`). The
 `_outaudio` tests are `scripts/gambatte_audio.py`'s (76 of 87). The first run, from the real boot ROM,
 passed **1,322** (SameBoy 1,642: 1,288 on both, 34 board only, 354 SameBoy only, 108 neither). Skip-boot gave
 the same 1,322, so the post-boot hand-off is a faithful start and later runs use it (15 frames, minutes
@@ -418,7 +418,7 @@ two bytes a pixel in `PPU.frame` on CGB hardware.
   `bgtiledata` 0 of 42 (the DMG's own tile-column offset, still open), `lycEnable` 109 of 147,
   `halt` 59 of 80, `enable_display` 88 of 116, `scy` 12 of 43, `cgbpal_m3` 29 of 44 (palette RAM
   reads and writes at the end of mode 3).
-* **Update (2026-10-11): CGB OAM-DMA bus rules written** from Gambatte's conflict map
+* **Update (2026-10-11; superseded 2026-11-12, see "Copyleft clean-up"): CGB OAM-DMA bus rules written** from Gambatte's conflict map
   (`memptrs.cpp`, `memory.cpp` `nontrivial_read/write`): a CGB source has its own conflict regions
   (ROM/SRAM: everything but VRAM; VRAM: $8000-$9FFF; WRAM: $C000 up), a CPU read in them gets the
   byte the DMA just moved (from $C000 up and a non-WRAM source: WRAM, in the half named by bit 4

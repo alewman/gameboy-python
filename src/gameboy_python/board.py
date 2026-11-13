@@ -391,8 +391,9 @@ class GameBoy:
                 return StopResult(StopAction.NOP, consume_operand=False)
             return StopResult(StopAction.HALT)
         if self.cgb and self.ppu.cgb_mode and self.key1 & 1:
-            # the switch clears DIV like any STOP (Gambatte stop(), SameBoy), at the end of STOP's
-            # operand read: a counter bit that is still high there makes its falling edge
+            # the switch clears DIV like any STOP (Pan Docs Timer_and_Divider_Registers.md,
+            # SameBoy), at the end of STOP's operand read: a counter bit that is still high there
+            # makes its falling edge
             # (Gambatte speedchange*_tima _1/_2 pairs move STOP by one M-cycle). With IME off the
             # CPU then holds the reset one M-cycle more (SameBoy enter_stop_mode;
             # Gambatte speedchange*_div pairs).
@@ -800,8 +801,8 @@ class GameBoy:
             self.timer.write_tac(value)
         elif low == 0x0F:
             # an interrupt raised late in this very cycle is not cleared by the write
-            # nor is a serial interrupt still hidden: it has not happened yet (Gambatte flags it
-            # at the end of the hiding)
+            # nor is a serial interrupt still hidden: it has not happened yet (it reaches IF at
+            # the end of the hiding: Gambatte serial/*_read_if_* verdicts)
             self.cpu.if_ = (value & 0x1F) | self._late_bits | (self.cpu.if_ & self._hide & 8)
         elif low == 0x40:
             self.ppu.write_lcdc(value)
