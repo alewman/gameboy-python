@@ -16,7 +16,11 @@ comes from MAME's device set as snes-python finds it (``SNES_DSP_ROMS``); ``--ip
 restarts the Game Boy once, around SNES frame 430; Game Boy frame counts are from that start.
 
 Writes ``OUT_DIR/snes_FFFFF.png``, ``OUT_DIR/index.json`` (SNES frame -> Game Boy frames
-completed) and ``OUT_DIR/packets.json``.
+completed) and ``OUT_DIR/packets.json``. ``--log`` also writes ``OUT_DIR/frames.jsonl``, one
+line per SNES frame from the start: the frame, the Game Boy's frame count, the INIDISP ($2100)
+values written in it, the number of CGRAM data ($2122) writes, and all 256 CGRAM words (hex)
+when they changed since the last line: how the border fade was measured (docs/sgb.md). A
+picture saved at frame f shows CGRAM as logged at frame f - 1.
 """
 
 from __future__ import annotations
@@ -42,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--start", type=int, default=600)
     parser.add_argument("--every", type=int, default=30)
     parser.add_argument("--ipl", type=Path, help="MAME's snes.zip (or the raw 64-byte IPL)")
+    parser.add_argument("--log", action="store_true", help="also write frames.jsonl")
     args = parser.parse_args(argv)
 
     ipl = None
@@ -57,6 +62,22 @@ def main(argv: list[str] | None = None) -> int:
     packets: list[dict] = []
     index: dict[int, int] = {}
     restart = cart._restart
+    inidisp: list[int] = []
+    cgram_writes = 0
+    last_cgram = b""
+    log = (args.out / "frames.jsonl").open("w") if args.log else None
+    if log is not None:
+        ppu_write = snes.ppu.write
+
+        def logged_write(port: int, value: int) -> None:
+            nonlocal cgram_writes
+            if port == 0x00:
+                inidisp.append(value)
+            elif port == 0x22:
+                cgram_writes += 1
+            ppu_write(port, value)
+
+        snes.ppu.write = logged_write
 
     def restarted() -> None:  # wrap the new Game Boy's P1 hook to log packets
         restart()
@@ -81,12 +102,28 @@ def main(argv: list[str] | None = None) -> int:
     while snes.frames < args.frames:
         snes.run_frames(1)
         frame = snes.frames
+        if log is not None:
+            cgram = bytes(snes.ppu.cgram)
+            line = {
+                "frame": frame,
+                "gb_frame": cart.gb.ppu.frames if cart.gb is not None else None,
+                "inidisp": inidisp,
+                "cgram_writes": cgram_writes,
+            }
+            if cgram != last_cgram:
+                line["cgram"] = cgram.hex()
+                last_cgram = cgram
+            log.write(json.dumps(line) + "\n")
+            inidisp = []
+            cgram_writes = 0
         if frame >= args.start and (frame - args.start) % args.every == 0 and cart.gb is not None:
             write_png(args.out / f"snes_{frame:05d}.png", picture(snes.ppu))
             index[frame] = cart.gb.ppu.frames
             (args.out / "index.json").write_text(json.dumps(index, indent=0))
             (args.out / "packets.json").write_text(json.dumps(packets, indent=0))
             print(frame, cart.gb.ppu.frames, flush=True)
+    if log is not None:
+        log.close()
     return 0
 
 

@@ -10,6 +10,9 @@ snes-python running the real SGB BIOS (scripts/sgb_lle_run.py) or SameBoy's SGB
 Frame matching: the two sides count frames differently (snes-python saves at SNES frames and
 records the Game Boy frame count; SameBoy counts its own), so each judge picture is compared
 with the HLE pictures of nearby Game Boy frames and the closest is reported (``--search``).
+While the game keeps its LCD off no Game Boy frames end, but the SNES side goes on (the border
+fade): the HLE is then also pictured every SNES frame's worth of Game Boy time
+(``sgb.SNES_FRAME_T``), all those pictures counting as the frame the LCD is stuck at.
 SameBoy draws the layers from line 0, the SNES (and sgb.py) from line 1: its line y + 1 is
 compared with our line y. The last line (blanked by the BIOS, sgb.BLANK_LINES) is compared
 only against snes-python. ``--out-dir`` keeps the closest HLE picture of each point as PNG.
@@ -30,6 +33,7 @@ from gameboy_python.sgb import (
     FIRST_LINE,
     GB_H,
     GB_W,
+    SNES_FRAME_T,
     SNES_H,
     SNES_W,
     WINDOW_X,
@@ -100,8 +104,12 @@ def main(argv: list[str] | None = None) -> int:
     judges = {frame: words_of(path) for frame, (path, _c) in points.items()}
     best: dict[int, tuple[int, int, int]] = {}
     keep: dict[int, bytes] = {}
+    last = gb.t
     while wanted and gb.ppu.frames <= max(wanted):
-        gb.run_frames(1)
+        frames = gb.ppu.frames
+        while gb.ppu.frames == frames and gb.t - last < SNES_FRAME_T:
+            gb.cpu.step()
+        last = gb.t
         if gb.ppu.frames not in wanted:
             continue
         mine = sgb.render()
