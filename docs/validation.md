@@ -1032,8 +1032,8 @@ line 1 (with line 0 the whole picture was one line off), and the last line is bl
 Causes, each looked at:
 
 * **Fade-in.** The BIOS fades the border in after power-on and after a new PCT_TRN; the HLE
-  shows it at once (out of scope, docs/sgb.md). The differing pixels are the border's (window 0)
-  at dimmed colours.
+  showed it at once. The differing pixels are the border's (window 0) at dimmed colours. Now
+  modelled: next section.
 * **Window-only bands.** On Donkey Kong, SNES frame 870: Game Boy lines 120-126 of the LLE
   picture equal lines 128-134 of the HLE picture (every candidate frame), i.e. the low-level
   SGB showed one 8-line row from the next row's data: a race between the BIOS's copy of the
@@ -1056,3 +1056,49 @@ since the LLE run (same Game Boy) is the judge for the SGB part.
 Tests: `tests/test_sgb.py` (16 synthetic tests: packets, players, every implemented command,
 VRAM-transfer timing, the border, masks, header packets, save states; one slow Donkey Kong
 regression picture where `NO_INTRO_DIR` is set). The fast suite is unchanged (310 passed).
+
+### Super Game Boy, the border fade (2026-11-13)
+
+Measured on the same low-level run, every SNES frame logged (`scripts/sgb_lle_run.py --log`:
+INIDISP writes, CGRAM, packets) for Donkey Kong, Pokemon Red, Kirby's Dream Land 2, Mario's
+Picross and Wario Land II. The BIOS fades by rewriting CGRAM palettes 4-6 every other SNES
+frame (master brightness stays 15): 32 writes taking each 5-bit channel of the old border down
+by one (`max(c - n, 0)`), 12 frames' pause, 33 writes bringing the new border's up
+(`min(c, n)`). All 65 writes of each of the five games fit, 0 exceptions over 48 colours x 3
+channels. The first write follows the PCT_TRN packet by 5-6 frames; other commands hold the
+cadence up (PAL_TRN, ATTR_TRN 3 frames; SOU_TRN 7 and 9; PAL_SET, ATTR_BLK, MASK_EN 1; the
+same in all five games). MASK_EN starts no fade. The rule and model: docs/sgb.md "The border
+fade" (on the Game Boy's clock, 71,473 T-cycles a SNES frame; first step 4 frames after the
+HLE reads the PCT_TRN data, the only fitted number: 3 or 5 lose 4-5 of 9 consecutive pictures).
+
+`scripts/sgb_compare.py` now also pictures the HLE every SNES frame's worth of Game Boy time
+while the LCD is off (no Game Boy frames end; Wario Land II keeps it off through part of its
+fade-in). Same eight games, same 41 LLE pictures each, before -> after:
+
+| Game | Exact of 41 | The rest |
+| --- | --- | --- |
+| Donkey Kong | 33 -> 35 | 2 fade-out of the BIOS's own border (600, 630); 4 window-only as before |
+| Kirby's Dream Land 2 | 32 -> 34 | power-on (600); 2 fade-out (630, 660); 4 window-only as before |
+| Pokemon Red | 36 -> 38 | 2 fade-out (600, 630); 1 window-only as before |
+| Pokemon Yellow | 35 -> 37 | 2 fade-out (600, 630); 2 window-only as before |
+| Link's Awakening DX | 36 -> 38 | 3 fade-out (600-660) |
+| Wario Land II | 35 -> 37 | 2 power-on and fade-out (600, 630); 2 window-only as before |
+| Mario's Picross | 28 -> 29 | 8 BIOS start-up (600-810, window whole); 1 window-only 303 px band at 900 (was hidden by the fade-in); 2 window-only as before |
+| Tetris DX | 0 -> 0 | border exact from SNES 690 on (was 780); the window is palette 1-A throughout |
+
+Every picture of the new border's fade-in is now exact, and nothing exact before differs. A
+Donkey Kong run with a picture every SNES frame from 655 to 663 (mid fade-in) matches 9 of 9
+with the HLE at the very Game Boy frame (no search). What still differs on the border is the
+fade-out of the BIOS's own border (Nintendo's artwork, not reproduced: the HLE is black
+there), before the game's border is ever shown. Not modelled: one-frame force blanks (INIDISP
+left at $80 through a frame) the BIOS shows now and then (Donkey Kong SNES frames 646, 666,
+733 ...); none falls on a compared frame.
+
+Skip-boot (no boot ROM, as play-gb runs) starts like the boot ROM path: no border until the
+first PCT_TRN, then the whole fade (black for ~1.3 s, then the fade-in). Donkey Kong: steps 1,
+32, 38 at Game Boy frames 71, 131, 143, done by 196; Pokemon Red: fade-in from frame 180, done
+by 245. The slow Donkey Kong regression picture (skip-boot, frame 600) is unchanged.
+
+Tests: six more synthetic tests in `tests/test_sgb.py` (the whole fade timeline tick by tick,
+the first border out of black, command holds with the LCD off, a second border during the
+fade-out, a save state mid-fade); fast suite 316 passed.
