@@ -13,8 +13,13 @@ import pytest
 from gameboy_python import MACHINES, GameBoy, load_cartridge
 from gameboy_python.sgb import (
     BORDER_ROWS,
+    FADE_DELAY_FRAMES,
+    FADE_END_TICK,
+    FADE_IN_TICK,
+    FADE_TICK_FRAMES,
     FIRST_LINE,
     GREY_RAMP,
+    SNES_FRAME_T,
     SNES_W,
     WINDOW_X,
     WINDOW_Y,
@@ -97,6 +102,18 @@ def transfer(sgb: SuperGameBoy, code: int, data: bytes, arg: int = 0) -> None:
     """A *_TRN command and the frames that carry its data."""
     command(sgb, code, bytes([arg]))
     show(sgb, tiles_screen(data), frames=2)
+
+
+def wait(sgb: SuperGameBoy, snes_frames: int) -> None:
+    """Let SNES frames pass on the Game Boy's clock (the fade's time), no LCD frames drawn."""
+    sgb.gb.t += snes_frames * SNES_FRAME_T
+    sgb.run_fade()
+
+
+def fade_through(sgb: SuperGameBoy) -> None:
+    """Wait out a whole border fade (the new border is then shown at its own colours)."""
+    wait(sgb, FADE_DELAY_FRAMES + FADE_END_TICK * FADE_TICK_FRAMES)
+    assert not sgb.fading
 
 
 # ----- attaching ------------------------------------------------------------------------
@@ -255,6 +272,7 @@ def test_chr_trn_pct_trn_border() -> None:
     pct[0x840 + 9 * 2 : 0x840 + 9 * 2 + 2] = le(0x6666)  # palette 6
     command(sgb, 0x00, le(0x0123))  # colour 0: the backdrop
     transfer(sgb, 0x14, bytes(pct))  # PCT_TRN
+    fade_through(sgb)
     assert sgb.border_loaded
     words = sgb.render()
     assert pixel(words, 0, 1) == 0x0123  # row 1 of tile 1 is transparent: the backdrop
@@ -264,6 +282,99 @@ def test_chr_trn_pct_trn_border() -> None:
     assert pixel(words, WINDOW_X, WINDOW_Y) == 0x6666  # the border covers the Game Boy picture
     # the layers' line 0 is not on the screen: the screen starts at line 1
     assert words[0] == 0x0123
+
+
+def one_tile_border(sgb: SuperGameBoy, color: int, tile_number: int = 1) -> None:
+    """CHR_TRN then PCT_TRN: map entry 0 is tile ``tile_number``, whose pixel (0, 1) is colour
+    9 of palette 4, which is ``color``; the rest is transparent tile 0. Layer line 0 is off the
+    screen, hence row 1."""
+    tile = bytearray(32)
+    tile[2:4] = b"\x80\x00"
+    tile[18:20] = b"\x00\x80"
+    transfer(sgb, 0x13, bytes(32 * tile_number) + bytes(tile))
+    pct = bytearray(4096)
+    pct[0:2] = le(tile_number | 4 << 10)
+    pct[0x800 + 9 * 2 : 0x800 + 9 * 2 + 2] = le(color)
+    transfer(sgb, 0x14, bytes(pct))
+
+
+def test_the_border_fades_out_then_in() -> None:
+    """The BIOS's fade as measured on the low-level SGB (docs/sgb.md "The border fade"): every
+    other SNES frame each channel of palettes 4-6 steps by one, the old border down to black
+    (32 steps), five steps' pause, then the new border up from black (33 steps)."""
+    sgb = machine()
+    one_tile_border(sgb, 0x7FFF)  # white
+    fade_through(sgb)
+    assert pixel(sgb.render(), 0, 1) == 0x7FFF
+    one_tile_border(sgb, 25 | 10 << 5 | 3 << 10, tile_number=2)  # a new border (r 25 g 10 b 3)
+    assert pixel(sgb.render(), 0, 1) == 0x7FFF  # not yet
+    wait(sgb, FADE_DELAY_FRAMES - 1)
+    assert pixel(sgb.render(), 0, 1) == 0x7FFF
+    wait(sgb, 1)  # tick 1: the old border, each channel down by one
+    assert pixel(sgb.render(), 0, 1) == 30 | 30 << 5 | 30 << 10
+    wait(sgb, 29 * FADE_TICK_FRAMES)  # tick 30
+    assert pixel(sgb.render(), 0, 1) == 1 | 1 << 5 | 1 << 10
+    wait(sgb, 1)  # half a tick: no step
+    assert pixel(sgb.render(), 0, 1) == 1 | 1 << 5 | 1 << 10
+    wait(sgb, 1)  # tick 31: black, and stays black until the new border
+    assert pixel(sgb.render(), 0, 1) == 0
+    assert sgb.border_map[0] & 0xFF == 1  # still the old map
+    wait(sgb, (FADE_IN_TICK - 1 - 31) * FADE_TICK_FRAMES)
+    assert sgb.fade_tick == FADE_IN_TICK - 1 and pixel(sgb.render(), 0, 1) == 0
+    wait(sgb, FADE_TICK_FRAMES)  # the new border, each channel at most 1
+    assert sgb.border_map[0] & 0xFF == 2
+    assert pixel(sgb.render(), 0, 1) == 1 | 1 << 5 | 1 << 10
+    wait(sgb, 9 * FADE_TICK_FRAMES)  # fade-in step 10: blue has reached its 3
+    assert pixel(sgb.render(), 0, 1) == 10 | 10 << 5 | 3 << 10
+    wait(sgb, (FADE_END_TICK - FADE_IN_TICK - 10) * FADE_TICK_FRAMES)
+    assert sgb.fading and pixel(sgb.render(), 0, 1) == 25 | 10 << 5 | 3 << 10
+    wait(sgb, FADE_TICK_FRAMES)  # tick 70: over
+    assert not sgb.fading
+    words = sgb.render()
+    assert pixel(words, 0, 1) == 25 | 10 << 5 | 3 << 10
+    assert words[(WINDOW_Y - FIRST_LINE) * SNES_W + WINDOW_X] == GREY_RAMP[0]  # window: no fade
+
+
+def test_the_first_border_comes_out_of_black() -> None:
+    """From power-on (boot ROM or skip-boot) there is no border to fade out: black until the
+    new border's fade-in, which starts at the same time as after any other border."""
+    sgb = machine()
+    one_tile_border(sgb, 0x7FFF)
+    wait(sgb, FADE_DELAY_FRAMES + (FADE_IN_TICK - 2) * FADE_TICK_FRAMES)
+    assert not sgb.border_loaded and pixel(sgb.render(), 0, 1) == 0
+    wait(sgb, FADE_TICK_FRAMES)
+    assert sgb.border_loaded and pixel(sgb.render(), 0, 1) == 1 | 1 << 5 | 1 << 10
+
+
+def test_commands_hold_the_fade_up_and_the_lcd_does_not_drive_it() -> None:
+    sgb = machine()
+    one_tile_border(sgb, 0x7FFF)
+    fade_through(sgb)
+    one_tile_border(sgb, 0x7FFF)
+    wait(sgb, FADE_DELAY_FRAMES)
+    assert sgb.fade_tick == 1
+    command(sgb, 0x17, b"\x00")  # MASK_EN: one SNES frame
+    command(sgb, 0x0A, bytes(9))  # PAL_SET: one more
+    wait(sgb, FADE_TICK_FRAMES + 1)
+    assert sgb.fade_tick == 1
+    wait(sgb, 1)
+    assert sgb.fade_tick == 2
+    command(sgb, 0x0F, bytes(15))  # DATA_SND: none
+    wait(sgb, FADE_TICK_FRAMES)
+    assert sgb.fade_tick == 3
+
+
+def test_a_second_border_during_the_fade_out_takes_the_first_ones_place() -> None:
+    sgb = machine()
+    one_tile_border(sgb, 0x7FFF)
+    wait(sgb, FADE_DELAY_FRAMES + 9 * FADE_TICK_FRAMES)
+    assert sgb.fade_tick == 10
+    one_tile_border(sgb, 0x001F, tile_number=3)  # the timeline goes on, held up 3 + 3 frames
+    assert sgb.fade_tick == 10
+    wait(sgb, (FADE_IN_TICK - 10) * FADE_TICK_FRAMES + 6)
+    assert sgb.fade_tick == FADE_IN_TICK and sgb.border_map[0] & 0xFF == 3
+    fade_through(sgb)
+    assert pixel(sgb.render(), 0, 1) == 0x001F
 
 
 def test_mask_en() -> None:
@@ -326,6 +437,24 @@ def test_save_state_round_trip() -> None:
     assert other.save_state() == blob
     assert list(other.render()) == list(sgb.render())
     assert other.players == 1
+
+
+def test_save_state_mid_fade() -> None:
+    sgb = machine()
+    one_tile_border(sgb, 0x7FFF)
+    fade_through(sgb)
+    one_tile_border(sgb, 0x03E0, tile_number=2)
+    wait(sgb, FADE_DELAY_FRAMES + 12 * FADE_TICK_FRAMES)
+    blob = sgb.save_state()
+    other = machine()
+    other.gb.t = sgb.gb.t  # the board's own state carries its clock
+    other.load_state(blob)
+    assert other.save_state() == blob
+    for _ in range(60):
+        wait(sgb, FADE_TICK_FRAMES)
+        wait(other, FADE_TICK_FRAMES)
+        assert list(other.render()) == list(sgb.render())
+    assert not other.fading and pixel(other.render(), 0, 1) == 0x03E0
 
 
 def test_no_object_outgrows_pypy_layout() -> None:

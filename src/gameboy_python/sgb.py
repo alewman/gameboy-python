@@ -33,10 +33,12 @@ Two layers, kept apart:
 The picture is the SNES's: 256 x 224, the Game Boy's 160 x 144 at (48, 40), colourised through
 four 4-colour palettes picked per 8 x 8 cell by the attribute map, under a border of 4bpp tiles
 in palettes 4-6. Colours are SNES words, ``0bbbbbgggggrrrrr``. Colour 0 is the backdrop: every
-shade-0 Game Boy pixel and every transparent border pixel shows ``cgram[0]``.
+shade-0 Game Boy pixel and every transparent border pixel shows ``cgram[0]``. A new border
+fades the old one out and itself in, as the real BIOS does (measured on the low-level SGB:
+docs/sgb.md "The border fade"); the fade runs on the Game Boy's clock (``gb.t``).
 
 Not modelled (docs/sgb.md "Out of scope"): the BIOS's own border artwork, built-in palettes,
-menus, boot animation and fades; SOUND/SOU_TRN; DATA_SND/DATA_TRN/JUMP (SNES code and data);
+menus and boot animation; SOUND/SOU_TRN; DATA_SND/DATA_TRN/JUMP (SNES code and data);
 OBJ_TRN; ICON_EN, ATRC_EN, TEST_EN, PAL_PRI (accepted, no effect). Commands act the moment their
 last packet's stop bit arrives; the real BIOS takes frames.
 """
@@ -105,11 +107,41 @@ TRN_NONE, TRN_PAL, TRN_ATTR, TRN_CHR_LOW, TRN_CHR_HIGH, TRN_PCT = 0, 1, 2, 3, 4,
 #: "the actual transfer starts at the beginning of the next frame after the command")
 TRANSFER_DELAY = 2
 TRANSFER_BYTES = 4096  # 256 tiles of the screen, 16 bytes each
+BORDER_COLORS = 64  # cgram[64:112]: the border's palettes 4-6, the only colours the fade touches
+
+# The border fade (docs/sgb.md "The border fade"), measured on snes-python running the real BIOS:
+# a new border (PCT_TRN) fades the old one out, then the new one in, by stepping each 5-bit
+# channel of palettes 4-6 one unit every other SNES frame. Time is the Game Boy's (``gb.t``),
+# since its LCD may be off (no frame starts) for much of a fade.
+#: one SNES frame in the Game Boy's T-cycles: the SGB clocks its Game Boy at the SNES master
+#: clock / 5 and an NTSC frame is 357,366 master clocks on average (262 lines of 1,364, two
+#: fewer every other frame)
+SNES_FRAME_T = 71_473
+FADE_TICK_FRAMES = 2  # one fade step every other SNES frame
+FADE_DELAY_FRAMES = 4  # from reading the PCT_TRN data to the first step
+#: steps 1-32 (ticks 1-32): the old border's channels c - step, floored at 0; ticks 33-37 the
+#: border stays black; tick 38 shows the new border and fade-in steps 1-33 (ticks 38-70) show
+#: its channels min(c, step); after tick 70 the fade is over
+FADE_IN_TICK = 38
+FADE_END_TICK = 70
+#: SNES frames a command holds the fade up while the BIOS handles it (measured during fades;
+#: unlisted commands: 0; CHR_TRN and PCT_TRN unmeasured, taken as the other VRAM transfers)
+COMMAND_FRAMES = {
+    0x04: 1,  # ATTR_BLK
+    0x09: 8,  # SOU_TRN (7 and 9 seen: the upload's length)
+    0x0A: 1,  # PAL_SET
+    0x0B: 3,  # PAL_TRN
+    0x13: 3,  # CHR_TRN
+    0x14: 3,  # PCT_TRN
+    0x15: 3,  # ATTR_TRN
+    0x17: 1,  # MASK_EN
+}
 ATF_BYTES = 90  # one attribute file: 18 rows of 20 two-bit cells
 ATF_COUNT = 45  # $00-$2C
 
 #: save_state's layout, in order: (name, kind, length). Kinds: "u8" one integer (or bool),
-#: "bytes" a bytearray, "words" an array of u16 (little-endian). Plain data for a transcriber.
+#: "bytes" a bytearray, "words" an array of u16 (little-endian), "u64" one integer in 8 bytes
+#: (little-endian). Plain data for a transcriber.
 STATE_LAYOUT = (
     ("p1", "u8", 1),
     ("receiving", "u8", 1),
@@ -137,8 +169,13 @@ STATE_LAYOUT = (
     ("tiles_pending", "bytes", 256 * 32),
     ("border_map", "words", 32 * BORDER_ROWS),
     ("border_loaded", "u8", 1),
+    ("border_map_pending", "words", 32 * BORDER_ROWS),
+    ("border_colors_pending", "words", 48),
+    ("fading", "u8", 1),
+    ("fade_tick", "u8", 1),
+    ("fade_due", "u64", 1),
 )
-STATE_VERSION = 1
+STATE_VERSION = 2
 
 
 class SuperGameBoy:
@@ -190,6 +227,14 @@ class SuperGameBoy:
         self.tiles_pending = bytearray(256 * 32)  # CHR_TRN's, shown from the next PCT_TRN
         self.border_map = array("H", bytes(32 * BORDER_ROWS * 2))
         self.border_loaded = False  # before any PCT_TRN the border area is black
+        # PCT_TRN's map and colours, shown when the fade reaches FADE_IN_TICK
+        self.border_map_pending = array("H", bytes(32 * BORDER_ROWS * 2))
+        self.border_colors_pending = array("H", bytes(48 * 2))
+        # the border fade: running or not, the last step taken, gb.t of the next step. From a
+        # boot ROM or from skip-boot alike none runs until the first PCT_TRN
+        self.fading = False
+        self.fade_tick = 0
+        self.fade_due = 0
         self.ppu = gb.ppu
         gb.joypad.on_write = self.p1_write
         gb.ppu.line_out = self.lcd_line
@@ -258,6 +303,7 @@ class SuperGameBoy:
 
     def lcd_frame(self) -> None:
         """PPU.frame_start: line 0 begins, so the last frame is whole in ``lcd``."""
+        self.run_fade()
         if self.mask != MASK_FREEZE:
             self.shown[:] = self.lcd
         if self.transfer_wait:
@@ -314,6 +360,9 @@ class SuperGameBoy:
             return
         if not self.enabled:
             return
+        self.run_fade()
+        if self.fading:
+            self.fade_due += COMMAND_FRAMES.get(code, 0) * SNES_FRAME_T
         if code == PAL01:
             self._pal_pair(c, 0, 1)
         elif code == PAL23:
@@ -505,13 +554,59 @@ class SuperGameBoy:
         elif kind == TRN_CHR_HIGH:  # tiles $80-$FF
             self.tiles_pending[4096:8192] = data
         elif kind == TRN_PCT:
-            # $000-$73F: the map, 29 rows of 32 entries; $800-$85F: palettes 4-6
+            # $000-$73F: the map, 29 rows of 32 entries; $800-$85F: palettes 4-6. Kept until
+            # the fade has taken the old border out (``_show_new_border``)
             for i in range(32 * BORDER_ROWS):
-                self.border_map[i] = data[2 * i] | data[2 * i + 1] << 8
+                self.border_map_pending[i] = data[2 * i] | data[2 * i + 1] << 8
             for i in range(48):
-                self.cgram[64 + i] = (data[0x800 + 2 * i] | data[0x801 + 2 * i] << 8) & 0x7FFF
-            self.tiles[:] = self.tiles_pending
-            self.border_loaded = True
+                word = data[0x800 + 2 * i] | data[0x801 + 2 * i] << 8
+                self.border_colors_pending[i] = word & 0x7FFF
+            if not self.fading or self.fade_tick >= FADE_IN_TICK:
+                # a new fade; one already taking the old border out shows this border instead
+                self.fading = True
+                self.fade_tick = 0
+                self.fade_due = self.gb.t + FADE_DELAY_FRAMES * SNES_FRAME_T
+
+    # ----- the border fade ---------------------------------------------------------------
+
+    def run_fade(self) -> None:
+        """Take the fade's steps that are due by now (``gb.t``). Every caller (frame starts,
+        commands, ``render``, ``save_state``) gets the same state for the same time."""
+        while self.fading and self.gb.t >= self.fade_due:
+            self.fade_tick += 1
+            self.fade_due += FADE_TICK_FRAMES * SNES_FRAME_T
+            if self.fade_tick == FADE_IN_TICK:
+                self._show_new_border()
+            elif self.fade_tick == FADE_END_TICK:
+                self.fading = False
+                self.fade_tick = 0
+
+    def _show_new_border(self) -> None:
+        """The faded-out border's place goes to PCT_TRN's (and CHR_TRN's tiles so far)."""
+        self.border_map[:] = self.border_map_pending
+        self.cgram[BORDER_COLORS : BORDER_COLORS + 48] = self.border_colors_pending
+        self.tiles[:] = self.tiles_pending
+        self.border_loaded = True
+
+    def shown_cgram(self) -> array:
+        """``cgram`` as the screen shows it: palettes 4-6 through the fade. Fading out (ticks
+        1-37), each 5-bit channel c shows max(c - tick, 0); fading in, min(c, tick - 37)."""
+        colors = array("H", self.cgram)
+        if not self.fading or self.fade_tick == 0:
+            return colors
+        tick = self.fade_tick
+        for i in range(BORDER_COLORS, BORDER_COLORS + 48):
+            word = colors[i]
+            out = 0
+            for shift in (0, 5, 10):
+                channel = word >> shift & 31
+                if tick < FADE_IN_TICK:
+                    channel = max(channel - tick, 0)
+                else:
+                    channel = min(channel, tick - FADE_IN_TICK + 1)
+                out |= channel << shift
+            colors[i] = out
+        return colors
 
     # ----- the picture -------------------------------------------------------------------
 
@@ -542,8 +637,9 @@ class SuperGameBoy:
 
     def render(self) -> array:
         """The SNES picture: 256 x 224 BGR555 words, rows top to bottom."""
+        self.run_fade()
         out = array("H", bytes(SNES_W * SNES_H * 2))
-        cgram = self.cgram
+        cgram = self.shown_cgram()
         backdrop = cgram[0]
         shown = self.shown
         for screen_y in range(SNES_H - BLANK_LINES):  # the blanked lines stay 0
@@ -574,11 +670,14 @@ class SuperGameBoy:
 
     def save_state(self) -> bytes:
         """Everything above as one blob, in STATE_LAYOUT's order, after a version byte."""
+        self.run_fade()
         out = bytearray([STATE_VERSION])
         for name, kind, length in STATE_LAYOUT:
             value = getattr(self, name)
             if kind == "u8":
                 out.append(int(value))
+            elif kind == "u64":
+                out += int(value).to_bytes(8, "little")
             elif kind == "bytes":
                 assert len(value) == length
                 out += value
@@ -598,6 +697,9 @@ class SuperGameBoy:
                 at += 1
                 current = getattr(self, name)
                 setattr(self, name, bool(value) if isinstance(current, bool) else value)
+            elif kind == "u64":
+                setattr(self, name, int.from_bytes(data[at : at + 8], "little"))
+                at += 8
             elif kind == "bytes":
                 getattr(self, name)[:] = data[at : at + length]
                 at += length

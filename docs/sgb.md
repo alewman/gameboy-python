@@ -35,7 +35,7 @@ the backdrop `cgram[0]`.
 
 ## Structure
 
-Two layers in one class, `SuperGameBoy` (28 instance attributes, under PyPy's 80):
+Two layers in one class, `SuperGameBoy` (33 instance attributes, under PyPy's 80):
 
 1. **ICD2** (hardware). The same rules as snes-python's ICD2 model, which passes Mooneye's SGB
    boot tests:
@@ -63,8 +63,10 @@ itself (Pan Docs: the SGB freezes when the LCD is turned off).
 
 ## The data (all of it is the save state)
 
-`save_state()` writes a version byte (1) then these fields in this order (`STATE_LAYOUT`);
-u8 = one byte (bools as 0/1), words = little-endian u16s:
+`save_state()` brings the fade up to `gb.t` (`run_fade`), then writes a version byte (2) and
+these fields in this order (`STATE_LAYOUT`); u8 = one byte (bools as 0/1), words =
+little-endian u16s, u64 = one little-endian 8-byte integer. Version 1 (before the fade) is
+refused:
 
 | Field | Kind | Size | Meaning |
 | --- | --- | --- | --- |
@@ -89,7 +91,12 @@ u8 = one byte (bools as 0/1), words = little-endian u16s:
 | tiles | bytes | 8192 | border tiles shown (256 x 32-byte 4bpp SNES tiles) |
 | tiles_pending | bytes | 8192 | CHR_TRN's tiles, shown from the next PCT_TRN |
 | border_map | words | 928 | PCT_TRN's map, 29 rows x 32 entries |
-| border_loaded | u8 | | false until the first PCT_TRN |
+| border_loaded | u8 | | false until the first PCT_TRN's border is shown |
+| border_map_pending | words | 928 | PCT_TRN's map, shown at fade tick 38 |
+| border_colors_pending | words | 48 | PCT_TRN's palettes 4-6, into `cgram[64..111]` at tick 38 |
+| fading | u8 | | a border fade is running |
+| fade_tick | u8 | | the fade's last step, 0-69 (0: none yet) |
+| fade_due | u64 | | `gb.t` (the board's T-cycle clock) of the next step: restore the board's state with this one |
 
 `enabled` starts from the cartridge's header bytes at attach (the skip-boot case); with a
 boot ROM running, the header packets decide it again after `$FB`.
@@ -109,7 +116,7 @@ Byte 0 is `code * 8 + packets`; `c[n]` is byte n of the gathered command.
 | $0B | PAL_TRN | VRAM transfer -> `system_palettes` (2048 words) |
 | $11 | MLT_REQ | `players = c[1] & 3`; `player &= PLAYER_MASK[players]`; update lines |
 | $13 | CHR_TRN | VRAM transfer -> `tiles_pending[0:4096]` (`c[1]` bit 0 = 0) or `[4096:8192]` |
-| $14 | PCT_TRN | VRAM transfer: bytes $000-$73F -> `border_map`, $800-$85F -> `cgram[64..111]`; then `tiles = tiles_pending`, `border_loaded = True` |
+| $14 | PCT_TRN | VRAM transfer: bytes $000-$73F -> `border_map_pending`, $800-$85F -> `border_colors_pending`; starts the border fade, which shows them (and `tiles_pending`) at tick 38 |
 | $15 | ATTR_TRN | VRAM transfer: bytes $000-$FD1 -> `attr_files` |
 | $16 | ATTR_SET | ATF `c[1] & $3F` (above $2C: nothing) -> `attr_map` (each byte 4 cells, first in bits 7-6); `c[1]` bit 6 cancels the mask |
 | $17 | MASK_EN | `mask = c[1] & 3`: 0 off, 1 freeze, 2 black, 3 colour 0 |
@@ -121,6 +128,61 @@ counts down; at 0 the data is read from `lcd`, which then holds the first whole 
 after the command: 256 tiles, tile n from cell `(n mod 20, n div 20)`, 16 bytes each, per row
 a low-plane byte then a high-plane byte, leftmost pixel in bit 7 (shade bit 0 / bit 1). That is
 the 4 KiB at $8000-$8FFF when the game shows them with BGP $E4 (Pan Docs SGB_VRAM_Transfer.md).
+
+## The border fade
+
+Measured on snes-python running the real BIOS (2026-11-13: Donkey Kong, Pokemon Red, Kirby's
+Dream Land 2, Mario's Picross, Wario Land II; every SNES frame logged: INIDISP writes, CGRAM
+after each frame, packets: `scripts/sgb_lle_run.py --log`). The BIOS never touches the master
+brightness for it (INIDISP stays at 15, apart from one-frame force blanks, see below); it
+rewrites CGRAM palettes 4-6, the border's, every other SNES frame:
+
+- **Fade-out**, writes 1-32: each 5-bit channel of each colour is `max(c - n, 0)` for write n,
+  c the old border's colour (at power-on the BIOS's own border, not reproduced here).
+- **Pause**: 12 SNES frames from write 32 to write 33 (the new border's map and tiles go in).
+- **Fade-in**, writes 1-33: each channel `min(c, n)`, c the new border's colour.
+
+All 65 writes of all five games fit these formulas with 0 exceptions (48 colours x 3 channels
+each). Palettes 0-3 (the Game Boy's) and colour 0 (the backdrop) are not faded, so the Game Boy
+window and the transparent border pixels keep their colours. MASK_EN starts no fade (MASK_EN
+packets in Kirby's Dream Land 2 and Pokemon Red: no CGRAM writes beyond the 65).
+
+The first write comes 5 or 6 SNES frames after the PCT_TRN packet (the data is read ~2 frames
+after the packet); a picture shows a write from the next frame on. The 2-frame cadence slips
+while the BIOS handles other commands: PAL_TRN and ATTR_TRN hold the next write up by 3
+frames, SOU_TRN by 7 or 9, PAL_SET, ATTR_BLK and MASK_EN by 1; DATA_SND, SOUND, PAL_PRI,
+MLT_REQ, ICON_EN and ATRC_EN by none.
+
+The model (`run_fade`, `shown_cgram`), on the Game Boy's clock `gb.t`, because a game may keep
+its LCD off (no frame starts) for many frames of a fade (Donkey Kong does):
+
+- One SNES frame is `SNES_FRAME_T` = 71,473 T-cycles (the SGB's Game Boy runs at the SNES
+  master clock / 5; an NTSC frame averages 357,366 master clocks).
+- When PCT_TRN's data has been read (`_finish_transfer`), unless a fade is still before tick
+  38: `fading = True`, `fade_tick = 0`, `fade_due = gb.t + 4 frames` (`FADE_DELAY_FRAMES`,
+  fitted: 3 and 5 each lose 4-5 of 9 consecutive Donkey Kong pictures that 4 matches). During a
+  fade-out a newer PCT_TRN only replaces the pending border.
+- `run_fade()`: while `fading` and `gb.t >= fade_due`: `fade_tick += 1`, `fade_due += 2
+  frames`; at tick 38 (`FADE_IN_TICK`) the pending map and palettes and `tiles_pending` become
+  the border (`border_loaded = True`); at tick 70 (`FADE_END_TICK`) the fade ends (`fading =
+  False`, `fade_tick = 0`). It runs at each frame start, before each command, in `render()` and
+  in `save_state()`: the state at a given `gb.t` is the same however often it is called.
+- Each command obeyed while `fading` adds `COMMAND_FRAMES[code]` frames to `fade_due` (the
+  measured holds; SOU_TRN 8, CHR_TRN and PCT_TRN 3 as the other transfers, unmeasured).
+- Drawing: for tick t in 1-37 each channel of `cgram[64..111]` shows `max(c - t, 0)`, for t in
+  38-69 `min(c, t - 37)`; at tick 0 (fade scheduled, no step yet) the colours as they are.
+
+**Skip-boot and power-on** start alike: no fade, no border (black around the window) until
+the first PCT_TRN, which then runs the whole timeline, fading out the black (the real BIOS
+fades out its own border there), then the game's border fading in from ~1.3 s after the
+packet, whole by ~2.4 s. Not
+shortening the fade when no border is loaded keeps the two starts and the timing the same as a
+real SGB's.
+
+Not modelled: the one-frame force blanks (INIDISP left at $80 through a frame, so presumably
+a black SNES picture; no such picture was looked at) the BIOS shows now and then, likely when
+its main loop runs late (Donkey Kong at SNES frames 646, 666,
+733, ...; Pokemon Red 597, 692, ...): timing of the BIOS's own work, not of the packets.
 
 ## The picture
 
@@ -138,6 +200,9 @@ black** (`BLANK_LINES`: the BIOS force-blanks it). For each other pixel:
    `shown`, palette p of the cell: `cgram[0]` if s == 0 else `cgram[p * 16 + s]`.
 3. Else (border area, transparent): `cgram[0]` once a border is loaded, black before.
 
+Border colours (`entry >> 10 & 7` = 4-6) go through the fade (`shown_cgram()`); the rest of
+`cgram` is drawn as it is.
+
 Power-on: all four Game Boy palettes are a grey ramp (`$7FFF, $56B5, $294A, $0000`, or the
 `palette` argument), the attribute map 0, no border (black around the window).
 
@@ -148,15 +213,17 @@ boot ROM from MAME's `sns_rom_sgb`, MAME's SNES IPL) with gameboy-python as its 
 `scripts/sgb_lle_run.py`, then `scripts/sgb_compare.py --lle`. Detector: **SameBoy's HLE SGB**
 (`scripts/sgb_sameboy.py`, colour correction off), `scripts/sgb_compare.py --sameboy`. Both
 sides boot the same SGB boot ROM. Pictures compared at 5 bits per channel over all 256 x 224
-pixels; each judge picture against the closest HLE frame within 3 Game Boy frames. The full
-table is in validation.md "Super Game Boy, HLE (2026-11-13)".
+pixels; each judge picture against the closest HLE frame within 3 Game Boy frames (while the
+LCD is off, also every SNES frame's worth of Game Boy time). The full tables are in
+validation.md "Super Game Boy, HLE (2026-11-13)" and "Super Game Boy, the border fade".
 
-In short: **every settled picture is pixel-exact against the real BIOS** except for three
-causes, all timing: the BIOS's border fade-in after power-on and after a new border (the first
-~120 SNES frames after the game starts), one 8-line row of the Game Boy picture that the
-low-level SGB occasionally shows from the next row (a row-buffer race on the SNES side), and
-games that never send a palette (Tetris DX), whose window keeps the BIOS's built-in palette
-1-A. The packet stream is identical to the low-level run (same packets, same Game Boy frames).
+In short: **every settled picture, and every picture of the border's fade-in, is pixel-exact
+against the real BIOS** except for: the fade-out of the BIOS's own border before the game's
+first border (its artwork is not reproduced: black here), one 8-line row of the Game Boy
+picture that the low-level SGB occasionally shows from the next row (a row-buffer race on the
+SNES side), and games that never send a palette (Tetris DX), whose window keeps the BIOS's
+built-in palette 1-A. The packet stream is identical to the low-level run (same packets, same
+Game Boy frames).
 
 **From skip-boot** (no boot ROM, as play-gb runs): the ICD2 starts at $30, where the boot ROM's
 header packets leave it. Starting from the board's skip-boot select ($00) lost each game's first
@@ -164,12 +231,12 @@ packet, a $00 start pulse taken for no change; for Pokemon Red that is its MLT_R
 never sent a border (found by the gameboy-rust transcription, 2026-11-13). With the fix, Pokemon
 Red (900 frames) and Pokemon Yellow, Kirby's Dream Land 2, Link's Awakening DX, Wario Land II and
 Tetris DX (1,500) all load their borders from skip-boot; Donkey Kong and Mario's Picross did
-before and still do.
+before and still do. The border then fades in as after the boot ROM ("The border fade").
 
 ## Out of scope (not done, on purpose)
 
 - The BIOS's own artwork and data: the default border, the built-in palettes (1-A ... 4-H,
-  and the per-title palettes for non-SGB games), menus, the boot animation, fades. They are
+  and the per-title palettes for non-SGB games), menus, the boot animation. They are
   Nintendo's ROM contents. A frontend may pass `palette=` to `SuperGameBoy`.
 - SOUND ($08), SOU_TRN ($09): SNES sound. DATA_SND ($0F), DATA_TRN ($10), JUMP ($12): SNES code
   and data (games use DATA_SND to patch the BIOS; ignored). OBJ_TRN ($18): SNES sprites.
@@ -182,9 +249,10 @@ before and still do.
   later and drops a packet if the next arrives before it has read the previous one (the ICD2
   holds one). The multiplayer change of MLT_REQ is immediate (the BIOS writes `$6003` later).
   No game in the eight tested diverged because of it (identical packet streams).
-- **Border change.** A new border appears at once; the BIOS fades the old one out and the new
-  one in (about 2 seconds). CHR_TRN tiles are shown only from the next PCT_TRN (SameBoy's
-  rule, Core/sgb.c, Expat); not checked against the BIOS with a CHR_TRN-only game.
+- **Border change.** Measured only for the first border after power-on (every game tested sends
+  one). A second border later in a game, PCT_TRN during a fade-in, CHR_TRN during a fade: the
+  model's rules above, unverified. CHR_TRN tiles are shown only from the next PCT_TRN
+  (SameBoy's rule, Core/sgb.c, Expat); not checked against the BIOS with a CHR_TRN-only game.
 - Tile numbers 256+ in the border map, palette numbers 0-3 or 7 in border entries: taken as
   transparent / as `cgram` palettes 0-3 and 7. Unverified.
 - ATTR_CHR's stop at the last cell and its off-screen start; ATTR_BLK/ATTR_LIN counts above
