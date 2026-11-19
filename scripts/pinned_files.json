@@ -1,0 +1,38 @@
+[
+ {
+  "path": "tests/test_roms/game-boy-test-roms-v7.0.zip",
+  "url": "https://github.com/c-sp/game-boy-test-roms/releases/download/v7.0/game-boy-test-roms-v7.0.zip",
+  "sha256": "b9a9d7a1075aa35a3d07c07c34974048672d8520dca9e07a50178f5860c3832c",
+  "size": 3756786,
+  "kind": "test-rom",
+  "license": "MIT for the bundle; each suite keeps its own licence",
+  "note": "c-sp bundle v7.0 (2024-02-25): 4,510 ROMs from 19 suites + howtos; unzip to tests/test_roms/gbtr/"
+ },
+ {
+  "path": "tests/test_roms/mts-20260714-0944-31510e1.zip",
+  "url": "https://gekkio.fi/files/mooneye-test-suite/mts-20260714-0944-31510e1/mts-20260714-0944-31510e1.zip",
+  "sha256": "18aa29462dfe1fcd32a2cb3621733abdc72410074918b9245aa99a6920f7d3f2",
+  "size": 423779,
+  "kind": "test-rom",
+  "license": "MIT",
+  "note": "Gekkio's prebuilt Mooneye Test Suite for commit 31510e12 (the pinned source)"
+ },
+ {
+  "path": "reference/docs/gbctr.pdf",
+  "url": "https://gekkio.fi/files/gb-docs/gbctr.pdf",
+  "sha256": "cb75ab32f3dfe643ed99f4bf540f9964e5e29dada021cfa4cc14e9e0c0132783",
+  "size": 2890922,
+  "kind": "live-document",
+  "license": "CC-BY-SA-4.0",
+  "note": "Game Boy: Complete Technical Reference, revision 192 (2026-08-16); the URL always serves the latest revision"
+ },
+ {
+  "path": "reference/build-rgbds/rgbds-linux-x86_64.tar.xz",
+  "url": "https://github.com/gbdev/rgbds/releases/download/v1.0.4/rgbds-linux-x86_64.tar.xz",
+  "sha256": "3e19e50ea602e316be709160acaf0a708b1fa6d32d219ec541f244442895dbb7",
+  "size": 1406524,
+  "kind": "tool",
+  "license": "MIT",
+  "note": "RGBDS 1.0.4, to build SameBoy's boot ROMs (and test ROM sources)"
+ }
+]

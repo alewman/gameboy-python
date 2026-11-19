@@ -1,0 +1,70 @@
+# scripts/compat_sweep.py --tier titles at 401ac36: {'same': 1281, 'error': 1, 'near': 349, 'differs': 67, 'skipped': 722, 'unsupported': 18}
+# dump, pixels at best at the worst of frames 600, 960, 1500, board
+3-pun Yosou - Umaban Club (Japan).zip	error	sameboy: OSError('Cannot load library /data/emu/gameboy-python/reference/src/SameBoy/build/lib/libsameboy.so: /data/emu/gameboy-python/reference/src/SameBoy/build/lib/libsameboy.so: undefined symbol: _ZGVbN2v_sin')
+Addams Family, The (USA).zip	1 px	mbc1
+Alien Olympics (Europe).zip	169 px	mbc1
+All-Star Baseball 99 (USA).zip	1 px	mbc1
+Aretha (Japan).zip	517 px	mbc2
+Attack of the Killer Tomatoes (USA, Europe).zip	247 px	mbc1
+Balloon Kid (USA, Europe).zip	1290 px	mbc1
+Battle Pingpong (Japan) (En).zip	267 px	mbc1
+Bill & Ted's Excellent Game Boy Adventure - A Bogus Journey! (USA, Europe).zip	1 px	mbc1
+Bill & Ted's Excellent Portable Adventure - A Bogus Journey! (World) (Retro Collection).zip	1 px	mbc1
+Bust-A-Move 2 - Arcade Edition (USA, Europe).zip	1 px	mbc1
+Castle Quest (Europe).zip	3 px	mbc1
+Dino Breeder (Japan) (Rev 1) (SGB Enhanced).zip	227 px	mbc2
+Doraemon 2 - Animal Planet Densetsu (Japan).zip	2586 px	mbc1
+FIFA Soccer 96 (USA, Europe) (En,Fr,De,Es) (SGB Enhanced).zip	1 px	mbc1
+God Medicine - Fukkokuban (Japan) (SGB Enhanced).zip	24 px	mbc1
+Jimmy Connors Tennis (USA, Europe).zip	1 px	mbc1
+Jimmy Connors no Pro Tennis Tour (Japan) (En).zip	1 px	mbc1
+Kaeru no Tame ni Kane wa Naru (Japan).zip	15 px	mbc1
+Lawnmower Man, The (Europe).zip	1968 px	mbc1
+Mani 4 in 1 - Bubble Bobble + Elevator Action + Chase H.Q. + Sagaia (China) (En).zip	7641 px	mbc1
+Mani 4 in 1 - Genki Bakuhatsu Gambaruger + Zettai Muteki Raijin-Oh + Zoids Densetsu + Miracle Adventure of Esparks - Ushinawareta Seiseki Perivron (China) (Ja).zip	6199 px	mbc1
+Mani 4 in 1 - R-Type II + Saigo no Nindou + Ganso!! Yancha Maru + Shisenshou - Match-Mania (China) (Ja).zip	8056 px	mbc1
+Mani 4 in 1 - Takahashi Meijin no Bouken-jima II + GB Genjin + Bomber Boy + Milon no Meikyuu Kumikyoku (China) (Ja).zip	8258 px	mbc1
+Micro Machines 2 - Turbo Tournament (Europe).zip	1 px	mbc1
+Nettou Samurai Spirits (Japan) (Rev 1) (SGB Enhanced).zip	1094 px	mbc1
+Pac-Attack (USA) (SGB Enhanced).zip	1 px	mbc1
+Pac-Panic (Europe) (SGB Enhanced).zip	1 px	mbc1
+Pit-Fighter (USA, Europe).zip	8651 px	mbc1
+Popeye (Japan) (En).zip	164 px	mbc1
+Pro Soccer (Japan).zip	1 px	mbc1
+Puzzle Bobble GB (Japan).zip	1 px	mbc1
+R-Type (USA, Europe).zip	13 px	mbc1
+Samurai Shodown (USA, Europe) (SGB Enhanced).zip	577 px	mbc1
+Spot (Japan).zip	1632 px	rom
+Spot - The Video Game (USA).zip	1632 px	rom
+Super Kick Off (Europe) (En,Fr,De,It,Nl).zip	1 px	mbc1
+Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev 2).zip	14074 px	mbc1
+Super Mario Land 2 - 6-tsu no Kinka (Japan) (Rev 2).zip	14074 px	mbc1
+Super Pachinko Taisen (Japan) (SGB Enhanced).zip	249 px	mbc1
+Suzuki Aguri no F-1 Super Driving (Japan).zip	1 px	mbc1
+Vattle Giuce (Japan) (En).zip	583 px	mbc1
+Virtual Wars (Japan).zip	1872 px	mbc1
+Wizardry Gaiden I - Joou no Junan (Japan).zip	1449 px	mbc1
+WordZap (USA).zip	2 px	mbc1
+World Cup 98 (USA, Europe) (SGB Enhanced).zip	1 px	mbc1
+Yomihon Yumegoyomi - Tenjin Kaisen 2 (Japan).zip	1 px	mbc1
+All Star Tennis 2000 (Europe) (AZTP) (GB Compatible).zip	1 px	mbc5
+Aqualife (Japan) (SGB Enhanced) (GB Compatible).zip	3115 px	mbc5
+Bakukyuu Renpatsu!! Super B-Daman - Gekitan! Rising Valkyrie!! (Japan) (SGB Enhanced) (GB Compatible).zip	12533 px	mbc5
+Barcode Taisen Bardigun (Japan) (Rev 1) (SGB Enhanced) (GB Compatible).zip	1 px	mbc3
+Columns GB - Tezuka Osamu Characters (Japan) (SGB Enhanced) (GB Compatible).zip	1 px	mbc5
+DT - Lords of Genomes (Japan) (SGB Enhanced) (GB Compatible).zip	1 px	mbc5
+Dino Breeder 3 - Gaia Fukkatsu (Japan) (SGB Enhanced) (GB Compatible).zip	1022 px	mbc5
+Golf Ou - The King of Golf (Japan) (SGB Enhanced) (GB Compatible).zip	10 px	mbc5
+Hello Kitty's Cube Frenzy (USA) (GB Compatible).zip	1 px	mbc5
+Honkaku Shougi - Shougi Ou (Japan) (SGB Enhanced) (GB Compatible).zip	1006 px	mbc5
+Jack no Daibouken - Daimaou no Gyakushuu (Japan) (SGB Enhanced) (GB Compatible).zip	86 px	mbc5
+Katou Hifumi Kudan - Shougi Kyoushitsu (Japan) (SGB Enhanced) (GB Compatible).zip	832 px	mbc5
+Legend of Zelda, The - Link's Awakening DX (USA, Europe) (Rev 2) (SGB Enhanced) (GB Compatible).zip	317 px	mbc5
+Ojarumaru - Tsukiyo ga Ike no Takaramono (Japan) (GB Compatible).zip	59 px	mbc5
+Quest - Brian's Journey (USA) (GB Compatible).zip	69 px	mbc5
+Sesame Street - The Adventures of Elmo in Grouchland (USA) (GB Compatible).zip	1 px	mbc5
+Tanimura Hitoshi Ryuu Pachinko Kouryaku Daisakusen - Don Quijote ga Iku (Japan) (SGB Enhanced) (GB Compatible).zip	991 px	mbc5
+Totsugeki! Papparatai (Japan) (SGB Enhanced) (GB Compatible).zip	2163 px	mbc5
+Tyrannosaurus Tex (World) (Piko Interactive).zip	1808 px	mbc5
+Wings of Fury (USA) (GB Compatible).zip	1 px	mbc5
+Zelda no Densetsu - Yume o Miru Shima DX (Japan) (Rev 2) (SGB Enhanced) (GB Compatible).zip	317 px	mbc5
