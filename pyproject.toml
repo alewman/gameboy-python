@@ -23,8 +23,10 @@ classifiers = [
 # The CPU and sound cores, pinned by revision, never a local path. Develop against local
 # checkouts with `pip install -e ../sm83-python -e ../gb-apu-python` after installing this.
 dependencies = [
-    "sm83-python @ git+https://github.com/alewman/sm83-python.git@95f2b8b39c1a1b3890d3b47b39cb1f698e948eca",
-    "gb-apu-python @ git+https://github.com/alewman/gb-apu-python.git@f0a7f48b72dab9cf019cefc3968a09d0227fd189",
+    # 1f312fa = sm83-python 95f2b8b and d4393c6 = gb-apu-python f0a7f48 after their history
+    # rewrites of 2026-11-21 (same trees).
+    "sm83-python @ git+https://github.com/alewman/sm83-python.git@1f312fa3c9e60c2fc43d7044ddf2a95219d0d36b",
+    "gb-apu-python @ git+https://github.com/alewman/gb-apu-python.git@d4393c6af0d634e637ff63a421278fd0c6b6700f",
 ]
 
 [project.optional-dependencies]
