@@ -115,7 +115,7 @@ SingleStepTests `sm83` belongs to the CPU core, not here; sm83-python's
 
 `$NO_INTRO_DIR/Nintendo - Game Boy*`
 (GB 1,958, GBC 1,960, plus Aftermarket and Private sets);
-`/data/emu/roms/gb` and `/data/emu/roms/gbc` (frontend sets, with the
+a frontend's GB and GBC folders (with the
 `[BIOS]` boot ROMs: DMG `4ed31ec6…`, DMG0, MGB, CGB revisions). MAME's
 `hash/gameboy.xml` (1,743 entries) and `gbcolor.xml` (1,718) carry board
 `slot` features. Counts in [cartridge.md](cartridge.md).

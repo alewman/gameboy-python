@@ -1,6 +1,6 @@
 # scripts/compat_sweep.py --tier titles at 401ac36: {'same': 1281, 'error': 1, 'near': 349, 'differs': 67, 'skipped': 722, 'unsupported': 18}
 # dump, pixels at best at the worst of frames 600, 960, 1500, board
-3-pun Yosou - Umaban Club (Japan).zip	error	sameboy: OSError('Cannot load library /data/emu/gameboy-python/reference/src/SameBoy/build/lib/libsameboy.so: /data/emu/gameboy-python/reference/src/SameBoy/build/lib/libsameboy.so: undefined symbol: _ZGVbN2v_sin')
+3-pun Yosou - Umaban Club (Japan).zip	error	sameboy: OSError('Cannot load library reference/src/SameBoy/build/lib/libsameboy.so: reference/src/SameBoy/build/lib/libsameboy.so: undefined symbol: _ZGVbN2v_sin')
 Addams Family, The (USA).zip	1 px	mbc1
 Alien Olympics (Europe).zip	169 px	mbc1
 All-Star Baseball 99 (USA).zip	1 px	mbc1
