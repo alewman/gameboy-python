@@ -85,9 +85,13 @@
   "url": "https://github.com/pokemon-speedrunning/gambatte-core",
   "rev": "5a41a68c25402421fb1983ddadc9faf2418ddb0f",
   "date": "2026-04-16T21:32:37-07:00",
-  "sparse": [],
-  "license": "GPL-2.0",
-  "note": "fork carrying sinamas's Gambatte test suite (test/hwtests, testrunner.cpp); sinamas/gambatte is now private"
+  "sparse": [
+   "/COPYING",
+   "/README.md",
+   "/test/hwtests/"
+  ],
+  "license": "GPL-2.0: closed box only. Since 2026-11-24 (Aubrey) only the test suite (test/hwtests: ROM sources, names and expected pictures, the judge) is fetched; the emulator (libgambatte, common, testrunner.cpp) is not",
+  "note": "fork carrying sinamas's Gambatte test suite (test/hwtests); sinamas/gambatte is now private"
  },
  {
   "path": "reference/src/game-boy-test-roms",
@@ -153,15 +157,6 @@
   "note": "513 tiny tests, checked on DMG-CPU-08 (C blob) per README"
  },
  {
-  "path": "reference/src/giibiiadvance",
-  "url": "https://github.com/AntonioND/giibiiadvance",
-  "rev": "ccb40c3cf7d9efec538858a36d4ab69bb4d0ce5c",
-  "date": "2026-01-25T02:01:07Z",
-  "sparse": [],
-  "license": "GPL-3.0",
-  "note": "AntonioND's emulator and GB timing documents"
- },
- {
   "path": "reference/src/little-things-gb",
   "url": "https://github.com/pinobatch/little-things-gb",
   "rev": "3fea6a7d4bc4426da948f470f7ae93a8e8fa3ef7",
@@ -187,42 +182,6 @@
   "sparse": [],
   "license": "MIT",
   "note": "PPU mode-3 tests; expected/ per revision; photos/; PPU documentation .md"
- },
- {
-  "path": "reference/src/metroboy",
-  "url": "https://github.com/aappleby/metroboy",
-  "rev": "36797ad4cf77b3e04ffe45716218a79b5280076a",
-  "date": "2025-02-22T19:36:25-08:00",
-  "sparse": [],
-  "license": "no licence file",
-  "note": "GateBoy / LogicBoy / MetroBoy; GateBoy = gate-level DMG-CPU B with a guessed CPU"
- },
- {
-  "path": "reference/src/metrolib",
-  "url": "https://github.com/aappleby/metrolib",
-  "rev": "617e42fe6e7f2ae929c75c200ebe750842a244b1",
-  "date": "2026-06-28T17:47:02-07:00",
-  "sparse": [],
-  "license": "no licence file",
-  "note": "needed to compile GateBoyTests (symlinks/metrolib)"
- },
- {
-  "path": "reference/src/metron",
-  "url": "https://github.com/aappleby/metron",
-  "rev": "4ef5607b05c59053319da7c7fc64f56fba14692e",
-  "date": "2026-06-27T19:45:23-07:00",
-  "sparse": [],
-  "license": "no licence file",
-  "note": "symlink target of metroboy; not needed for GateBoyTests"
- },
- {
-  "path": "reference/src/mooneye-gb",
-  "url": "https://github.com/wilbertpol/mooneye-gb",
-  "rev": "b78dd21f0b6d00513bdeab20f7950e897a0379b3",
-  "date": "2016-07-05T21:02:31+02:00",
-  "sparse": [],
-  "license": "GPL-3.0",
-  "note": "wilbertpol's fork with extra tests"
  },
  {
   "path": "reference/src/mooneye-test-suite",

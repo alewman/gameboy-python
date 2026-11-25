@@ -145,7 +145,7 @@ suggestion; the requirements are:
   from Mooneye `boot_div-dmgABCmgb`.
 - **A test-ROM harness** that reads every protocol in validation.md: Mooneye
   registers at `LD B,B`; blargg serial and $A000; GBMicrotest $FF82;
-  Gambatte's `_out<hex>` screen digits (testrunner.cpp's pattern table) and
+  Gambatte's `_out<hex>` screen digits (learnt from the suite's expected pictures) and
   `_outaudio0/1`; picture comparison with the suites' exact shades.
 - **Tooling at the family bar**: `state.py`, a debugger reusing sm83-python's
   `DebugSession` with board watchpoints (I/O registers, VRAM, OAM, MBC

@@ -69,8 +69,9 @@ emulator's screenshots; the photos are separate and blurry (`README.md`
 emulator's output that was checked by eye.
 
 **C6. GateBoy's README vs its source on audio.** The README says the audio
-cells "aren't being simulated"; `src/GateBoyLib/GateBoyCh1–4.cpp` and
-`GateBoySPU.cpp` (2,639 lines) carry schematic-tagged gates (`/*#p13.COWE*/`).
+cells "aren't being simulated"; its audio source was read (before the
+2026-11-14 rule; unlicensed, not fetched since 2026-11-24) to carry
+schematic-tagged gates (HYPOTHESIS, for review).
 The README predates the audio work, or the audio is traced but not checked.
 Not used as an audio judge either way (dmg-sim is).
 

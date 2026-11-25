@@ -41,7 +41,7 @@ source commit `31510e12`; the bundle's Mooneye copy is older but has the same
 | Model | Covers | CPU | Speed here | Standing |
 | --- | --- | --- | --- | --- |
 | **dmg-sim** (SystemVerilog, generated from `dmg-schematics` netlists `28f66aed`) | the whole DMG-CPU B **including the SM83**, WRAM, VRAM, LCD, APU, MBC1/MBC5 carts | from the die (msinger's SM83 schematics; `visual-sm83` exists too) | **~74 min of host time per emulated second**: Mooneye `bits/mem_oam` with `+SECS=0.4` took 29 min 26 s and 506 MB, and its frame 23 matched dmg-sim's expected picture byte for byte (measured 2026-10-05, Icarus Verilog 14.0-devel built here); README says 150 min/s on a Ryzen 5 3600 | The judge for anything a short ROM can show: its README table passes `cpu_instrs`, `instr_timing`, `mem_timing`, `halt_bug`, 11/12 `dmg_sound` (not 10, wave-RAM corruption), every applicable Mooneye acceptance test; not `oam_bug` ("depend on small differences in signal delays which could change with temperature"). |
-| **GateBoy** (aappleby, `metroboy` `36797ad4`) | every standard cell of DMG-CPU B; audio channels are traced in the source (`GateBoyCh1–4.cpp`, `/*#p13.…*/` gate tags) though the README says audio is not simulated (C6) | **"my current best guess"**: the CPU is *not* from the die (README) | README: 6–8 fps (≈8× slower than real time) in fast mode | A fast die-ish detector for PPU/timer/DMA; not a CPU judge. |
+| **GateBoy** (aappleby, https://github.com/aappleby/metroboy @ `36797ad4`; no licence file, so its source is not fetched since 2026-11-24, Aubrey) | every standard cell of DMG-CPU B; its audio channels were read to carry schematic gate tags (HYPOTHESIS: source read before the 2026-11-14 rule) though the README says audio is not simulated (C6) | **"my current best guess"**: the CPU is *not* from the die (README) | README: 6–8 fps (≈8× slower than real time) in fast mode | A fast die-ish detector for PPU/timer/DMA; not a CPU judge. |
 | Gekkio's `gb-research/sm83-cpu-core` (VHDL) | the SM83 alone, from the die | from the die | sibling's measurement: ~6,400 instructions/s | sm83-python's die judge (its rung 5); listed here because a board failure the core cannot explain goes there first |
 | `dmg-schematics` (KiCad, CC BY-SA) | schematics, netlists (furrtek's earlier DMG-CPU-Inside is not used: its author objects to AI use of his work) | dmg-schematics includes `sm83/` | — | The document behind both models; read it to settle "which counter bit" questions. |
 
@@ -62,19 +62,12 @@ source commit `31510e12`; the bundle's Mooneye copy is older but has the same
    < 0.2 s plus ~2 frames, so roughly 15–20 host minutes each: run the
    disputed ones, not the suite.
 
-**Building GateBoy here** (2026-10-05): `metroboy`'s `symlinks/` point at
-sibling checkouts, so clone `aappleby/metrolib` and `aappleby/metron` beside it
-(both pinned), then, from `reference/src/metroboy`:
-
-```
-g++ -std=c++20 -O2 -DNDEBUG -DCONFIG_RELEASE -w -Isrc -Isymlinks -Isymlinks/metrolib \
-    src/GateBoyLib/*.cpp src/GateBoyTests/GateBoyTests.cpp \
-    ../metrolib/metrolib/core/*.cpp <metrolib/gameboy/*.cpp except GBBlitter.cpp> \
-    audio_stub.cpp -o ../../build-gateboy/GateBoyTests -lpthread
-```
-
-(`audio_stub.cpp` defines an empty `audio_post(int, short, short)`; 30 s.)
-It links and is headless, but at `36797ad4` every suite in `main()` sits under
+**GateBoy was built here** (2026-10-05) from `metroboy` with its sibling
+checkouts `aappleby/metrolib` (`617e42fe`) and `aappleby/metron` (`4ef5607b`),
+with g++ -std=c++20 and an empty audio stub of our own, into
+`reference/build-gateboy/GateBoyTests` (30 s). None of the three has a licence
+file, so since 2026-11-24 their source is not fetched (Aubrey) and the recipe
+is not repeated here; the binary stays. It links and is headless, but at `36797ad4` every suite in `main()` sits under
 `if (0)` and `config_fastmode` makes it return at once; it expects ROMs at
 `symlinks/GBMicrotests/bin/` and `tests/mooneye-gb/tests/build/`. Driving it
 needs a small driver of our own: **decided not to write one** (Aubrey,
@@ -1102,3 +1095,26 @@ by 245. The slow Donkey Kong regression picture (skip-boot, frame 600) is unchan
 Tests: six more synthetic tests in `tests/test_sgb.py` (the whole fade timeline tick by tick,
 the first border out of black, command holds with the LCD off, a second border during the
 fade-out, a save state mid-fade); fast suite 316 passed.
+
+## Closed-box sources removed (2026-11-24)
+
+Aubrey's rule of 2026-11-24: an MIT repository does not download or keep the source of
+anything the family's `sources.md` marks closed box only, nor copyleft or unlicensed emulator
+code. Pins removed from `scripts/pinned_repos.json`, trees moved aside unopened,
+out of the repository (not deleted):
+giibiiadvance (https://github.com/AntonioND/giibiiadvance @ `ccb40c3c`, GPL-3.0), mooneye-gb
+(https://github.com/wilbertpol/mooneye-gb @ `b78dd21f`, GPL-3.0), and GateBoy's three trees,
+metroboy (`36797ad4`), metrolib (`617e42fe`) and metron (`4ef5607b`) (aappleby, no licence
+file). gambatte-core (`5a41a68c`, GPL-2.0) keeps only its test suite (`test/hwtests`, the
+judge); the emulator source left the sparse list and its files moved out. The built
+`reference/build-gateboy/GateBoyTests` stays (outside the source tree). Nothing in the gate
+used the moved trees: the Gambatte ROMs the scripts run are c-sp's bundle in
+`tests/test_roms/gbtr/`.
+
+**Kept, with a question for Aubrey:** dmg-sim (CC BY-SA 4.0, closed box only), because it is
+the die judge and is built here with Icarus Verilog; no shipped build exists. Its source is
+not opened. Whether its build moves to emu-tools-gpl is open.
+
+Passages rewritten: GateBoy's source file names and gate-tag quote (this file's tier-4 table,
+undocumented-behavior.md C6: HYPOTHESIS), its build recipe (paths into the removed tree), and
+Gambatte's test-runner file (handoff-brief.md).
