@@ -61,8 +61,9 @@ otherwise starts from the state the boot ROM leaves.
 Nothing third-party is committed. `scripts/fetch_references.py` rebuilds `reference/` and
 `tests/test_roms/` from `scripts/pinned_files.json` (the c-sp test-ROM bundle, Gekkio's prebuilt
 Mooneye suite, GBCTR, RGBDS, pinned by SHA-256) and `scripts/pinned_repos.json` (repositories at
-full commit SHAs: Pan Docs, GBCTR, the test suites, SameBoy, docboy, dmg-sim (built with Icarus,
-never opened), the die schematics, Icarus Verilog). Closed-box and unlicensed emulator source
+full commit SHAs: Pan Docs, GBCTR, the test suites, SameBoy, docboy). msinger's dmg-sim, dmg-schematics and gbdoc
+and GateBoy were used until 2026-11-26 and are set aside for furrtek's wishes, their lineage's root
+author ([docs/provenance.md](docs/provenance.md) "Author respect"). Closed-box and unlicensed emulator source
 (Gambatte's emulator, GateBoy, giibiiadvance, mooneye-gb) is not fetched (Aubrey, 2026-11-24;
 docs/provenance.md). It needs `git` and `curl`.
 

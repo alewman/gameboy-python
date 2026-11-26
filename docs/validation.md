@@ -21,7 +21,7 @@ source commit `31510e12`; the bundle's Mooneye copy is older but has the same
 | --- | --- | --- | --- | --- |
 | **Mooneye Test Suite** (Gekkio, MIT, `31510e12`) | 75 acceptance + 28 emulator-only (MBC) + misc/manual/madness | Every `.s` has a "Verified results: pass: … fail: …" header naming models (DMG 0 / ABC, MGB, SGB, SGB2, CGB, AGB, AGS); fleet table in `README.markdown` "Hardware testing" (DMG-CPU, A, **B**, C; CGB 0–E; AGB …) | B/C/D/E/H/L = 3/5/8/13/21/34 and `LD B,B` = pass; all $42 = fail; also sent over serial (`README.markdown` "Pass/fail reporting") | Of the 75 acceptance tests, 51 are verified on all seven models, 9 on G+S only, the rest per model. **66 apply to DMG-CPU B.** |
 | **Gambatte test suite** (sinamas, GPL-2; repository now private, pinned through `pokemon-speedrunning/gambatte-core` `5a41a68c`) | 3,524 ROMs; 1,747 with a `dmg08` result, 3,154 with `cgb04c` | README: "The development of numerous tests, and their verification on hardware, is as much an emphasis as the development of an efficient software implementation." `dmg08` / `cgb04c` name the units (C1, C3) | **Encoded in the file name**: `_dmg08_out3`, `_cgb04c_outFF`, `_dmg08_cgb04c_out2` = the hex digits the screen shows after 15 frames (pattern table in `test/testrunner.cpp` l.65); `_outaudio0/1` = silent or not; a `.png` beside the ROM = expected picture | Also hardware *dumps*: `hwtests/*_dumper_dmg08.bin`, `*_cgb.bin` (I/O registers after reset, VRAM, WRAM, $FExx/$FFxx reads). The deepest PPU/interrupt-timing corpus there is. |
-| **GBMicrotest** (aappleby, MIT, `463eb6bc`) | 513 ROMs, no mapper needed | README: "All tests in this repo have been checked on real hardware (version DMG-CPU-08 I believe)" (C1) | $FF82 = $01 pass / $FF fail ($FF80 got, $FF81 expected: "not always set consistently", c-sp) after 2 frames (`is_if_set_during_ime0` ~380 ms) | One register at one T offset after boot; `_a … _d` families step the offset. 304 ROMs are in such families. Built to bring up GateBoy, so small enough for the die model. |
+| **GBMicrotest** (aappleby, MIT, `463eb6bc`) | 513 ROMs, no mapper needed | README: "All tests in this repo have been checked on real hardware (version DMG-CPU-08 I believe)" (C1) | $FF82 = $01 pass / $FF fail ($FF80 got, $FF81 expected: "not always set consistently", c-sp) after 2 frames (`is_if_set_during_ime0` ~380 ms) | One register at one T offset after boot; `_a … _d` families step the offset. 304 ROMs are in such families. Written to bring up GateBoy (lineage note: provenance.md "Author respect"). |
 | **blargg** (Shay Green; `retrio/gb-test-roms` `c240dd7d`) | `cpu_instrs`, `instr_timing`, `mem_timing`, `mem_timing-2`, `halt_bug`, `dmg_sound`, `cgb_sound`, `oam_bug`, `interrupt_time` | c-sp: "verified on DMG-CPU-08 (DMG-CPU C blob), CPU-CGB-02 (CPU CGB B) and CPU-CGB-06 (CPU CGB E)" with per-test tables (blargg howto) | Serial text ending "Passed"/"Failed" (`cpu_instrs`, `instr_timing`, `mem_timing`); cartridge RAM: $A001–$A003 = DE B0 61, $A000 = $80 running then the result code, text from $A004 (`dmg_sound`, `cgb_sound`, `oam_bug`, `mem_timing-2`); screen only (`halt_bug`, `interrupt_time`) | `dmg_sound`'s run "never really finishes" on hardware, and its expected picture "was created with SameBoy" (c-sp): use the $A000 protocol, not the picture. |
 | **AGE test ROMs** (c-sp, MIT, `1f5bc10e`) | 47 | c-sp: "verified on DMG-CPU-08 (DMG-CPU C blob), CPU-CGB-02, -04, -06"; names carry the devices | per test (c-sp howto) | |
 | **Scribbltests** (Hacktix, MIT) | 8 | "verified on MGB 9638 D and CPU CGB D by their author" (c-sp) | pictures | |
@@ -34,58 +34,42 @@ source commit `31510e12`; the bundle's Mooneye copy is older but has the same
 | **Mealybug Tearoom Tests** (Matt Currie, MIT, `70e88fb9`), 35 ROMs | Expected pictures are "screenshots from my Game Boy emulator (which I believe to be correct)", and `photos/` holds "blurry photos of the ROMs running on real devices" (`README.md` "Usage"). Pictures per revision: `expected/DMG-blob` (24), `expected/DMG-CPU B` (2, both **different** from DMG-blob: C2), `CPU CGB C` (31), `CPU CGB D` (24). Mid-mode-3 register writes: the PPU timing judge. Not "photographs" as the expected images. |
 | **Mooneye emulator-only MBC tests** | "Results have been verified using a flash cartridge with a genuine MBC1B1 / MBC2A / MBC5 chip". |
 | **SameSuite** (Lior Halphon, X11, `f15645fb`), 78 ROMs | Per-sub-suite README results: the APU sub-suite is sample-accurate through the **CGB-only** PCM12/PCM34 registers; "Pre-CGB devices pass `div_write_trigger` and `div_write_trigger_10` (Tested: DMG-B, blob)", CPU CGB E passes all. A CGB judge, and nearly silent on DMG. |
-| **dmg-sim** (msinger, CC BY-SA 4.0, `786f8c8a`) | The die model below; its timing constants were fitted to 11 measured delays on a real DMG-CPU B cartridge port (`README.md` "Timing Model", all within −35 % … +15 %). |
 
 ## Die-level models
 
-| Model | Covers | CPU | Speed here | Standing |
-| --- | --- | --- | --- | --- |
-| **dmg-sim** (SystemVerilog, generated from `dmg-schematics` netlists `28f66aed`) | the whole DMG-CPU B **including the SM83**, WRAM, VRAM, LCD, APU, MBC1/MBC5 carts | from the die (msinger's SM83 schematics; `visual-sm83` exists too) | **~74 min of host time per emulated second**: Mooneye `bits/mem_oam` with `+SECS=0.4` took 29 min 26 s and 506 MB, and its frame 23 matched dmg-sim's expected picture byte for byte (measured 2026-10-05, Icarus Verilog 14.0-devel built here); README says 150 min/s on a Ryzen 5 3600 | The judge for anything a short ROM can show: its README table passes `cpu_instrs`, `instr_timing`, `mem_timing`, `halt_bug`, 11/12 `dmg_sound` (not 10, wave-RAM corruption), every applicable Mooneye acceptance test; not `oam_bug` ("depend on small differences in signal delays which could change with temperature"). |
-| **GateBoy** (aappleby, https://github.com/aappleby/metroboy @ `36797ad4`; no licence file, so its source is not fetched since 2026-11-24, Aubrey) | every standard cell of DMG-CPU B; its audio channels were read to carry schematic gate tags (HYPOTHESIS: source read before the 2026-11-14 rule) though the README says audio is not simulated (C6) | **"my current best guess"**: the CPU is *not* from the die (README) | README: 6–8 fps (≈8× slower than real time) in fast mode | A fast die-ish detector for PPU/timer/DMA; not a CPU judge. |
-| Gekkio's `gb-research/sm83-cpu-core` (VHDL) | the SM83 alone, from the die | from the die | sibling's measurement: ~6,400 instructions/s | sm83-python's die judge (its rung 5); listed here because a board failure the core cannot explain goes there first |
-| `dmg-schematics` (KiCad, CC BY-SA) | schematics, netlists (furrtek's earlier DMG-CPU-Inside is not used: its author objects to AI use of his work) | dmg-schematics includes `sm83/` | — | The document behind both models; read it to settle "which counter bit" questions. |
+**Set aside (2026-11-26).** Until that day this section listed msinger's **dmg-sim** (the whole
+DMG-CPU B, SystemVerilog generated from his `dmg-schematics` netlists, built with Icarus Verilog
+from source), **GateBoy** (aappleby/metroboy, a gate-level port of furrtek's schematics, CPU
+"my current best guess"), **`dmg-schematics`** itself and, among the pins, msinger's **gbdoc**.
+dmg-schematics' DMG-CPU B schematics "were derived from the schematics in
+furrtek/DMG-CPU-Inside" (its README) and gbdoc started from "Furrtek's schematics"; furrtek
+objects to AI use of his work, so the family sets his whole lineage aside for that wish, not
+for any licence (Aubrey, 2026-11-26; emulator-lineage `docs/sources.md` at `d9b8ce2`). This
+section's old text also said "furrtek's earlier DMG-CPU-Inside is not used"; that was true of
+his repository, not of its derivatives, which were. What they were used for, and what backs
+each fact now: [provenance.md](provenance.md) "Author respect". Their pins (and Icarus
+Verilog's, which existed only to build dmg-sim) left `scripts/pinned_repos.json`, and the
+fetched trees and builds (with a copy of DMG-CPU-Inside left in `reference/trash/` since
+2026-11-12) moved unopened to `/data/backup/gameboy-python-furrtek-lineage-2026-11-26/`.
 
-**Running dmg-sim here** (no root needed; done 2026-10-05):
-
-1. Icarus Verilog 12 (Ubuntu's) cannot parse it (`const real` in functions,
-   `timing-default.sv` l.50). Build Icarus from source at the pinned
-   `steveicarus/iverilog` commit (`467d830d`): `apt-get download gperf` +
-   `dpkg -x` for the one missing tool, `sh autoconf.sh && ./configure
-   --prefix=… && make -j16 && make install` (29 s).
-2. `make dmg_cpu_b_gameboy.vvp IVERILOG=<that iverilog>` (under a second;
-   many "sorry: … not yet fully supported" warnings are expected).
-3. `vvp -N dmg_cpu_b_gameboy.vvp -none +BOOTROM=boot/quickboot.bin
-   +ROM=<rom> +SECS=<s> +VID_FILE=… +SAV_FILE=…`; `tests/run_test.sh` shows
-   how its own harness turns the video dump into a frame (`mkvid/mkimgs`) and
-   compares it with ImageMagick (not installed here: `mkvid/mkimgs --raw`
-   plus Pillow did the comparison). A GBMicrotest ROM needs quickboot's
-   < 0.2 s plus ~2 frames, so roughly 15–20 host minutes each: run the
-   disputed ones, not the suite.
-
-**GateBoy was built here** (2026-10-05) from `metroboy` with its sibling
-checkouts `aappleby/metrolib` (`617e42fe`) and `aappleby/metron` (`4ef5607b`),
-with g++ -std=c++20 and an empty audio stub of our own, into
-`reference/build-gateboy/GateBoyTests` (30 s). None of the three has a licence
-file, so since 2026-11-24 their source is not fetched (Aubrey) and the recipe
-is not repeated here; the binary stays. It links and is headless, but at `36797ad4` every suite in `main()` sits under
-`if (0)` and `config_fastmode` makes it return at once; it expects ROMs at
-`symlinks/GBMicrotests/bin/` and `tests/mooneye-gb/tests/build/`. Driving it
-needs a small driver of our own: **decided not to write one** (Aubrey,
-2026-10-05; handoff-brief.md "Decisions made"): dmg-sim is the die judge.
+What is left at die level is Gekkio's `gb-research/sm83-cpu-core` (VHDL, the SM83 alone,
+traced from his own photographs of an SGB-CPU 01 die): sm83-python's die judge (its rung 5);
+a board failure the core cannot explain goes there first. **No respect-clean model of the rest
+of the DMG SoC is known**; the board's judges are the hardware-run suites above.
 
 **SameBoy built here** (2026-10-05, 4 s): `make -C reference/src/SameBoy lib
 tester CONF=release RGBDS=$PWD/reference/build-rgbds/` (RGBDS 1.0.4 builds
 SameBoy's boot ROMs). `libsameboy.so` leaves glibc's vector maths unresolved;
 `scripts/sameboy_run.py` loads `libmvec.so.1` globally first. GBMicrotest runs
-need `--seconds 0.5` after quickboot (the boot itself takes under 0.2 s).
+need `--seconds 2` after the real boot ROM (about 1.4 s).
 
 ## Tier 3: emulator-derived, and the detectors
 
 | Source | Use | Measured here (DMG-B, 2026-10-05) |
 | --- | --- | --- |
-| **SameBoy** (`c458e7c5`, built locally as `libsameboy.so` + tester in 4 s; MIT) | the reference detector, driven by `scripts/sameboy_run.py` (ctypes; mooneye, blargg serial, blargg $A000 and GBMicrotest protocols) | Mooneye acceptance 66/66 applicable (with a real or quickboot boot ROM; 63/66 with SameBoy's own boot ROM, see start-here.md "Boot ROMs"); blargg `cpu_instrs`, `instr_timing`, `mem_timing`, `mem_timing-2`, `dmg_sound`, `oam_bug` pass; GBMicrotest 476 pass, 5 fail, 32 give no result (non-protocol testbenches such as `minimal`, `temp`, `*_testbench`) |
+| **SameBoy** (`c458e7c5`, built locally as `libsameboy.so` + tester in 4 s; MIT) | the reference detector, driven by `scripts/sameboy_run.py` (ctypes; mooneye, blargg serial, blargg $A000 and GBMicrotest protocols) | Mooneye acceptance 66/66 applicable (with the real boot ROM, and with quickboot before 2026-11-26; 63/66 with SameBoy's own boot ROM, see start-here.md "Boot ROMs"); blargg `cpu_instrs`, `instr_timing`, `mem_timing`, `mem_timing-2`, `dmg_sound`, `oam_bug` pass; GBMicrotest 476 pass, 5 fail, 32 give no result (non-protocol testbenches such as `minimal`, `temp`, `*_testbench`) |
 | **MAME 0.285** `gameboy` | trace oracle for the CPU (`scripts/mame_trace.py`, [mame-oracle.md](mame-oracle.md)) | Mooneye acceptance **58/66** applicable: fails `ei_sequence`, `interrupts/ie_push`, `oam_dma/reg_read`, `ppu/lcdon_timing-GS`, `ppu/lcdon_write_timing-GS`, `ppu/stat_lyc_onoff`; no result in 3 s for `oam_dma/sources-GS`, `ppu/intr_2_mode0_timing_sprites`. blargg `mem_timing-2` passes, `dmg_sound` fails $0A, `oam_bug` fails $02 (no OAM bug). A detector only. |
-| Gambatte, mGBA, AGE (`c-sp/age`), GateBoy/LogicBoy | second detectors | not run here |
+| Gambatte, mGBA, AGE (`c-sp/age`) | second detectors | not run here (GateBoy/LogicBoy was listed too; set aside 2026-11-26) |
 | Mealybug expected pictures, SameBoy-made blargg pictures | see above | — |
 | gbdev's **GBEmulatorShootout** (`38b926bd`, moved from daid) | the leaderboard at gbdev.io/GBEmulatorShootout: a test list with expected pictures | `scripts/shootout.py` scores the board as the leaderboard does: 230 of 258 (2026-11-08; SGB tests skipped); top there: docboy 258/261, Emulicious 254/261, SameBoy 253/264 |
 
@@ -97,10 +81,10 @@ SingleStepTests `sm83` belongs to the CPU core, not here; sm83-python's
 - A **hardware capture of DMG audio output** (DAC levels, filter): none
   pinned. The analogue stage is a labelled fit, as in famicom-python.
 - A **DMG-CPU B hardware run of Gambatte or GBMicrotest**: both were
-  captured on a DMG-CPU C (blob) unit (C1). dmg-sim (B) is the arbiter where
-  B and C might differ.
-- **OAM-bug determinism**: dmg-sim says some cases are not deterministic;
-  blargg's 8 `oam_bug` tests pass on DMG-C. Judge the board on those 8 only.
+  captured on a DMG-CPU C (blob) unit (C1). dmg-sim (B) was the arbiter where
+  B and C might differ, until it was set aside (2026-11-26); now none is.
+- **OAM-bug determinism**: SameBoy's author found some cases not deterministic on his DMG
+  (`Core/memory.c`); blargg's 8 `oam_bug` tests pass on DMG-C. Judge the board on those 8 only.
 - A **CGB die model**: none. CGB phases rest on Gambatte `cgb04c`, Mooneye
   C-group, SameSuite, Mealybug CGB C/D, c-sp's blargg/AGE runs.
 
@@ -117,7 +101,8 @@ a frontend's GB and GBC folders (with the
 
 - **Mooneye** acceptance, 56 of the 66 applicable ROMs pass (skip-boot); the other 10 need the
   dot-accurate PPU and are strict xfails (`tests/test_mooneye.py::NEEDS_PPU`). Real boot ROM: same,
-  except 3 phase tests (xfail until milestone 2). dmg-sim quickboot: the same set.
+  except 3 phase tests (xfail until milestone 2). dmg-sim quickboot: the same set (a boot ROM
+  set aside 2026-11-26).
 - **blargg** cpu_instrs 11/11 (serial text), instr_timing, mem_timing, mem_timing-2 ($A000).
 - **MAME trace** (`scripts/mame_compare.py`, blargg 01-special, SameBoy's open boot ROM on both
   sides from $0000): no divergence over 1,200,000 instructions ignoring `if` and `af` (the two
@@ -195,8 +180,8 @@ corrupts the row being read, with the write, read and read-plus-increment patter
   increment patterns for the idle cycle. DMG-C therefore corrupts fewer or different iterations
   than any of these; the likely places are the end of the corruptible window and the first
   corruptible row. I stopped fitting by checksum without a second oracle: SameBoy's rule (rows
-  8-bytes-aligned from index 0, 2 dots per object) agrees with the board on the first row, and
-  the dmg-sim die model (default simplified OAM) does not model the bug.
+  8-bytes-aligned from index 0, 2 dots per object) agrees with the board on the first row (the
+  dmg-sim die model, set aside since 2026-11-26, did not model the bug by default).
 - Not done: Gambatte `oam_access/*` and `oamdma/*` dmg08 results.
 
 ## Results: milestone 4, the APU (2026-10-09)
@@ -209,7 +194,7 @@ extracted with its history from `gameboy_python/apu/`; it imports nothing from t
 15 to -1, an off DAC to 0, NR51 pans, NR50 scales by (volume + 1) / 8, the sum is divided by 4 and
 passed through the DMG high-pass (charge 0.999958 per T), which is off while every DAC is off.
 
-- **blargg `dmg_sound`**: 12 of 12 (`tests/test_apu.py`; SameBoy 12/12, dmg-sim 11/12). Fitted
+- **blargg `dmg_sound`**: 12 of 12 (`tests/test_apu.py`; SameBoy 12/12; dmg-sim, set aside 2026-11-26, 11/12). Fitted
   for 09, 10 and 12: `WAVE_TRIGGER_DELAY` = 6 T, `WAVE_WINDOW` = 2 T, the trigger-corruption age
   window `CORRUPT_LO/HI` = 1..3 T (test 10 accepts several windows; none was picked by a second
   oracle).
@@ -309,8 +294,8 @@ Fixed by this pass (each shown by a Gambatte group, none by tuning to a single R
   `stat_irq_blocking` fails on the DMG 0 machine as its header says and passes on DMG-B; the three DMG 0
   boot tests (`boot_div/hwio/regs-dmg0`) pass from the DMG0 boot ROM (`tests/test_dmg0.py`).
 
-Open, with what is known (none is a C1 B/C difference on dmg-sim; those cannot be shown without a
-second DMG oracle and none was claimed):
+Open, with what is known (none was claimed as a C1 B/C difference; those cannot be shown without a
+DMG-CPU B oracle, and since 2026-11-26 none is left):
 
 - **Pictures that differ by one tile column** (`bgtilemap` 0/16, `bgtiledata` 0/16, `scx_0363c0` 0/36,
   `on_screen` 2/18, `scy` 9/24): the board's image matches except for a column of 8 by 128 pixels; the map
@@ -995,7 +980,9 @@ A licence audit found two pieces taken from Gambatte's GPL-2 source, both now re
 Both pass lists are unchanged: DMG-08 1,695, CGB-04c on `cgb-c` 2,892 (the identical sets).
 Behaviour first read in Gambatte's source but fitted here (the CGB window undo,
 `WIN_UNDO_DOTS`) is marked as such in `ppu.py`. furrtek's DMG-CPU-Inside was dropped from the
-pins (its author objects to AI use of his work; it was never used in code).
+pins (its author objects to AI use of his work; it was never used in code). (2026-11-26: that
+was true of his repository; works derived from it, dmg-schematics, gbdoc, dmg-sim and GateBoy,
+were used and are now set aside too: provenance.md "Author respect".)
 
 ### Super Game Boy, HLE (2026-11-13)
 
@@ -1113,7 +1100,9 @@ used the moved trees: the Gambatte ROMs the scripts run are c-sp's bundle in
 
 **Kept, with a question for Aubrey:** dmg-sim (CC BY-SA 4.0, closed box only), because it is
 the die judge and is built here with Icarus Verilog; no shipped build exists. Its source is
-not opened. Whether its build moves to emu-tools-gpl is open.
+not opened. Whether its build moves to emu-tools-gpl is open. (Answered 2026-11-26, for a
+different reason: set aside for the author's wishes, provenance.md "Author respect"; the built
+`GateBoyTests` left too.)
 
 Passages rewritten: GateBoy's source file names and gate-tag quote (this file's tier-4 table,
 undocumented-behavior.md C6: HYPOTHESIS), its build recipe (paths into the removed tree), and

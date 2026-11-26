@@ -10,7 +10,8 @@ written (2026-10-05) and kept up as the board corrected them; handoff-brief is h
 | [timing.md](timing.md) | The M-cycle callback design and where in the M-cycle things land; the system counter and every timer quirk; when each IF bit rises; the PPU dot schedule and Mooneye's measured consequences; OAM DMA; the OAM corruption bug; the APU on the clock; CGB double speed |
 | [cartridge.md](cartridge.md) | Why MBCs live here; the connector and the proposed protocol; the header; MBC coverage measured over the local No-Intro sets; per-MBC registers and judges; save data |
 | [undocumented-behavior.md](undocumented-behavior.md) | Fifteen DMG quirks with their judges, the DMG revision table, contradictions C1–C10, open items |
-| [validation.md](validation.md) | Every oracle by tier with pins and provenance quotes; the result protocols; the die-level models and how to run dmg-sim and build GateBoy; SameBoy and MAME measured as detectors; what is not available; local romsets |
+| [validation.md](validation.md) | Every oracle by tier with pins and provenance quotes; the result protocols; the die-level models (dmg-sim and GateBoy, set aside 2026-11-26); SameBoy and MAME measured as detectors; what is not available; local romsets |
+| [provenance.md](provenance.md) | "Author respect" (2026-11-26): what furrtek's lineage (dmg-schematics, gbdoc, dmg-sim, GateBoy) was used for, what backs each fact now, what needs new evidence |
 | [sgb.md](sgb.md) | The HLE Super Game Boy (`sgb.py`): structure, state, each command, the picture, what it was validated against, open items |
 | [mame-oracle.md](mame-oracle.md) | The verified MAME 0.285 recipe for `gameboy`, its output, six traps, and its measured score |
 | [handoff-brief.md](handoff-brief.md) | Historical (2026-10-05): the brief the board was built from: decisions, what the board needs from sm83-python, seven milestones with acceptance tests, constraints |
@@ -20,7 +21,9 @@ written (2026-10-05) and kept up as the board corrected them; handoff-brief is h
 These came out of running the tools and checking the sources against each
 other, not out of any single document:
 
-1. **A complete DMG-CPU B including the SM83 runs here from the die.**
+1. **A complete DMG-CPU B including the SM83 runs here from the die.** (Withdrawn
+   2026-11-26: dmg-sim simulates schematics derived from furrtek's, and is set aside for his
+   wishes; [provenance.md](provenance.md) "Author respect".)
    msinger's dmg-sim (SystemVerilog generated from the corrected schematics,
    with transistor-derived delays fitted to measurements on a real DMG-CPU B)
    compiles with Icarus Verilog built from source in under a minute and ran
@@ -29,12 +32,12 @@ other, not out of any single document:
    judge for anything a short test ROM can show, CPU included, which GateBoy
    (CPU guessed) cannot be.
 2. **The hardware-captured DMG suites were captured on a DMG-CPU C (blob),**
-   not on the B that every die model describes: Gambatte (`dmg08`),
+   not on the B that the (now set-aside) die models describe: Gambatte (`dmg08`),
    GBMicrotest and c-sp's blargg/AGE runs all name the DMG-CPU-08 board.
    Mealybug already shows two B/blob picture differences.
 3. **SameBoy's open DMG boot ROM fails three Mooneye boot-state tests**
    (`boot_div`, `boot_hwio`, `boot_sclk_align`) on SameBoy itself; the real
-   boot ROM and dmg-sim's `quickboot.bin` pass all four. The test harness must
+   boot ROM passes all four (and so did dmg-sim's `quickboot.bin`, no longer used). The test harness must
    not boot with SameBoy's ROM.
 4. **SameBoy passes all 66 Mooneye acceptance tests that apply to DMG-B,
    all blargg DMG suites, and 476 of 513 GBMicrotest ROMs** through a 230-line

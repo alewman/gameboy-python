@@ -22,8 +22,7 @@ frames, and after each frame checks the result protocols:
   or the cartridge-RAM block at $A000 (signature DE B0 61, status, text);
 - GBMicrotest (``--microtest``): after the run, $FF82 = $01 pass, $FF fail
   (only $FF82 is reliable, per the suite's own notes). Give it
-  ``--seconds 0.5``: the boot ROM must finish first (quickboot takes under
-  0.2 s, the real DMG ROM about 1.4 s, so use ``--seconds 2`` with that);
+  ``--seconds 2`` with the real DMG boot ROM (it takes about 1.4 s to finish);
 - timeout: none of these within ``--seconds``; the screen may still carry the
   answer (``--png`` saves it).
 
@@ -34,9 +33,11 @@ Boot ROM, in this order (docs/start-here.md "Boot ROMs"; Aubrey 2026-10-05):
 2. the documented local default for the model, the user's No-Intro
    ``[BIOS]`` zip under ``LOCAL_BOOT_DIR`` (``GAMEBOY_NOINTRO_DIR`` overrides),
    read in place and checked against its SHA-256 (``LOCAL_BOOT``);
-3. ``reference/src/dmg-sim/boot/quickboot.bin`` (DMG only);
-4. SameBoy's own open boot ROM, last, and labelled in the verdict: it fails
+3. SameBoy's own open boot ROM, last, and labelled in the verdict: it fails
    three Mooneye boot-state tests (docs/undocumented-behavior.md C7).
+
+(Until 2026-11-26 dmg-sim's ``quickboot.bin`` was the third choice for DMG; set aside with
+dmg-sim, docs/provenance.md "Author respect".)
 
 Boot ROMs are never copied into the repository.
 
@@ -99,7 +100,6 @@ LOCAL_BOOT = {
         "b4f2e416a35eef52cba161b159c7c8523a92594facb924b3ede0d722867c50c7",
     ),
 }
-QUICKBOOT = ROOT / "reference" / "src" / "dmg-sim" / "boot" / "quickboot.bin"
 FIBONACCI = (3, 5, 8, 13, 21, 34)
 FRAMES_PER_SECOND = 4194304 / 70224
 
@@ -188,8 +188,6 @@ def choose_boot(model: str, override: Path | None) -> tuple[bytes | None, str]:
             if hashlib.sha256(image).hexdigest() == digest:
                 return image, "real boot ROM"
             print(f"warning: {path} does not match its SHA-256; not used")
-    if model == "dmg-b" and QUICKBOOT.exists():
-        return QUICKBOOT.read_bytes(), "quickboot"
     return None, "SameBoy open boot ROM: boot-state tests unreliable"
 
 

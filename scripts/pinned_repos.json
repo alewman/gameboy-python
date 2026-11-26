@@ -54,24 +54,6 @@
   "note": "reference image + hardware photos"
  },
  {
-  "path": "reference/src/dmg-schematics",
-  "url": "https://github.com/msinger/dmg-schematics",
-  "rev": "28f66aedf974b91aafeb42443f2b731fcd7769e7",
-  "date": "2026-09-08T00:40:57+02:00",
-  "sparse": [],
-  "license": "CC-BY-SA-4.0",
-  "note": "msinger's corrected DMG-CPU B + SM83 schematics and netlists"
- },
- {
-  "path": "reference/src/dmg-sim",
-  "url": "https://github.com/msinger/dmg-sim",
-  "rev": "786f8c8aaac7ae507eac2a59f2a7d3d5e91dfe66",
-  "date": "2026-09-11T03:16:30+02:00",
-  "sparse": [],
-  "license": "CC-BY-SA-4.0",
-  "note": "SystemVerilog DMG-CPU B incl. SM83 generated from dmg-schematics; boot/quickboot.bin; needs Icarus Verilog newer than 12"
- },
- {
   "path": "reference/src/docboy",
   "url": "https://github.com/Docheinstein/docboy",
   "rev": "01e04d3d9fcb4ea28d05f468771127b2f6bd3549",
@@ -128,15 +110,6 @@
   "sparse": [],
   "license": "no licence file",
   "note": "blargg's test ROMs and sources"
- },
- {
-  "path": "reference/src/gbdoc",
-  "url": "https://github.com/msinger/gbdoc",
-  "rev": "5ff3cb65b4ff811e5a213a5d368ec552536f26d3",
-  "date": "2026-08-12T10:37:27+02:00",
-  "sparse": [],
-  "license": "CC-BY-SA-4.0",
-  "note": "msinger's research documents"
  },
  {
   "path": "reference/src/GBEmulatorShootout-gbdev",
@@ -254,14 +227,5 @@
   "sparse": [],
   "license": "no licence file",
   "note": ""
- },
- {
-  "path": "reference/build-iverilog/src",
-  "url": "https://github.com/steveicarus/iverilog",
-  "rev": "467d830d2435d28d63ecdfc011c5bf150f15f206",
-  "date": "2026-10-04T10:15:08-07:00",
-  "sparse": [],
-  "license": "GPL-2.0",
-  "note": "Icarus Verilog built from source for dmg-sim (Ubuntu's 12.0 cannot parse it); see docs/validation.md"
  }
 ]

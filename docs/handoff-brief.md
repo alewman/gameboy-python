@@ -28,7 +28,7 @@ Read, in order, before writing code:
 5. `docs/undocumented-behavior.md`: quirks, revisions, **contradictions
    C1–C10**, open items.
 6. `docs/validation.md`: every oracle with its tier and pin; the result
-   protocols; the die models and how to run dmg-sim; SameBoy and MAME as
+   protocols; the die models (set aside since 2026-11-26); SameBoy and MAME as
    measured detectors.
 7. `docs/mame-oracle.md`: the verified MAME 0.285 recipe and its traps.
 8. sm83-python's `docs/start-here.md` ("The bus as the SoC sees it",
@@ -39,8 +39,8 @@ Read, in order, before writing code:
 
 Then `python scripts/fetch_references.py` (or `--verify`) to rebuild
 `reference/` and `tests/test_roms/`, and the two local builds the brief
-relies on (validation.md): SameBoy (`libsameboy.so`, seconds) and dmg-sim
-(Icarus Verilog from source, under a minute).
+relies on (validation.md): SameBoy (`libsameboy.so`, seconds). (dmg-sim, the second, is set
+aside since 2026-11-26: provenance.md "Author respect".)
 
 ## Decisions already made (Aubrey, 2026-10-05)
 
@@ -67,7 +67,7 @@ relies on (validation.md): SameBoy (`libsameboy.so`, seconds) and dmg-sim
   a configured path (`--boot` / `GAMEBOY_BOOT_ROM`, raw or No-Intro `.zip`),
   then the documented local default (Aubrey's No-Intro `[BIOS]` zips, read in
   place and checked by SHA-256: table in start-here.md "Boot ROMs"), then
-  dmg-sim's `quickboot.bin`, then SameBoy's open ROM, labelled, because it
+  dmg-sim's `quickboot.bin` (until 2026-11-26; set aside with dmg-sim), then SameBoy's open ROM, labelled, because it
   fails three Mooneye boot-state tests (C7). Never copy a boot ROM into the
   repository. `scripts/sameboy_run.py` implements this order.
 - **Output**: frames as data (DMG: 160×144 2-bit shades plus a "blank" state;
@@ -180,7 +180,8 @@ Numbers in brackets are what SameBoy (the reference detector) scored here on
    `DMG-CPU B` pair for the two tests where B differs (C2) [SameBoy: not run
    here; run it first and record]; blargg `halt_bug` (screen); GBMicrotest
    PPU, timer and interrupt families at least SameBoy's pass set
-   [476/513], every miss run on dmg-sim before it is called a board bug.
+   [476/513], every miss run on dmg-sim before it is called a board bug (since 2026-11-26: on
+   SameBoy and against Gambatte's `dmg08` results; no die model is left for it).
 3. **The OAM bug and the remaining CPU/SoC corners.** IDU addresses reaching
    OAM in mode 2, the three corruption patterns, DMA bus conflicts.
    **Acceptance**: blargg `oam_bug` 1–8 [SameBoy: pass]; Mooneye
@@ -190,7 +191,7 @@ Numbers in brackets are what SameBoy (the reference detector) scored here on
    frame sequencer on DIV-APU, every DMG quirk in `Audio_details.md`
    "Obscure Behavior"; `take_samples()` with a labelled analogue fit.
    **Acceptance**: blargg `dmg_sound` 01–12 [SameBoy: 12/12; dmg-sim 11/12,
-   not 10]; SameSuite `div_write_trigger`, `div_write_trigger_10` (the two
+   not 10, a measurement of a source set aside 2026-11-26]; SameSuite `div_write_trigger`, `div_write_trigger_10` (the two
    that pass on DMG-B); Gambatte's `dmg08` `_outaudio` tests; the import-
    boundary test.
 5. **Cartridges.** MBC1 (+multicart), MBC2, MBC3 (+RTC on wall time), MBC5
@@ -204,7 +205,7 @@ Numbers in brackets are what SameBoy (the reference detector) scored here on
    all 513 GBMicrotest ROMs, results tabulated with SameBoy's beside them;
    joypad (Gambatte `jpadirq`), serial timing, the DMG revision fields (DMG0
    boot ROM and `stat_irq_blocking`). **Acceptance**: every failure either
-   fixed, shown to be a C1 B/C difference on dmg-sim, or listed as an open
+   fixed, shown to be a C1 B/C difference on dmg-sim (no longer possible since 2026-11-26: C1), or listed as an open
    item with its evidence.
 7. **Phase 2, CGB.** Double speed and the speed switch, HDMA/GDMA, VRAM/WRAM
    banks, CGB palettes and priority, KEY0 compatibility mode, the CGB PPU and
@@ -234,6 +235,12 @@ Numbers in brackets are what SameBoy (the reference detector) scored here on
 4. **No GateBoy test driver.** Its `GateBoyTests` builds (30 s) but ships with
    every suite disabled; dmg-sim is the die judge (its CPU is from the die,
    GateBoy's is a guess). GateBoy stays pinned as reading material only.
+
+   *Note, 2026-11-26 (not a change to the decisions above, which stand as made):* Aubrey set
+   furrtek's lineage aside for the author's wishes, so decisions 1, 2 and 4 lost their
+   tie-breaker, their second boot ROM and their die judge: dmg-sim, quickboot and GateBoy are no
+   longer used. DMG-CPU B stays the reference; the harness boots the real ROM, else skip-boot,
+   with SameBoy's ROM labelled as before. See provenance.md "Author respect".
 
 5. **IE and IF are core attributes**; the board raises IF bits through the
    core's method from inside bus callbacks; the core services $FF0F/$FFFF

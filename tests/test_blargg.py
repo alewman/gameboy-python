@@ -2,8 +2,8 @@
 
 ``cpu_instrs`` (the eleven individual ROMs and the combined one), ``instr_timing`` and
 ``mem_timing`` print on the serial port; ``mem_timing-2`` writes its result to cartridge RAM
-($A000 protocol). All run from the skip-boot state; the real-boot-ROM and quickboot variants of
-the same ROMs are in tests/test_boot_variants.py.
+($A000 protocol). All run from the skip-boot state; the real-boot-ROM variant of
+the same ROMs is in tests/test_boot_variants.py.
 """
 
 from pathlib import Path

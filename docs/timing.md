@@ -32,8 +32,8 @@ lets famicom-python be:
 
 The order of "units advance" and "the access lands" inside one M-cycle is the
 single most consequential choice in the board. GBCTR's external-bus diagrams
-(`gb-ctr/appendix/external-bus.typ`) and GateBoy's eight clock phases A–H
-(`metroboy/README.md` "Why is GateBoy so slow?") show a read is sampled late in
+(`gb-ctr/appendix/external-bus.typ`, eight half-periods of the 4 MiHz clock per M-cycle with
+the sampling edge marked) show a read is sampled late in
 the M-cycle and a write's data is driven in its second half. Mooneye's
 `*_timing` tests and blargg `mem_timing` measure the consequences in M-cycles;
 GBMicrotest measures them at single-T granularity (each test checks "one
@@ -51,9 +51,10 @@ it; with the reload inside `tick()` Mooneye `timer/rapid_toggle` is one instruct
 PPU and serial both tick before the access. Two constants are fitted, not read off the die: the
 counter's power-on phase (4 T) and `SERIAL_PHASE_T` (4 T; serial/boot_sclk_align with boot_div).
 
-3. Settle residual T-level questions on the die: `dmg-sim` runs any small test
-   ROM through the whole DMG-CPU B including the SM83, with transistor-derived
-   delays ([validation.md](validation.md) "Die-level models").
+3. Settle residual T-level questions on the die: this step named dmg-sim until 2026-11-26; it
+   is set aside for furrtek's wishes, and no other DMG die model is respect-clean, so residual
+   T-level questions are open items with the test ROM or console probe that would settle them
+   (provenance.md "Author respect").
 
 Do not settle it by matching SameBoy's source: SameBoy is the reference
 *detector*, its code states its own timing model, and that model is not
@@ -176,11 +177,9 @@ the address bus). The corruption pattern depends on read, write, or
 read-plus-increment, and on the OAM row the PPU is scanning. Judges: blargg
 `oam_bug` (8 tests, verified on DMG-C by c-sp), Gambatte `oam_access/*`.
 
-Caveat on the judges: dmg-sim's README says its default simplified OAM model
-omits the bug, and with the full SRAM model "oam_bug tests depend on small
-differences in signal delays which could change with temperature … some edge
-cases indeed behave nondeterministic on real hardware" (citing SameBoy's
-`memory.c`). So blargg `oam_bug` is a judge of the deterministic cases only;
+Caveat on the judges: some OAM-bug cases are not deterministic on real hardware
+(SameBoy's `Core/memory.c` notes it; dmg-sim's README, which said the same citing SameBoy, is
+set aside since 2026-11-26). So blargg `oam_bug` is a judge of the deterministic cases only;
 the brief scopes it that way.
 
 ## The APU on the clock

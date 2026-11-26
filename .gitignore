@@ -17,7 +17,7 @@ htmlcov/
 # Fetched references, tools and test programs; scripts/fetch_references.py
 # fills these from scripts/pinned_files.json and scripts/pinned_repos.json.
 # Never commit them: third-party documents, programs and source trees, and
-# the local builds of SameBoy, Icarus Verilog, dmg-sim and GateBoy.
+# the local builds of SameBoy (and, before 2026-11-26, Icarus Verilog, dmg-sim and GateBoy).
 reference/
 tests/test_roms/
 

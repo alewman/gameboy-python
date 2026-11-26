@@ -13,8 +13,8 @@ Nothing fetched here is committed (see .gitignore). Two pin files drive it:
 - ``scripts/pinned_repos.json``: one entry per git repository, cloned shallow at
   the pinned revision (sparse where the entry lists paths).
 
-Building SameBoy, Icarus Verilog (for dmg-sim) and GateBoy from these trees is
-described in docs/validation.md; this script only fetches.
+Building SameBoy from these trees is described in docs/validation.md; this script only
+fetches.
 
     python scripts/fetch_references.py            # everything missing
     python scripts/fetch_references.py --verify   # hash what is present, fetch nothing

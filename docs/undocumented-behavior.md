@@ -17,10 +17,10 @@ somewhere. Each item names its source and the test that judges it.
 | 8 | OAM DMA: start after 1 M; $A000–$FFFF sources read the external bus; CPU bus conflicts | Mooneye `oam_dma_start.s`; `gb-ctr/.../dma.typ` | Mooneye `oam_dma*` |
 | 9 | Unused I/O bits read 1; IF top bits read 1 | Mooneye `bits/unused_hwio-GS`, `if_ie_registers` | Mooneye |
 | 10 | $FEA0–$FEFF: $00 when OAM free, corruption when blocked (DMG) | `pandocs/Memory_Map.md` | Gambatte `fexx_*_dumper_dmg08.bin` dumps |
-| 11 | DMG wave RAM: CPU access while CH3 plays reaches the byte CH3 is reading, only in that cycle; retrigger corrupts wave RAM | blargg `dmg_sound` 09, 10, 12 | blargg (10 is not reproduced by dmg-sim either) |
+| 11 | DMG wave RAM: CPU access while CH3 plays reaches the byte CH3 is reading, only in that cycle; retrigger corrupts wave RAM | blargg `dmg_sound` 09, 10, 12 | blargg |
 | 12 | APU: power off clears registers except length counters (DMG) and wave RAM | blargg `dmg_sound` 08, 11 | blargg |
 | 13 | HALT bug, EI delay, IE-push cancellation, opcode holes lock up | sm83-python `docs/start-here.md` | Mooneye `halt_*`, `ei_*`, `interrupts/ie_push`; blargg `halt_bug`; Gambatte `undef_ops` |
-| 14 | Joypad: inputs settle over several reads ("the first reads are used as a short delay, allowing the inputs to stabilize"); with both rows selected the rows combine; with neither, $F | `pandocs/Joypad_Input.md` | Gambatte `jpadirq_*` (how the rows combine and how long settling takes: read dmg-schematics) |
+| 14 | Joypad: inputs settle over several reads ("the first reads are used as a short delay, allowing the inputs to stabilize"); with both rows selected the rows combine; with neither, $F | `pandocs/Joypad_Input.md` | Gambatte `jpadirq_*` (how the rows combine and how long settling takes: needs new evidence, a console probe; this said "read dmg-schematics", set aside 2026-11-26) |
 | 15 | OAM scan picks the first 10 objects (by Y) in OAM order; on DMG the smaller X wins overlaps | `pandocs/OAM.md` "Object Priority and Conflicts" | Mooneye `manual-only/sprite_priority`, dmg-acid2 |
 
 ## Revision table (DMG family)
@@ -37,13 +37,16 @@ Unknown cells are unknown, not "same as B".
 ## Contradictions and doubts
 
 **C1. The hardware-captured DMG results come from a DMG-CPU C, the die model
-is a DMG-CPU B.** Gambatte's `dmg08` files, GBMicrotest ("DMG-CPU-08 I
+was a DMG-CPU B.** Gambatte's `dmg08` files, GBMicrotest ("DMG-CPU-08 I
 believe") and c-sp's blargg/AGE runs ("DMG-CPU-08 (DMG-CPU C blob)") all name
 the DMG-CPU-08 mainboard, which Mooneye's fleet table pairs with **DMG-CPU C
 (blob)**. dmg-sim, GateBoy and dmg-schematics are DMG-CPU B. Mooneye's main
 fleet includes a B. Resolution for the build: reference model B; a failure
 that only Gambatte/GBMicrotest report is run on dmg-sim before the board is
-changed; a B/C split, if found, becomes a `revision` field.
+changed; a B/C split, if found, becomes a `revision` field. *Since 2026-11-26* dmg-sim is set
+aside for furrtek's wishes (provenance.md "Author respect"), so nothing here can show a B/C
+split any more: such a failure is recorded as an open item, with Mooneye's B-verified tests
+and SameBoy as detectors, until a DMG-CPU B run of the ROM (a console probe) settles it.
 
 **C2. Mealybug's DMG pictures differ by revision.** `expected/DMG-CPU B` holds
 two pictures that differ from `expected/DMG-blob`
@@ -68,23 +71,28 @@ emulator's screenshots; the photos are separate and blurry (`README.md`
 "Usage"). Tier 2, not tier 1, and pixel-exact matching is against an
 emulator's output that was checked by eye.
 
-**C6. GateBoy's README vs its source on audio.** The README says the audio
+**C6. GateBoy's README vs its source on audio.** (GateBoy is set aside since 2026-11-26 for
+furrtek's wishes; this entry is kept as history.) The README says the audio
 cells "aren't being simulated"; its audio source was read (before the
 2026-11-14 rule; unlicensed, not fetched since 2026-11-24) to carry
 schematic-tagged gates (HYPOTHESIS, for review).
 The README predates the audio work, or the audio is traced but not checked.
-Not used as an audio judge either way (dmg-sim is).
+Not used as an audio judge either way. (This said "dmg-sim is"; in fact no APU constant was
+decided by dmg-sim: blargg `dmg_sound` and SameBoy were the judges and the three fitted wave
+constants were not picked by any second oracle (validation.md, milestone 4). dmg-sim's 11/12 was a
+measurement of it, and it is set aside since 2026-11-26.)
 
 **C7. SameBoy's boot ROM is not a timing-faithful replacement.** With it,
 Mooneye `boot_div-dmgABCmgb`, `boot_hwio-dmgABCmgb` and
 `serial/boot_sclk_align-dmgABCmgb` fail on SameBoy itself; with the real DMG
-boot ROM or dmg-sim's `quickboot.bin` they pass (measured 2026-10-05). Any
+boot ROM they pass (and they did with dmg-sim's `quickboot.bin`, no longer used since
+2026-11-26) (measured 2026-10-05). Any
 document that calls SameBoy's boot ROMs drop-in replacements means "for
 games", not "for tests".
 
-**C8. OAM bug determinism.** blargg `oam_bug` passes on a DMG-C (c-sp); dmg-sim
-says some cases depend on signal delays and temperature and SameBoy's source
-notes nondeterminism. Judge only the 8 blargg tests, and do not chase
+**C8. OAM bug determinism.** blargg `oam_bug` passes on a DMG-C (c-sp); SameBoy's source
+notes nondeterminism on its author's DMG (`Core/memory.c`, OBSERVED by him; dmg-sim's README
+said the same and is set aside since 2026-11-26). Judge only the 8 blargg tests, and do not chase
 cases outside them.
 
 **C9. Gambatte's repository went private.** sinamas/gambatte now answers
@@ -102,9 +110,11 @@ the skip-boot path loads $FF.
 ## Open items
 
 1. Which system-counter bit clocks the serial port (Mooneye says only "a big
-   counter"); read dmg-schematics.
+   counter"). The board uses bit 7 (SameBoy's reading, FITTED to Mooneye `boot_sclk_align`);
+   needs new evidence: a console probe timing SB shifts against DIV. (This said "read
+   dmg-schematics", set aside 2026-11-26.)
 2. Where in the M-cycle each unit samples (timing.md "Where in the
-   M-cycle"); settle with GBMicrotest families and dmg-sim.
+   M-cycle"); settle with GBMicrotest families (dmg-sim was named too, set aside 2026-11-26).
 3. Whether interrupts can occur during the CGB speed-switch pause (Pan Docs
    TODO).
 4. The 22 Mealybug DMG-blob pictures on a B (C2).

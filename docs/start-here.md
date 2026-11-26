@@ -36,9 +36,10 @@ refactor. Revision letters follow Mooneye's naming
 | CGB-001 | CPU CGB 0, A, B, C, D, **E** | CGB0 / CGB (not in GBCTR's table; Pan Docs `Power_Up_Sequence.md`) | 4.194304 MHz, CPU ×2 in double speed | **2** (rows from day one) |
 | AGB/AGS in GB mode | CPU AGB … | CGB-AGB | | out of scope (a GBA board would embed this one) |
 
-Why **DMG-CPU B** (decided by Aubrey 2026-10-05): it is the only revision with a die-level model
+Why **DMG-CPU B** (decided by Aubrey 2026-10-05): it was the only revision with a die-level model
 (`dmg-schematics`, `dmg-sim` and GateBoy are all DMG-CPU B: their READMEs'
-first lines), it is in Mooneye's main test fleet (`DMG-CPU-04` mainboard,
+first lines; all three set aside on 2026-11-26 for furrtek's wishes, provenance.md "Author
+respect"), it is in Mooneye's main test fleet (`DMG-CPU-04` mainboard,
 "Hardware testing" table), and it was the volume part. The catch: several
 hardware-captured suites were captured on a **DMG-CPU C (blob)** unit
 (Gambatte's `dmg08` names, GBMicrotest, c-sp's blargg runs: see
@@ -172,8 +173,10 @@ is divided from the main clock by "a big counter, so clock edges align based
 on the *reset time*, not the time when SC is written" (Mooneye
 `serial/boot_sclk_align-dmgABCmgb.s` l.24–26, verified pass on DMG ABC and MGB,
 fail on DMG 0, SGB, CGB): serial timing after boot depends on the boot ROM.
-Which counter bit it is, is not stated there; take it from the die
-(dmg-schematics) before building, and record the source.
+Which counter bit it is, is not stated there. (This said "take it from the die
+(dmg-schematics)"; that was never done, and dmg-schematics is set aside since 2026-11-26. The
+board's choice, bit 7, is SameBoy's reading fitted to Mooneye `boot_sclk_align` with `boot_div`:
+`serial.py`.)
 
 ## The PPU
 
@@ -237,8 +240,7 @@ length at 256 Hz, sweep 128 Hz, envelope 64 Hz (`Audio_details.md` "DIV-APU").
 That coupling to the timer's counter is why the APU is in this board and not
 a core of its own (see [handoff-brief.md](handoff-brief.md) "Decisions").
 
-The judges are blargg `dmg_sound` (hardware-verified on DMG), the die model
-(dmg-sim: passes 11 of 12 `dmg_sound` tests, its `README.md` "Tests") and,
+The judges are blargg `dmg_sound` (hardware-verified on DMG) and,
 for CGB, blargg `cgb_sound` and SameSuite's `apu/` (sample-accurate through
 the CGB-only PCM12/PCM34 registers). No hardware capture of DMG analogue
 output is pinned; the analogue stage is a labelled fit.
@@ -267,11 +269,11 @@ SGB/SGB2 boot ROMs are not in the local sets (SNES-board concern). Confirmed
 `boot_regs-dmgABC` pass (DMG-B), `boot_regs-mgb` passes (MGB),
 `misc/boot_regs-cgb` passes (CGB-E with the Rev 1 image).
 
-The two open replacements, both pinned, for when no real ROM is present:
+The open replacements, for when no real ROM is present (one left since 2026-11-26):
 
 | Replacement | What it leaves | Mooneye boot tests on SameBoy (DMG-B) | Licence | Role |
 | --- | --- | --- | --- | --- |
-| dmg-sim `boot/quickboot.bin` (msinger) | the DMG A/B/C exit state incl. DIV phase, PPU phase and serial clock; VRAM zeroed (no logo) | **all four pass** | CC BY-SA 4.0 | second choice |
+| dmg-sim `boot/quickboot.bin` (msinger) | the DMG A/B/C exit state incl. DIV phase, PPU phase and serial clock; VRAM zeroed (no logo) | **all four pass** (2026-10-05) | CC BY-SA 4.0 | second choice until 2026-11-26; **set aside** with dmg-sim (provenance.md "Author respect"), no longer fetched or used |
 | SameBoy `BootROMs/dmg_boot.asm` (built with RGBDS 1.0.4) | logo + animation; registers as DMG | `boot_regs-dmgABC` passes; **`boot_div-dmgABCmgb`, `boot_hwio-dmgABCmgb`, `serial/boot_sclk_align-dmgABCmgb` fail** (C7) | MIT | last fallback only, labelled |
 
 A "skip boot" path (load the post-boot register and I/O state directly) is
@@ -279,7 +281,9 @@ also needed, as every emulator has: Pan Docs `Power_Up_Sequence.md` tables
 give the CPU registers per model and the I/O state for DMG0, DMG/MGB, SGB and
 CGB, confirmed by Mooneye `boot_regs-*`/`boot_hwio-*`. The system counter's
 phase at handoff is the part a table cannot hold: take it from
-`boot_div-dmgABCmgb` (and quickboot's source, which reproduces it).
+`boot_div-dmgABCmgb`; the board running the real DMG boot ROM reaches the same counter and PPU
+phase at $0100 as its skip-boot state (OBSERVED 2026-11-26). (This also named quickboot's
+source, set aside 2026-11-26.)
 
 ## A suggested module shape
 

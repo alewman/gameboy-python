@@ -2,9 +2,11 @@
 
 Order: a configured path (``override`` or ``GAMEBOY_BOOT_ROM``, a raw image or a No-Intro
 ``.zip``), then Aubrey's local No-Intro ``[BIOS]`` zips read in place and checked by SHA-256
-(``GAMEBOY_NOINTRO_DIR`` moves the directory), then dmg-sim's ``quickboot.bin``, then SameBoy's
-open ROM, labelled, because it fails three Mooneye boot-state tests (C7). Nothing is ever copied
-into this repository.
+(``GAMEBOY_NOINTRO_DIR`` moves the directory), then SameBoy's open ROM, labelled, because it
+fails three Mooneye boot-state tests (C7). Nothing is ever copied into this repository.
+
+Until 2026-11-26 dmg-sim's ``quickboot.bin`` came before SameBoy's ROM; dmg-sim is set aside
+for the author's wishes (furrtek's lineage: docs/provenance.md "Author respect").
 """
 
 from __future__ import annotations
@@ -37,7 +39,6 @@ LOCAL = {
         "a8cb5f4f1f16f2573ed2ecd8daedb9c5d1dd2c30a481f9b179b5d725d95eafe2",
     ),
 }
-QUICKBOOT = ROOT / "reference" / "src" / "dmg-sim" / "boot" / "quickboot.bin"
 SAMEBOY_OPEN = (
     ROOT / "reference" / "src" / "SameBoy" / "build" / "bin" / "BootROMs" / "dmg_boot.bin"
 )
@@ -65,8 +66,6 @@ def find_boot_rom(name: str = "DMG", override: Path | None = None) -> tuple[byte
             image = read_image(path)
             if hashlib.sha256(image).hexdigest() == digest:
                 return image, "real boot ROM"
-    if name == "DMG" and QUICKBOOT.exists():
-        return QUICKBOOT.read_bytes(), "quickboot (dmg-sim)"
     if name == "DMG" and SAMEBOY_OPEN.exists():
         return SAMEBOY_OPEN.read_bytes(), "SameBoy open boot ROM: boot-state tests unreliable"
     return None, "none found: skip-boot state"

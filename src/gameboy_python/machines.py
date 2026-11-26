@@ -1,7 +1,9 @@
 """The machines, as data: one row per model and revision.
 
 DMG-01 with a DMG-CPU B is the reference model (decided 2026-10-05; docs/start-here.md "Why
-DMG-CPU B"): it is the only revision with die-level models and it is in Mooneye's fleet. Every
+DMG-CPU B"): it is in Mooneye's fleet and has its own Mealybug pictures. (It was also chosen as
+the revision of the die-level models dmg-sim and GateBoy, set aside 2026-11-26 for the author's
+wishes: docs/provenance.md "Author respect".) Every
 other row is present so that adding it later is data, not a refactor, and is marked
 ``certified=False`` until a suite has judged it. Each quirk field names its source and tier.
 

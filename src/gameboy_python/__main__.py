@@ -7,7 +7,7 @@
     python -m gameboy_python play rom.gb                         # a window: gameboy_python.frontend
 
 ``--boot`` is ``skip`` (the default), ``real`` (your No-Intro boot ROM, read in place),
-``quick`` (dmg-sim's quickboot), or a path to a raw or zipped image. ``--png FILE`` saves the
+or a path to a raw or zipped image. ``--png FILE`` saves the
 last completed frame (grey shades, 160x144); ``--wav FILE`` saves the sound.
 """
 
@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 from gameboy_python import GameBoy, load_cartridge
-from gameboy_python.boot import QUICKBOOT, find_boot_rom, read_image
+from gameboy_python.boot import find_boot_rom, read_image
 from gameboy_python.image import write_png
 from gameboy_python.testrom import run_blargg_ram, run_blargg_serial, run_mooneye
 from gameboy_python.trace import write_trace
@@ -45,8 +45,6 @@ def boot_image(choice: str) -> tuple[bytes | None, str]:
         return None, "skip-boot state"
     if choice == "real":
         return find_boot_rom("DMG")
-    if choice == "quick":
-        return QUICKBOOT.read_bytes(), "quickboot (dmg-sim)"
     return read_image(Path(choice)), f"boot ROM {choice}"
 
 
@@ -60,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="python -m gameboy_python", description=__doc__.split("\n\n")[0]
     )
     parser.add_argument("rom", type=Path)
-    parser.add_argument("--boot", default="skip", help="skip, real, quick, or a path")
+    parser.add_argument("--boot", default="skip", help="skip, real, or a path")
     parser.add_argument("--frames", type=int, default=60, help="frames to run (default 60)")
     parser.add_argument(
         "--protocol", choices=sorted(PROTOCOLS), help="run until a test ROM's result"
