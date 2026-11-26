@@ -81,6 +81,12 @@ carry-down for gameboy-rust and gameboy-rust-fast, in their own gated session.
 - **Not candidates**: emu-russia/dmgcpu (CC0) builds on msinger's dmg-schematics ("the main
   source of both correct schematics and signal names", its README), and msinger's visual-sm83
   is his own schematics' model: both in the lineage.
+- **SonoSooS's *Gameboy CPU internals*** credits emu-russia/dmgcpu, so it is in the lineage
+  too: **set aside by Aubrey, 2026-11-26** (sm83-python's open question answered). This
+  repository never pinned it; its one citation, the `_stop` docstring in `board.py`, now names
+  Pan Docs' STOP page with LIJI's flowchart and SameBoy `stop()`, which were beside it. The STOP
+  outcomes on DMG stay untested here (HYPOTHESIS; sm83-python provenance.md S11-S12 say what
+  would settle them). No behaviour changed.
 
 ### Replacing a die-level answer
 
